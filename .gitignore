@@ -1,0 +1,15 @@
+# Arquivos de ambiente virtual
+# Ignora toda a pasta 'venv'
+venv/
+# Ignora arquivos de ambiente virtual globais ou ocultos (opcional)
+.venv/
+/env/
+
+# cache
+__pycache__/
+*.egg-info/
+
+# IDEs / Editor
+.vscode/
+.idea/
+test_log.txt
