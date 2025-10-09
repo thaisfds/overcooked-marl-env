@@ -164,26 +164,74 @@ class OvercookedMARL(ParallelEnv):
 # =================================================================
 
     def _load_map_from_file(self, map_path):
-        """Lê o arquivo de texto, traduz os caracteres para números e encontra a posição inicial dos agentes."""
-        static_map, agent_start_pos = [], {}
+
+        static_map = []
+        agent_start_pos = {}
+        dispenser_assignments = {}
+        
         with open(map_path, 'r') as f:
-            for y, line in enumerate(f.readlines()):
+            lines = f.readlines()
+
+        map_processing_finished = False
+        
+        # --- 1. Processar Grid Map e Agentes ---
+        for y, line in enumerate(lines):
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+            
+            # Se a linha contiver apenas dígitos e espaços, assumimos que o mapa terminou
+            if all(c.isdigit() or c.isspace() for c in line_stripped):
+                map_processing_finished = True
+                break
+            
+            # Se o processamento do mapa não tiver terminado, leia a linha como grid
+            if not map_processing_finished:
                 row = []
-                for x, char in enumerate(line.strip()):
+                
+                for x, char in enumerate(line_stripped):
+                    
                     if '0' <= char <= str(self.num_fixed_agents - 1):
                         agent_id = f"agent_{char}"
                         agent_start_pos[agent_id] = (x, y)
-                        row.append(CHAR_TO_NUM[' ']) 
+                        row.append(CHAR_TO_NUM[' '])
                     elif char in CHAR_TO_NUM:
                         row.append(CHAR_TO_NUM[char])
+                    elif char == ' ':
+                        row.append(CHAR_TO_NUM[' '])
                     else:
-                        raise ValueError(f"Caractere '{char}' não reconhecido no mapa em ({x}, {y}).")
-                static_map.append(row)
-        return np.array(static_map, dtype=np.uint8), agent_start_pos
+                        map_processing_finished = True
+                        break
+                
+                if not map_processing_finished:
+                    static_map.append(row)
+
+        static_map_np = np.array(static_map, dtype=np.uint8)
+        map_end_line_index = len(static_map)
+        
+        # --- 2. Processar Atribuições do Dispenser (RAW_ITEM_ID X Y) ---
+        # Continua lendo as linhas após o fim do mapa (índice map_end_line_index)
+        
+        for y_idx in range(map_end_line_index, len(lines)):
+            line_stripped = lines[y_idx].strip()
+            
+            if not line_stripped or line_stripped.startswith('#'):
+                continue
+
+            parts = line_stripped.split()
+            
+            # Assumindo formato [RAW_ITEM_ID] [X] [Y]
+            if len(parts) == 3 and all(p.isdigit() for p in parts):
+                raw_item_id = int(parts[0])
+                x, y = int(parts[1]), int(parts[2])
+
+                dispenser_assignments[(x, y)] = raw_item_id
+            
+        return static_map_np, agent_start_pos, dispenser_assignments
     
     def _initialize_game_state(self):
         """Carrega o mapa dinamicamente e inicializa o estado de jogo."""
-        map_static_np, agent_start_pos = self._load_map_from_file(self.map_path)
+        map_static_np, agent_start_pos, dispenser_assignments = self._load_map_from_file(self.map_path)
         self.map_size = map_static_np.shape
         items_on_ground = np.zeros(self.map_size, dtype=np.uint8) 
         
@@ -193,7 +241,8 @@ class OvercookedMARL(ParallelEnv):
             "carrying": {agent: ITEM_NAMES['none'] for agent in self.possible_agents},
             "items_on_ground": items_on_ground,
             "dishes_pending": 3,
-            "time_steps": 0
+            "time_steps": 0,
+            "dispensers": dispenser_assignments,
         }
         return state
 
@@ -371,7 +420,7 @@ class OvercookedMARL(ParallelEnv):
         return self.state["agent_pos"][agent_id]
 
     def _handle_interaction(self, agent_id):
-        """Executa a lógica de Ação 4 (Interagir) usando o mapeamento genérico."""
+        """Executa a lógica de Ação 4 (Interagir) usando o mapeamento dinâmico de dispensers."""
         
         ix, iy = self._get_tile_in_front(agent_id)
         carrying_item = self.state["carrying"][agent_id]
@@ -385,26 +434,27 @@ class OvercookedMARL(ParallelEnv):
         if station_type in STATION_PROCESSOR:
             if carrying_item in STATION_PROCESSOR[station_type]:
                 
-                # Usa o PROCESSING_MAP com os novos IDs sequenciais (7 -> 8 ou 8 -> 4)
                 if carrying_item in PROCESSING_MAP:
                     next_state = PROCESSING_MAP[carrying_item]
                     self.state["carrying"][agent_id] = next_state
                     reward += 1.0 if next_state in ALL_FINAL_CODES else 0.5
                     return reward, 0.0
         
-        # --- 2. ESTAÇÕES DE MATERIAIS ---
+        # LÓGICA DE COLETA DE ITENS
         
-        elif station_type == CHAR_TO_NUM['I']: # Estação de Ingredientes (Tomate Cru - Exemplo)
+        # Verifica se a coordenada atual é um dispenser definido no mapa de atribuições
+        if (ix, iy) in self.state["dispensers"]:
+            
             if carrying_item == ITEM_NAMES['none']:
-                self.state["carrying"][agent_id] = ITEM_NAMES['tomato_raw']
+                
+                # Obtém o código RAW/BASE a ser liberado (Ex: 5 para Tomate RAW)
+                item_to_dispense = self.state["dispensers"][(ix, iy)]
+                
+                self.state["carrying"][agent_id] = item_to_dispense
                 reward += 0.5
+                return reward, 0.0 # Recompensa local e sai
         
-        elif station_type == CHAR_TO_NUM['P']: # Estação de Pratos Limpos
-            if carrying_item == ITEM_NAMES['none']:
-                self.state["carrying"][agent_id] = ITEM_NAMES['dish_empty']
-                reward += 0.5
-        
-        # --- 3. BANCADA E COMBINAÇÃO (Lógica Bit-wise) ---
+        # BANCADA E COMBINAÇÃO
         
         elif station_type == CHAR_TO_NUM['#']:
             is_a_dish = item_on_ground != ITEM_NAMES['none'] and item_on_ground % 2 != 0 
@@ -412,14 +462,13 @@ class OvercookedMARL(ParallelEnv):
             
             # Combinação: Ingrediente Final + Prato na Bancada
             if is_final_ingredient and is_a_dish:
-                # Usa FINAL_TO_BIT para converter o ID Simples (2, 3, 4) para Bit-wise (2, 4, 8)
                 bit_value_ingrediente = FINAL_TO_BIT.get(carrying_item, 0)
                 new_bit_code = item_on_ground + bit_value_ingrediente 
                 
                 self.state["carrying"][agent_id] = new_bit_code 
                 self.state["items_on_ground"][iy, ix] = ITEM_NAMES['none'] 
                 reward += 2.0
-            
+                
             # Colocar item na bancada
             elif carrying_item != ITEM_NAMES['none'] and item_on_ground == ITEM_NAMES['none']:
                 self.state["items_on_ground"][iy, ix] = carrying_item
@@ -432,7 +481,7 @@ class OvercookedMARL(ParallelEnv):
                 self.state["items_on_ground"][iy, ix] = ITEM_NAMES['none']
                 reward += 0.2
         
-        # --- 4. ENTREGA ('D') ---
+        # ENTREGA ('D')
         elif station_type == CHAR_TO_NUM['D']: 
             if carrying_item == ITEM_NAMES['RECIPE_FULL_CODE']: 
                 self.state["carrying"][agent_id] = ITEM_NAMES['none'] 
