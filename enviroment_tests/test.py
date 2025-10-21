@@ -1,10 +1,22 @@
 import gymnasium as gym
 import numpy as np
 
-# Importe a classe do seu ambiente. 
-# Se você seguiu o setup.py e o __init__.py, o nome do pacote deve funcionar.
-# Se ainda não instalou, use a importação direta:
+# Importamos a classe direta para instanciação
 from overcooked_marl_env.env import OvercookedMARL
+
+def action_to_str(action):
+    """Convert numeric action to descriptive string"""
+    action_map = {
+        0: "(Cima)",
+        1: "(Baixo)",
+        2: "(Esquerda)",
+        3: "(Direita)",
+        4: "(Interagir)"
+    }
+    # Handle numpy int types by converting to Python int
+    if hasattr(action, 'item'):
+        action = action.item()
+    return action_map.get(action, f"Desconhecido ({action})")
 
 def run_sanity_check(env_class, max_steps=100):
     """
@@ -13,14 +25,9 @@ def run_sanity_check(env_class, max_steps=100):
     
     # 1. Criar o Ambiente
     print("--- 1. Inicializando Ambiente ---")
-    try:
-        # Tenta usar gym.make() se o ambiente estiver registrado
-        env = gym.make("OvercookedMARL-v0")
-        print(f"Ambiente criado via gym.make(): {env.unwrapped.metadata['name']}")
-    except Exception:
-        # Caso o make() falhe, usa a classe diretamente
-        env = env_class()
-        print(f"Ambiente criado via classe direta: {env.metadata['name']}")
+    
+    env = env_class(verbose=False) 
+    print(f"Ambiente criado via classe direta: {env.metadata['name']}")
         
     print(f"Agentes Ativos: {env.agents}")
     print(f"Espaço de Ação para 'agent_0': {env.action_space('agent_0')}")
@@ -60,7 +67,13 @@ def run_sanity_check(env_class, max_steps=100):
         
         if step % 10 == 0 or done:
             print(f"\n[Passo {step}]")
-            print(f"  Ações: {actions}")
+            
+            # Format actions with more meaningful names
+            readable_actions = {}
+            for agent, action in actions.items():
+                readable_actions[agent] = action_to_str(action)
+            print(f"  Ações: {readable_actions}")
+            
             print(f"  Recompensas: {rewards}")
             print(f"  Total Acumulado: {total_reward}")
             print(f"  Terminated: {terminations}")

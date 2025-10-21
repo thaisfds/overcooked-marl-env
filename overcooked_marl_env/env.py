@@ -2,133 +2,42 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 from pettingzoo.utils.env import ParallelEnv
+from .core.items import ItemType, ItemManager
+from .core.recipes import Recipe, RecipeManager
 
-# =================================================================
-# VARIÁVEIS E CONSTANTES GLOBAIS
-# =================================================================
-
-CHAR_TO_NUM = {
-    # Células Transitáveis (Chão)
-    ' ': 0,  # Espaço Livre (Chão)
-    
-    # Células Não Transitáveis (Estações / Obstáculos)
-    '#': 1,  # Bancada Vazia (Obstáculo estático)
-    'I': 2,  # Estação de Ingredientes
-    'C': 3,  # Estação de Corte
-    'F': 4,  # Fogão/Cozimento
-    'P': 5,  # Estação de Pratos Limpos
-    'D': 6,  # Ponto de Entrega (Delivery)
-    'T': 7,  # Lixo (Trash)
-}
-
-ITEM_NAMES = {
-    # CÓDIGOS BÁSICOS
-    'none': 0,          
-    'dish_empty': 1,    
-    
-    # CÓDIGOS FINAIS (IDs simples e sequenciais)
-    'tomato_final': 2,  
-    'lettuce_final': 3, 
-    'meat_final': 4,    
-    
-    # CÓDIGOS DE ESTADOS INTERMEDIÁRIOS (Sequenciais logo após o último final)
-    'tomato_raw': 5,      
-    'lettuce_raw': 6,     
-    'meat_raw': 7,        
-    'meat_cut': 8,        
-    
-    # CÓDIGO FINAL DE RECEITA (Valor Bit-wise esperado na entrega)
-    'RECIPE_FULL_CODE': 15, # 1 (Prato) + 2 (Tomate) + 4 (Alface) + 8 (Carne)
-}
-
-# Mapeia o estado RAW/INTERMEDIÁRIO para o PRÓXIMO estado
-PROCESSING_MAP = {
-    ITEM_NAMES['tomato_raw']: ITEM_NAMES['tomato_final'],  # Cru (5) -> Final (2)
-    ITEM_NAMES['lettuce_raw']: ITEM_NAMES['lettuce_final'], # Cru (6) -> Final (3)
-    
-    ITEM_NAMES['meat_raw']: ITEM_NAMES['meat_cut'],        # Cru (7) -> Intermediário (8)
-    ITEM_NAMES['meat_cut']: ITEM_NAMES['meat_final'],      # Intermediário (8) -> Final (4)
-}
-
-# Mapeia a estação de processamento para os itens que ela trata
-STATION_PROCESSOR = {
-    CHAR_TO_NUM['C']: [ITEM_NAMES['tomato_raw'], ITEM_NAMES['lettuce_raw'], ITEM_NAMES['meat_raw']],
-    CHAR_TO_NUM['F']: [ITEM_NAMES['meat_cut']],
-}
-
-# Constantes para Observação Vetorial
+# Constantes para observação
 MAX_PROCESS_STEPS = 3 
-TOTAL_CHANNELS = 5 + MAX_PROCESS_STEPS # 5 canais base + 3 canais para o vetor de inventário
+TOTAL_CHANNELS = 5 + MAX_PROCESS_STEPS # 5 canais base + 3 canais para processamento
 
-# Lista Ordenada dos ingredientes finais (usa IDs simples)
-FINAL_INGREDIENTS_ORDER = [
-    ITEM_NAMES['tomato_final'], # 2
-    ITEM_NAMES['lettuce_final'], # 3
-    ITEM_NAMES['meat_final'], # 4
-]
-
-def _generate_bit_mapping():
-    """Calcula o mapeamento de ID Simples para o valor Bit-wise (2, 4, 8...)."""
-    mapping = {ITEM_NAMES['dish_empty']: 1}
-    all_codes = []
-    bit_value = 2 
-    
-    # Mapeia (2 -> 2), (3 -> 4), (4 -> 8)
-    for simple_code in FINAL_INGREDIENTS_ORDER:
-        mapping[simple_code] = bit_value
-        all_codes.append(simple_code)
-        bit_value *= 2 
-    return mapping, all_codes
-
-FINAL_TO_BIT, ALL_FINAL_CODES = _generate_bit_mapping()
-
-# Mapeamento de Códigos para o Vetor de Progresso (Visão da IA)
-PROCESSING_VECTOR_MAP = {
-    # Itens Crus/Intermediários
-    ITEM_NAMES['tomato_raw']:    [1, 0, 0],  
-    ITEM_NAMES['lettuce_raw']:   [1, 0, 0],  
-    ITEM_NAMES['meat_raw']:      [1, 0, 0],  
-    ITEM_NAMES['meat_cut']:      [1, 1, 0],  
-    
-    # Itens Finais
-    ITEM_NAMES['tomato_final']:  [1, 1, 0],  
-    ITEM_NAMES['lettuce_final']: [1, 1, 0],  
-    ITEM_NAMES['meat_final']:    [1, 1, 1],  
-    
-    # Pratos e Outros (Sem Vetor de Progresso)
-    ITEM_NAMES['dish_empty']:    [0, 0, 0],  
-    ITEM_NAMES['none']:          [0, 0, 0],  
-    
-    # Pratos Combinados (Códigos Bit-wise)
-    **{code: [0, 0, 0] for code in range(1, 16)}, 
-}
-
-# =================================================================
-# FUNÇÕES BASICAS DO GYMNASIUM / PETTINGZOO
-# =================================================================
-
-# Classe Principal do Ambiente MARL
 class OvercookedMARL(ParallelEnv):
-    
-    # Metadados (Necessário para Gymnasium/PettingZoo)
     metadata = {"render_modes": ["human", "rgb_array"], "name": "overcooked_marl_v0"}
 
 
-    def __init__(self, render_mode=None, map_path="maps/default_map.txt", num_fixed_agents=2):
+    def __init__(self, render_mode=None, map_path="maps/default_map.txt", num_fixed_agents=2, verbose=False):
         super().__init__()
         
-        # Variáveis de Setup
         self.map_path = map_path 
         self.num_fixed_agents = num_fixed_agents
+        self.verbose = verbose
         
-        # Cria IDs de agentes fixos: 'agent_0', 'agent_1', etc. (Necessário antes de _initialize_game_state)
+        self.item_manager = ItemManager()
+        self.recipe_manager = RecipeManager(self.item_manager)
+        
         self.possible_agents = [f"agent_{i}" for i in range(num_fixed_agents)]
-        self.agents = self.possible_agents[:] # Lista de agentes ativos no momento
+        self.agents = self.possible_agents[:]
         
-        # Inicializa o Estado
+        self._already_loaded_maps = set()
         self.state = self._initialize_game_state() 
         
-        # Definição do Observation Space
+        if not hasattr(self, 'map_size') or self.map_size is None:
+            raise ValueError("Map size was not properly initialized")
+        
+        # 0: Cima, 1: Baixo, 2: Esquerda, 3: Direita, 4: Interagir
+        self._action_to_direction = {0: (0, 1), 1: (0, -1), 2: (-1, 0), 3: (1, 0)}
+        
+        action_space_single = spaces.Discrete(5) 
+        
+        # Observation Space
         observation_space_single = spaces.Box(
             low=0, 
             high=255, 
@@ -142,19 +51,11 @@ class OvercookedMARL(ParallelEnv):
             for agent in self.possible_agents
         }
         
-        # Definição do Action Space (0-3: Movimento, 4: Interagir)
-        action_space_single = spaces.Discrete(5) 
-        
         self.action_spaces = {
             agent: action_space_single
             for agent in self.possible_agents
         }
-        
-        # Mapeamento de Ações para Movimentos
-        # 0: Cima, 1: Baixo, 2: Esquerda, 3: Direita, 4: Interagir
-        self._action_to_direction = {0: (0, 1), 1: (0, -1), 2: (-1, 0), 3: (1, 0)}
 
-        # Variáveis de Renderização (para a Fase 3)
         self.render_mode = render_mode
         self.window = None
         self.clock = None
@@ -164,81 +65,306 @@ class OvercookedMARL(ParallelEnv):
 # =================================================================
 
     def _load_map_from_file(self, map_path):
-
+        is_reload = map_path in self._already_loaded_maps
+        self._already_loaded_maps.add(map_path)
+        
         static_map = []
         agent_start_pos = {}
         dispenser_assignments = {}
+        recipes_to_load = []
+        
+        import os
+        if not os.path.isabs(map_path):
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            map_path = os.path.join(base_dir, map_path)
+        
+        if not is_reload or self.verbose:
+            print(f"Loading map from: {map_path}")
+        
+        if not os.path.exists(map_path):
+            available_dirs = os.listdir(os.path.dirname(map_path))
+            print(f"WARNING: Map file not found! Available files in directory: {available_dirs}")
+            raise FileNotFoundError(f"Map file not found at {map_path}")
         
         with open(map_path, 'r') as f:
             lines = f.readlines()
+            
+            if not is_reload and self.verbose:
+                print(f"Map file loaded with {len(lines)} lines")
+                print(f"First few lines: {[line.strip() for line in lines[:3]]}")
 
-        map_processing_finished = False
-        
         # --- 1. Processar Grid Map e Agentes ---
-        for y, line in enumerate(lines):
+        # First, find the actual grid map section between headers
+        grid_lines = []
+        in_grid_section = False
+        
+        for i, line in enumerate(lines):
             line_stripped = line.strip()
+            
             if not line_stripped:
+                if in_grid_section:
+                    in_grid_section = False
                 continue
-            
-            # Se a linha contiver apenas dígitos e espaços, assumimos que o mapa terminou
-            if all(c.isdigit() or c.isspace() for c in line_stripped):
-                map_processing_finished = True
-                break
-            
-            # Se o processamento do mapa não tiver terminado, leia a linha como grid
-            if not map_processing_finished:
-                row = []
                 
-                for x, char in enumerate(line_stripped):
+            if line_stripped == "# Grid Map":
+                in_grid_section = True
+                continue
+                
+            if line_stripped.startswith("# Dispensers") or line_stripped.startswith("# Recipes"):
+                in_grid_section = False
+                continue
+                
+            if in_grid_section and not (line_stripped[0].isdigit() and ' ' in line_stripped):
+                grid_lines.append(line)
+        
+        if not is_reload or self.verbose:
+            print(f"Found {len(grid_lines)} grid lines in map file")
+        
+        # Fallback para grid sem marcadores explícitos
+        if len(grid_lines) == 0:
+            in_grid_section = True
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                
+                if not line_stripped or (i == 0 and line_stripped.startswith('#')):
+                    continue
                     
-                    if '0' <= char <= str(self.num_fixed_agents - 1):
-                        agent_id = f"agent_{char}"
-                        agent_start_pos[agent_id] = (x, y)
-                        row.append(CHAR_TO_NUM[' '])
-                    elif char in CHAR_TO_NUM:
-                        row.append(CHAR_TO_NUM[char])
-                    elif char == ' ':
-                        row.append(CHAR_TO_NUM[' '])
-                    else:
-                        map_processing_finished = True
-                        break
+                if not line_stripped or (line_stripped[0].isdigit() and ' ' in line_stripped):
+                    in_grid_section = False
+                    break
+                    
+                if any(marker in line_stripped for marker in ["# Dispensers", "# Recipes"]):
+                    in_grid_section = False
+                    break
+                    
+                if not line_stripped.startswith('#'):
+                    grid_lines.append(line)
+                    
+            if not is_reload or self.verbose:
+                print(f"Found {len(grid_lines)} grid lines using fallback method")
+        
+        # Process the grid lines
+        for y, line in enumerate(grid_lines):
+            row = []
+            if not is_reload or self.verbose:
+                print(f"Processing map row {y}: '{line.strip()}'")
+            
+            for x, char in enumerate(line):
+                # Handle agent positions (0, 1, etc.)
+                if char.isdigit() and 0 <= int(char) < self.num_fixed_agents:
+                    agent_id = f"agent_{char}"
+                    agent_start_pos[agent_id] = (x, y)
+                    if not is_reload or self.verbose:
+                        print(f"Found agent {agent_id} at position ({x}, {y})")
+                    row.append(self.item_manager.get_cell_code(' '))  # Agent stands on empty space
+                    
+                # Handle map cells
+                elif char in self.item_manager.CHAR_TO_NUM:
+                    row.append(self.item_manager.get_cell_code(char))
+                    
+                # Empty space
+                elif char == ' ':
+                    row.append(self.item_manager.get_cell_code(' '))
+                    
+                # Skip newline characters without warning
+                elif char == '\n' or char == '\r':
+                    continue
+                    
+                # Skip characters we don't understand (like '#' comment marker)
+                else:
+                    if not is_reload or self.verbose:
+                        print(f"WARNING: Unknown character '{char}' at ({x}, {y}), treating as empty space")
+                    row.append(self.item_manager.get_cell_code(' '))
+            
+            if row:  # Only add non-empty rows
+                static_map.append(row)
                 
-                if not map_processing_finished:
-                    static_map.append(row)
+        if not static_map:
+            print("WARNING: No map data was successfully processed!")
+            # Create a minimal default map to avoid crashes
+            static_map = [
+                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#')],
+                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code('#')],
+                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#')]
+            ]
+            if not is_reload or self.verbose:
+                print("Created a minimal default map as a fallback")
 
         static_map_np = np.array(static_map, dtype=np.uint8)
-        map_end_line_index = len(static_map)
         
-        # --- 2. Processar Atribuições do Dispenser (RAW_ITEM_ID X Y) ---
-        # Continua lendo as linhas após o fim do mapa (índice map_end_line_index)
+        # Verificar se temos posições iniciais para todos os agentes
+        for i in range(self.num_fixed_agents):
+            agent_id = f"agent_{i}"
+            if agent_id not in agent_start_pos:
+                if not is_reload or self.verbose:
+                    print(f"Note: No explicit position found for {agent_id} in map. Finding suitable position...")
+                # Encontrar um espaço vazio para posicionar o agente
+                found_position = False
+                for y in range(len(static_map)):
+                    for x in range(len(static_map[0])):
+                        if static_map[y][x] == self.item_manager.get_cell_code(' '):
+                            agent_start_pos[agent_id] = (x, y)
+                            found_position = True
+                            if not is_reload or self.verbose:
+                                print(f"Assigned {agent_id} to position ({x}, {y})")
+                            break
+                    if found_position:
+                        break
+                        
+                # Se ainda não encontrou posição, coloque em (0,0)
+                if not found_position:
+                    agent_start_pos[agent_id] = (0, 0)
+                    if not is_reload or self.verbose:
+                        print(f"No suitable position found for {agent_id}. Using default (0,0)")
+                    
+        if not is_reload or self.verbose:
+            print(f"Final agent positions: {agent_start_pos}")
         
-        for y_idx in range(map_end_line_index, len(lines)):
-            line_stripped = lines[y_idx].strip()
+        # --- 2. Processar Atribuições do Dispenser (RAW_ITEM_ID X Y) e Receitas ---
+        # Process the remaining lines for dispensers and recipes
+        dispenser_section = False
+        recipe_section = False
+        
+        for line in lines:
+            line_stripped = line.strip()
             
-            if not line_stripped or line_stripped.startswith('#'):
+            if not line_stripped:
+                continue
+                
+            if line_stripped.startswith('# Dispensers'):
+                dispenser_section = True
+                recipe_section = False
+                continue
+                
+            if line_stripped.startswith('# Recipes'):
+                dispenser_section = False
+                recipe_section = True
+                continue
+                
+            if line_stripped.startswith('#'):
                 continue
 
-            parts = line_stripped.split()
+            # Parse based on current section
+            if dispenser_section and line_stripped[0].isdigit():
+                parts = line_stripped.split()
+                if len(parts) == 3 and all(p.isdigit() for p in parts):
+                    raw_item_id = int(parts[0])
+                    x, y = int(parts[1]), int(parts[2])
+                    dispenser_assignments[(x, y)] = raw_item_id
+                    if not is_reload or self.verbose:
+                        print(f"Added dispenser with item ID {raw_item_id} at position ({x}, {y})")
+                    
+            elif recipe_section:
+                # Recipes can be comma-separated values like "SALAD, BURGUER"
+                recipe_names = [name.strip().upper() for name in line_stripped.split(',')]
+                recipes_to_load.extend([r for r in recipe_names if r])
+                if not is_reload or self.verbose:
+                    print(f"Found recipes: {recipes_to_load}")
             
-            # Assumindo formato [RAW_ITEM_ID] [X] [Y]
-            if len(parts) == 3 and all(p.isdigit() for p in parts):
-                raw_item_id = int(parts[0])
-                x, y = int(parts[1]), int(parts[2])
-
-                dispenser_assignments[(x, y)] = raw_item_id
+            # If line contains digits in any section, it might be dispenser data
+            elif line_stripped[0].isdigit():
+                parts = line_stripped.split()
+                if len(parts) == 3 and all(p.isdigit() for p in parts):
+                    raw_item_id = int(parts[0])
+                    x, y = int(parts[1]), int(parts[2])
+                    dispenser_assignments[(x, y)] = raw_item_id
+                    if not is_reload or self.verbose:
+                        print(f"Added dispenser with item ID {raw_item_id} at position ({x}, {y})")
+                    
+            # If line contains recipe names in any section
+            elif any(keyword in line_stripped.upper() for keyword in ["SALAD", "BURGUER"]):
+                recipe_names = [name.strip().upper() for name in line_stripped.split(',')]
+                recipes_to_load.extend([r for r in recipe_names if r])
+                if not is_reload or self.verbose:
+                    print(f"Found recipes: {recipes_to_load}") 
+                
+        # Make sure we have valid data
+        if len(static_map) == 0:
+            print("WARNING: No valid grid map was found in the file. Creating a default map.")
+            static_map = [
+                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('C'), self.item_manager.get_cell_code('#')],
+                [self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code('D')],
+                [self.item_manager.get_cell_code('I'), self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code('#')]
+            ]
+        
+        # Initialize recipes
+        self._initialize_recipes(recipes_to_load)
             
         return static_map_np, agent_start_pos, dispenser_assignments
+        
+    def _initialize_recipes(self, recipe_names):
+        """Initialize recipes based on the names from the map file."""
+        added_recipes = False
+        
+        for name in recipe_names:
+            name = name.strip().upper()
+            if name == "SALAD":
+                recipe = Recipe(
+                    name="SALAD",
+                    ingredients=[ItemType.TOMATO, ItemType.LETTUCE],
+                    reward=10.0
+                )
+                self.recipe_manager.add_recipe(recipe)
+                added_recipes = True
+                if self.map_path not in self._already_loaded_maps or self.verbose:
+                    print(f"Added recipe: {name}")
+            elif name == "BURGUER":
+                recipe = Recipe(
+                    name="BURGUER",
+                    ingredients=[ItemType.LETTUCE, ItemType.MEAT],
+                    reward=15.0
+                )
+                self.recipe_manager.add_recipe(recipe)
+                added_recipes = True
+                if self.map_path not in self._already_loaded_maps or self.verbose:
+                    print(f"Added recipe: {name}")
+        
+        # Certifique-se de que pelo menos uma receita está definida (caso o mapa não especifique)
+        if not added_recipes:
+            if self.map_path not in self._already_loaded_maps or self.verbose:
+                print("WARNING: No recipes were loaded from the map. Adding default SALAD recipe.")
+            default_recipe = Recipe(
+                name="SALAD",
+                ingredients=[ItemType.TOMATO, ItemType.LETTUCE],
+                reward=10.0
+            )
+            self.recipe_manager.add_recipe(default_recipe)
     
     def _initialize_game_state(self):
-        """Carrega o mapa dinamicamente e inicializa o estado de jogo."""
+        """Carrega o mapa e inicializa o estado de jogo."""
         map_static_np, agent_start_pos, dispenser_assignments = self._load_map_from_file(self.map_path)
+        
+        if map_static_np.size == 0:
+            raise ValueError(f"Map file at {self.map_path} resulted in an empty map")
+            
         self.map_size = map_static_np.shape
+        if self.map_path not in self._already_loaded_maps or self.verbose:
+            print(f"Map loaded with size: {self.map_size}")
+        
         items_on_ground = np.zeros(self.map_size, dtype=np.uint8) 
+        
+        carrying = {}
+        for agent in self.possible_agents:
+            if agent not in agent_start_pos:
+                if self.map_path not in self._already_loaded_maps or self.verbose:
+                    print(f"WARNING: Agent {agent} was not assigned a position in the map. Using default position.")
+                # Encontra um espaço vazio
+                for y in range(self.map_size[0]):
+                    for x in range(self.map_size[1]):
+                        if map_static_np[y, x] == self.item_manager.get_cell_code(' '):
+                            agent_start_pos[agent] = (x, y)
+                            break
+                    if agent in agent_start_pos:
+                        break
+                if agent not in agent_start_pos:
+                    agent_start_pos[agent] = (0, 0)
+            
+            carrying[agent] = ItemType.NONE.value
         
         state = {
             "map_static": map_static_np,
             "agent_pos": agent_start_pos,
-            "carrying": {agent: ITEM_NAMES['none'] for agent in self.possible_agents},
+            "carrying": carrying,
             "items_on_ground": items_on_ground,
             "dishes_pending": 3,
             "time_steps": 0,
@@ -265,7 +391,8 @@ class OvercookedMARL(ParallelEnv):
         base_observation[:, :, 1] = self.state["items_on_ground"]
         
         # Camada 4: Ponto de Entrega (Binário)
-        base_observation[:, :, 4] = np.where(self.state["map_static"] == CHAR_TO_NUM['D'], 1, 0)
+        delivery_code = self.item_manager.get_cell_code('D')
+        base_observation[:, :, 4] = np.where(self.state["map_static"] == delivery_code, 1, 0)
         
         
         for agent_id in self.agents:
@@ -288,7 +415,7 @@ class OvercookedMARL(ParallelEnv):
             carrying_item_code = self.state["carrying"][agent_id]
             
             # Usa PROCESSING_VECTOR_MAP para converter o ID Simples para o vetor de observação
-            progress_vector = PROCESSING_VECTOR_MAP.get(carrying_item_code, [0, 0, 0])
+            progress_vector = self.item_manager.PROCESSING_VECTOR_MAP.get(carrying_item_code, [0, 0, 0])
             
             # Codifica o vetor nas camadas 5, 6 e 7 (na posição do agente)
             for i in range(NUM_VECTOR_CHANNELS):
@@ -307,6 +434,10 @@ class OvercookedMARL(ParallelEnv):
     def reset(self, seed=None, options=None):
         """Inicia um novo episódio."""
         gym.Env.reset(self, seed=seed) 
+        
+        # Make sure the map is marked as loaded to avoid duplicate logs
+        if not self.map_path in self._already_loaded_maps:
+            self._already_loaded_maps.add(self.map_path)
         
         # Reinicializa o estado e a lista de agentes
         self.state = self._initialize_game_state()
@@ -344,7 +475,7 @@ class OvercookedMARL(ParallelEnv):
                 new_x, new_y = np.clip(new_x, 0, max_x), np.clip(new_y, 0, max_y)
                 
                 cell_type = self.state["map_static"][new_y, new_x]
-                is_collision = (cell_type != CHAR_TO_NUM[' '])
+                is_collision = (cell_type != self.item_manager.get_cell_code(' '))
                 other_agent_pos = [pos for id, pos in self.state["agent_pos"].items() if id != agent_id]
                 
                 if (new_x, new_y) in other_agent_pos: is_collision = True
@@ -430,63 +561,53 @@ class OvercookedMARL(ParallelEnv):
         reward = -0.005
         global_reward_bonus = 0.0
 
-        # --- 1. LÓGICA DE PROCESSAMENTO (Genérica) ---
-        if station_type in STATION_PROCESSOR:
-            if carrying_item in STATION_PROCESSOR[station_type]:
-                
-                if carrying_item in PROCESSING_MAP:
-                    next_state = PROCESSING_MAP[carrying_item]
+        # Lógica de Processamento
+        if station_type in self.item_manager.STATION_PROCESSOR:
+            if carrying_item in self.item_manager.STATION_PROCESSOR[station_type]:
+                if carrying_item in self.item_manager.PROCESSING_MAP:
+                    next_state = self.item_manager.PROCESSING_MAP[carrying_item]
                     self.state["carrying"][agent_id] = next_state
-                    reward += 1.0 if next_state in ALL_FINAL_CODES else 0.5
+                    reward += 1.0 if next_state in self.recipe_manager.ALL_FINAL_CODES else 0.5
                     return reward, 0.0
         
-        # LÓGICA DE COLETA DE ITENS
-        
-        # Verifica se a coordenada atual é um dispenser definido no mapa de atribuições
+        # Lógica de Coleta de Itens
         if (ix, iy) in self.state["dispensers"]:
-            
-            if carrying_item == ITEM_NAMES['none']:
-                
-                # Obtém o código RAW/BASE a ser liberado (Ex: 5 para Tomate RAW)
+            if carrying_item == ItemType.NONE.value:
                 item_to_dispense = self.state["dispensers"][(ix, iy)]
-                
                 self.state["carrying"][agent_id] = item_to_dispense
                 reward += 0.5
-                return reward, 0.0 # Recompensa local e sai
+                return reward, 0.0
         
-        # BANCADA E COMBINAÇÃO
-        
-        elif station_type == CHAR_TO_NUM['#']:
-            is_a_dish = item_on_ground != ITEM_NAMES['none'] and item_on_ground % 2 != 0 
-            is_final_ingredient = carrying_item in ALL_FINAL_CODES
+        # Bancada e Combinação
+        elif station_type == self.item_manager.get_cell_code('#'):
+            is_a_dish = item_on_ground != ItemType.NONE.value and item_on_ground % 2 != 0 
+            is_final_ingredient = carrying_item in self.recipe_manager.ALL_FINAL_CODES
             
-            # Combinação: Ingrediente Final + Prato na Bancada
+            # Combinação: Ingrediente + Prato
             if is_final_ingredient and is_a_dish:
-                bit_value_ingrediente = FINAL_TO_BIT.get(carrying_item, 0)
+                bit_value_ingrediente = self.recipe_manager.FINAL_TO_BIT.get(carrying_item, 0)
                 new_bit_code = item_on_ground + bit_value_ingrediente 
-                
                 self.state["carrying"][agent_id] = new_bit_code 
-                self.state["items_on_ground"][iy, ix] = ITEM_NAMES['none'] 
+                self.state["items_on_ground"][iy, ix] = ItemType.NONE.value 
                 reward += 2.0
                 
             # Colocar item na bancada
-            elif carrying_item != ITEM_NAMES['none'] and item_on_ground == ITEM_NAMES['none']:
+            elif carrying_item != ItemType.NONE.value and item_on_ground == ItemType.NONE.value:
                 self.state["items_on_ground"][iy, ix] = carrying_item
-                self.state["carrying"][agent_id] = ITEM_NAMES['none']
+                self.state["carrying"][agent_id] = ItemType.NONE.value
                 reward += 0.2
             
             # Pegar item da bancada
-            elif carrying_item == ITEM_NAMES['none'] and item_on_ground != ITEM_NAMES['none']:
+            elif carrying_item == ItemType.NONE.value and item_on_ground != ItemType.NONE.value:
                 self.state["carrying"][agent_id] = item_on_ground
-                self.state["items_on_ground"][iy, ix] = ITEM_NAMES['none']
+                self.state["items_on_ground"][iy, ix] = ItemType.NONE.value
                 reward += 0.2
         
-        # ENTREGA ('D')
-        elif station_type == CHAR_TO_NUM['D']: 
-            if carrying_item == ITEM_NAMES['RECIPE_FULL_CODE']: 
-                self.state["carrying"][agent_id] = ITEM_NAMES['none'] 
+        # Entrega
+        elif station_type == self.item_manager.get_cell_code('D'): 
+            if carrying_item == ItemType.RECIPE_FULL.value: 
+                self.state["carrying"][agent_id] = ItemType.NONE.value
                 self.state["dishes_pending"] -= 1 
-                
                 global_reward_bonus = 20.0
                 reward += 10.0
         

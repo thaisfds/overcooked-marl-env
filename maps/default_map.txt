@@ -1,8 +1,13 @@
+# Grid Map
 #C#P#
 # 0 #
 #   D
 # 1 #
 #IIT#
 
+# Dispensers (item_id x y)
 2 4 1
 4 4 2
+
+# Recipes
+SALAD, BURGUER
