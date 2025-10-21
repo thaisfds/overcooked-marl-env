@@ -15,7 +15,7 @@ class Recipe:
         """Recipe type is its name in uppercase for consistency"""
         return self.name.upper()
 
-# Definições de receitas disponíveis no ambiente
+# Available recipe definitions in the environment
 RECIPE_DEFINITIONS: Dict[str, Recipe] = {
     "SALAD": Recipe(
         name="SALAD",
@@ -27,7 +27,7 @@ RECIPE_DEFINITIONS: Dict[str, Recipe] = {
         ingredients=[ItemType.LETTUCE, ItemType.MEAT],
         reward=15.0
     )
-    # Para adicionar novas receitas, basta adicioná-las aqui seguindo o mesmo formato
+    # To add new recipes, simply add them here following the same format
 }
 
 class RecipeManager:
@@ -38,7 +38,7 @@ class RecipeManager:
         self.ALL_FINAL_CODES = []
 
     def add_recipe(self, recipe: Recipe):
-        """Adiciona uma nova receita e atualiza o mapeamento bit-wise"""
+        """Adds a new recipe and updates the bit-wise mapping"""
         self.recipes[recipe.type] = recipe
         bit_value = 2
         for ingredient in recipe.ingredients:
@@ -48,31 +48,31 @@ class RecipeManager:
                 self.ALL_FINAL_CODES.append(ingredient)
 
     def get_recipe_code(self, recipe_name: str) -> int:
-        """Calcula o código final esperado para uma receita."""
+        """Calculates the expected final code for a recipe."""
         recipe = self.recipes.get(recipe_name.upper())
         if not recipe:
             return 0
             
-        code = self.FINAL_TO_BIT[ItemType.DISH]  # Começa com prato (1)
+        code = self.FINAL_TO_BIT[ItemType.DISH]  # Start with dish (1)
         for ingredient in recipe.ingredients:
             code += self.FINAL_TO_BIT[ingredient]
         return code
 
     def is_final_ingredient(self, item_code) -> bool:
-        """Verifica se o item é um ingrediente final válido."""
+        """Checks if the item is a valid final ingredient."""
         return item_code in self.ALL_FINAL_CODES
 
     def get_combination_value(self, base_code: int, ingredient_code: int) -> int:
-        """Combina um código base com um novo ingrediente."""
+        """Combines a base code with a new ingredient."""
         bit_value = self.FINAL_TO_BIT.get(ingredient_code, 0)
         return base_code + bit_value
 
 
-# Funções auxiliares para gerenciamento de receitas
+# Helper functions for recipe management
 def get_available_recipes() -> List[str]:
-    """Retorna uma lista com os nomes de todas as receitas disponíveis"""
+    """Returns a list with the names of all available recipes"""
     return list(RECIPE_DEFINITIONS.keys())
 
 def get_default_recipe() -> str:
-    """Retorna o nome da receita padrão"""
+    """Returns the default recipe name"""
     return list(RECIPE_DEFINITIONS.keys())[0] if RECIPE_DEFINITIONS else "SALAD"

@@ -1,13 +1,13 @@
 # TODO LIST
-- [x] Setup e Estrutura Inicial (Suas Notas)
-- [x]  Design do Ambiente MARL (Multi-Agent)
-    - [x] Definir Agentes
-    - [x] Definir Observation Spaces
-    - [x] Definir Action Spaces
-    - [x] Design da Recompenss
-    - [x] Design da Conclusão
-- [ ]  Implementação do Env
-    - [ ] Classe Principa
+- [x] Setup and Initial Structure (Your Notes)
+- [x] MARL (Multi-Agent) Environment Design
+    - [x] Define Agents
+    - [x] Define Observation Spaces
+    - [x] Define Action Spaces
+    - [x] Reward Design
+    - [x] Termination Design
+- [ ] Environment Implementation
+    - [ ] Main Class
     - [ ] __init__
     - [ ] _get_obs
     - [ ] _get_info

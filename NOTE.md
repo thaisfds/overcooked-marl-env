@@ -1,4 +1,4 @@
-# Notas
+# Notes
 
 python.exe -m pip install --upgrade pip
 
@@ -6,7 +6,7 @@ py -3.13 -m venv venv
 
 venv\Scripts\activate
 
-pip install gymnasium numpy pettingzoo # Adicione 'pettingzoo'
+pip install gymnasium numpy pettingzoo # Add 'pettingzoo'
 
 pip install -e .
 
@@ -14,86 +14,86 @@ python enviroment_tests/salad_lettuce.py > test_log.txt
 
 deactivate
 
-# Decisões
-Resumo : ambiente gymnasium para MARL baseado em overcooked
+# Decisions
+Summary: gymnasium environment for MARL based on overcooked
 
-### Design do Ambiente MARL (Multi-Agent)
-##### Definir Agentes
-Agentes Variáveis - Na implementação do step(), você precisará gerenciar um dicionário de agentes ativos e retornar os dados apenas para eles. O PettingZoo é a biblioteca ideal para isso, pois é construída para lidar com a natureza sequencial ou paralela de jogos com agentes variáveis/turnos.
+### MARL Environment Design
+##### Define Agents
+Variable Agents - In the implementation of step(), you'll need to manage a dictionary of active agents and return data only for them. PettingZoo is the ideal library for this, as it's built to handle the sequential or parallel nature of games with variable agents/turns.
 
-##### Definir Observation Spaces
-Observation Spaces (Visão Global) - Você usará um gymnasium.spaces.Box ou gymnasium.spaces.Dict para a observação. Recomendo um Box 3D (largura x altura x camadas de estado) onde cada camada representa o estado (e.g., 1ª camada: localização do agente, 2ª camada: localização do tomate, 3ª camada: estação de corte, etc.).
+##### Define Observation Spaces
+Observation Spaces (Global Vision) - You'll use a gymnasium.spaces.Box or gymnasium.spaces.Dict for the observation. I recommend a 3D Box (width x height x state layers) where each layer represents the state (e.g., 1st layer: agent location, 2nd layer: tomato location, 3rd layer: cutting station, etc.).
 
-##### Definir Action Spaces
-Action Spaces (Andar + Interagir) - Você usará um gymnasium.spaces.Discrete onde os primeiros 4 valores são as direções e os valores restantes são as interações (e.g., 0-3: Andar, 4: Interagir).
+##### Define Action Spaces
+Action Spaces (Walk + Interact) - You'll use a gymnasium.spaces.Discrete where the first 4 values are directions and the remaining values are interactions (e.g., 0-3: Walk, 4: Interact).
 
-Colisão e Restrições - O desafio aqui é a Action Masking (mascaramento de ações). Em cada step(), o agente tentará uma ação, mas você precisará verificar se ela é válida (e.g., não há parede, estação ou agente no caminho). Se a ação for inválida, você pode: 
-1) Não mover o agente (ficar parado), ou 
-2) Aplicar uma pequena penalidade de recompensa.
+Collision and Restrictions - The challenge here is Action Masking. In each step(), the agent will try an action, but you'll need to check if it's valid (e.g., no wall, station or agent in the way). If the action is invalid, you can:
+1) Not move the agent (stay still), or
+2) Apply a small reward penalty.
 
-##### Design da Recompensas
-Recompensa Híbrida - Isso é excelente. No método step(), você calculará: 
+##### Reward Design
+Hybrid Reward - This is excellent. In the step() method, you'll calculate:
 
-Recompensa Individual (local): Se a ação foi uma interação de sucesso (e.g., pegou um item, colocou um item na estação).
+Individual Reward (local): If the action was a successful interaction (e.g., picked up an item, placed an item at the station).
 
-Recompensa Coletiva (global): Se a ação resultou na entrega de um prato. Esta recompensa deve ser somada ao valor individual e distribuída para todos os agentes no dicionário rewards: dict.
+Collective Reward (global): If the action resulted in the delivery of a dish. This reward should be added to the individual value and distributed to all agents in the rewards: dict.
 
-##### Design da Conclusão
-Tempo Limite - Isso se traduz no sinal truncated (truncamento). É a maneira do Gymnasium dizer que o episódio acabou por uma razão não diretamente relacionada à falha ou sucesso da tarefa (e.g., tempo esgotado).
+##### Termination Design
+Time Limit - This translates to the truncated signal. It's Gymnasium's way of saying the episode ended for a reason not directly related to the task's failure or success (e.g., time out).
 
-Pratos Entregues - Isso se traduz no sinal terminated (terminação). É a conclusão natural da tarefa (sucesso ou falha crítica).
+Delivered Dishes - This translates to the terminated signal. It's the natural conclusion of the task (success or critical failure).
 
-### Implementação do Env
+### Environment Implementation
 
 
-# DICAS DA AI: Ordem de Implementação do Ambiente MARL
+# AI TIPS: MARL Environment Implementation Order
 
-Fase 1: Esqueleto e Espaços (A Estrutura do Gymnasium/PettingZoo)
+Phase 1: Skeleton and Spaces (The Gymnasium/PettingZoo Structure)
 
-Esta fase é sobre definir a "forma" do seu ambiente. Se você errar aqui, nada mais funcionará.
+This phase is about defining the "shape" of your environment. If you get this wrong, nothing else will work.
 
-    Criar a Classe Base: Defina a classe OvercookedMARL herdando de ParallelEnv (do PettingZoo).
+    Create the Base Class: Define the OvercookedMARL class inheriting from ParallelEnv (from PettingZoo).
 
-    Definir Variáveis Estáticas: No __init__, defina a lista de IDs de agentes (self.agents) e o tamanho do mapa (self.map_size).
+    Define Static Variables: In __init__, define the list of agent IDs (self.agents) and the map size (self.map_size).
 
-    Definir Observation & Action Spaces: Implemente self.observation_spaces e self.action_spaces como dicionários de gymnasium.spaces.
+    Define Observation & Action Spaces: Implement self.observation_spaces and self.action_spaces as dictionaries of gymnasium.spaces.
 
-        Observação: Defina as dimensões exatas (largura x altura x camadas de estado) do seu Box 3D.
+        Observation: Define the exact dimensions (width x height x state layers) of your 3D Box.
 
-        Ação: Defina o número total de ações discretas (4 movimentos + 1 interagir) no seu Discrete(5).
+        Action: Define the total number of discrete actions (4 movements + 1 interact) in your Discrete(5).
 
-    Implementar _initialize_game_state e _get_obs: Crie estas funções auxiliares. No início, elas podem retornar dados fictícios (np.zeros ou spaces.sample()) apenas para garantir que o formato de dados de entrada/saída esteja correto.
+    Implement _initialize_game_state and _get_obs: Create these helper functions. At first, they can return dummy data (np.zeros or spaces.sample()) just to ensure the input/output data format is correct.
 
-    Implementar reset(): Implemente o reset() para inicializar o estado do jogo e retornar as primeiras observações e informações usando seus métodos auxiliares.
+    Implement reset(): Implement reset() to initialize the game state and return the first observations and information using your helper methods.
 
-Fase 2: Lógica Central (O Motor do Jogo)
+Phase 2: Core Logic (The Game Engine)
 
-Esta é a fase mais complexa, onde a simulação ocorre.
+This is the most complex phase, where the simulation takes place.
 
-    Implementar step() (Lógica de Entrada): Faça o setup do método step(actions) para receber o dicionário de ações e inicializar os 5 dicionários de retorno (obs, rewards, term, trunc, info).
+    Implement step() (Input Logic): Set up the step(actions) method to receive the action dictionary and initialize the 5 return dictionaries (obs, rewards, term, trunc, info).
 
-    Lógica de Movimento e Colisão: Dentro do loop do step(), implemente a lógica de movimentação dos agentes, garantindo que as regras de colisão (com paredes, estações e outros agentes) sejam respeitadas.
+    Movement and Collision Logic: Within the step() loop, implement the agent movement logic, ensuring collision rules (with walls, stations, and other agents) are respected.
 
-    Lógica de Interação: Implemente a lógica principal do Overcooked: o que acontece quando um agente usa a ação "Interagir" em diferentes estados (pegar item, cortar item, combinar item).
+    Interaction Logic: Implement the main Overcooked logic: what happens when an agent uses the "Interact" action in different states (pick up item, cut item, combine item).
 
-    Lógica de Recompensa Híbrida:
+    Hybrid Reward Logic:
 
-        Calcule as pequenas recompensas individuais (pela progressão).
+        Calculate small individual rewards (for progression).
 
-        Calcule a grande recompensa global (pela entrega do prato) e distribua para todos os agentes.
+        Calculate the large global reward (for dish delivery) and distribute to all agents.
 
-    Lógica de Conclusão: Implemente as condições de terminated (pratos entregues) e truncated (tempo limite), garantindo que o dicionário de retorno __all__ seja marcado como True quando o episódio terminar.
+    Termination Logic: Implement the conditions for terminated (dishes delivered) and truncated (time limit), ensuring that the return dictionary __all__ is marked as True when the episode ends.
 
-Fase 3: Finalização e Testes
+Phase 3: Finalization and Testing
 
-    Implementar render() (Opcional, mas Recomendado): Adicione a lógica para renderizar o mapa (ASCII simples, se estiver usando render_mode="human", ou uma matriz de pixels para render_mode="rgb_array").
+    Implement render() (Optional but Recommended): Add logic to render the map (simple ASCII if using render_mode="human", or a pixel matrix for render_mode="rgb_array").
 
-    Executar check_env: Use a função check_env do Gymnasium (e parallel_api_test do PettingZoo, se desejar) para validar formalmente que você seguiu o protocolo da API.
+    Run check_env: Use the check_env function from Gymnasium (and parallel_api_test from PettingZoo, if desired) to formally validate that you followed the API protocol.
 
-    Rodar o Teste de Sanidade: Execute o script enviroment_tests/test.py para garantir que o ambiente roda 100 passos sem travar, confirmando que a lógica do jogo está estável.
+    Run the Sanity Test: Run the enviroment_tests/test.py script to ensure the environment runs 100 steps without crashing, confirming that the game logic is stable.
 
-    Finalizar o Setup: Garanta que seu setup.py e o registro no __init__.py estão corretos para que outros possam usar gym.make().
+    Finalize the Setup: Make sure your setup.py and registration in __init__.py are correct so others can use gym.make().
 
-A Regra de Ouro: Não passe para a próxima fase até que o código da fase atual funcione perfeitamente com o seu código de teste.
+The Golden Rule: Don't move to the next phase until the code for the current phase works perfectly with your test code.
 
 

@@ -1,26 +1,26 @@
 from setuptools import setup, find_packages
 
 setup(
-    # Nome do pacote (será usado para o pip install)
+    # Package name (will be used for pip install)
     name="overcooked-marl-env",
     
-    # Versão inicial do seu ambiente
+    # Initial version of your environment
     version="0.0.1",
     
-    # Informações básicas
-    description="Um ambiente Gymnasium/PettingZoo para MARL baseado em Overcooked.",
-    author="[Seu Nome ou Usuário]",
+    # Basic information
+    description="A Gymnasium/PettingZoo environment for MARL based on Overcooked.",
+    author="thaisfds",
     
-    # Encontra automaticamente a sua pasta de código ('overcooked_marl_env')
+    # Automatically finds your code folder ('overcooked_marl_env')
     packages=find_packages(),
     
-    # Dependências necessárias para rodar o ambiente
+    # Dependencies required to run the environment
     install_requires=[
-        "gymnasium>=0.29.1", # A versão mais recente do Gymnasium
-        "numpy",             # Para lidar com arrays e observações
-        "pettingzoo>=1.24.0",# Essencial para a classe base ParallelEnv
+        "gymnasium>=0.29.1", # The most recent version of Gymnasium
+        "numpy",             # For handling arrays and observations
+        "pettingzoo>=1.24.0",# Essential for the ParallelEnv base class
     ],
     
-    # Versão mínima do Python
-    python_requires=">=3.10", # Recomendado usar Python 3.10+
+    # Minimum Python version
+    python_requires=">=3.10", # Recommended to use Python 3.10+
 )

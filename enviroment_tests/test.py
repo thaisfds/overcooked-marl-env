@@ -1,101 +1,125 @@
 import gymnasium as gym
 import numpy as np
 
-# Importamos a classe direta para instanciação
+# PettingZoo imports
+try:
+    from pettingzoo.utils.conversions import parallel_to_aec_wrapper
+    from pettingzoo.test import parallel_api_test
+    HAS_PETTINGZOO = True
+except ImportError:
+    HAS_PETTINGZOO = False
+    print("Warning: PettingZoo not found. Some tests will be skipped.")
+
+# Import the direct class for instantiation
 from overcooked_marl_env.env import OvercookedMARL
 
 def action_to_str(action):
     """Convert numeric action to descriptive string"""
     action_map = {
-        0: "(Cima)",
-        1: "(Baixo)",
-        2: "(Esquerda)",
-        3: "(Direita)",
-        4: "(Interagir)"
+        0: "(Up)",
+        1: "(Down)",
+        2: "(Left)",
+        3: "(Right)",
+        4: "(Interact)"
     }
     # Handle numpy int types by converting to Python int
     if hasattr(action, 'item'):
         action = action.item()
-    return action_map.get(action, f"Desconhecido ({action})")
+    return action_map.get(action, f"Unknown ({action})")
 
 def run_sanity_check(env_class, max_steps=100):
     """
-    Executa um teste básico no ambiente multi-agente para verificar se a API está correta.
+    Runs a basic test on the multi-agent environment to verify if the API is correct.
     """
     
-    # 1. Criar o Ambiente
-    print("--- 1. Inicializando Ambiente ---")
+    # 1. Create the Environment
+    print("--- 1. Initializing Environment ---")
     
     env = env_class(verbose=False) 
-    print(f"Ambiente criado via classe direta: {env.metadata['name']}")
+    print(f"Environment created via direct class: {env.metadata['name']}")
         
-    print(f"Agentes Ativos: {env.agents}")
-    print(f"Espaço de Ação para 'agent_0': {env.action_space('agent_0')}")
-    print(f"Espaço de Observação para 'agent_0': {env.observation_space('agent_0').shape}")
+    print(f"Active Agents: {env.agents}")
+    print(f"Action Space for 'agent_0': {env.action_space('agent_0')}")
+    print(f"Observation Space for 'agent_0': {env.observation_space('agent_0').shape}")
     print("-" * 30)
 
-    # 2. Resetar o Ambiente
-    print("--- 2. Reset (Início do Episódio) ---")
+    # 2. Reset the Environment
+    print("--- 2. Reset (Episode Start) ---")
     observations, info = env.reset(seed=42)
-    print(f"Observações Iniciais: {len(observations)} agentes")
-    print(f"Info Inicial: {info.keys()}")
+    print(f"Initial Observations: {len(observations)} agents")
+    print(f"Initial Info: {info.keys()}")
     
-    # Exibir informações sobre receitas se disponível
+    # Display recipe information if available
     if "recipe_order" in info["agent_0"]:
-        print(f"Ordem de Receitas Esperada: {info['agent_0']['recipe_order']}")
-        print(f"Receita Esperada Agora: {info['agent_0']['next_expected_recipe']}")
+        print(f"Expected Recipe Order: {info['agent_0']['recipe_order']}")
+        print(f"Current Expected Recipe: {info['agent_0']['next_expected_recipe']}")
     print("-" * 30)
     
     total_reward = {agent: 0 for agent in env.agents}
     
-    # 3. Executar Passos de Simulação
-    print(f"--- 3. Executando {max_steps} Passos Aleatórios ---")
+    # 3. Execute Simulation Steps
+    print(f"--- 3. Running {max_steps} Random Steps ---")
     for step in range(max_steps):
-        # 3.1 Gerar Ações Aleatórias para CADA agente ativo
+        # 3.1 Generate Random Actions for EACH active agent
         actions = {
             agent: env.action_space(agent).sample()
             for agent in env.agents
         }
         
-        # 3.2 Executar o Passo (step)
-        # O retorno é sempre 5 dicionários: obs, reward, terminated, truncated, info
+        # 3.2 Execute the Step
+        # The return is always 5 dictionaries: obs, reward, terminated, truncated, info
         observations, rewards, terminations, truncations, infos = env.step(actions)
         
-        # 3.3 Processar o Resultado
+        # 3.3 Process the Result
         
-        # Verifica se o episódio acabou para algum agente
+        # Check if the episode is over for any agent
         done = any(terminations.values()) or any(truncations.values())
 
-        # Acumula recompensas
+        # Accumulate rewards
         for agent, reward in rewards.items():
             total_reward[agent] += reward
         
         if step % 10 == 0 or done:
-            print(f"\n[Passo {step}]")
+            print(f"\n[Step {step}]")
             
             # Format actions with more meaningful names
             readable_actions = {}
             for agent, action in actions.items():
                 readable_actions[agent] = action_to_str(action)
-            print(f"  Ações: {readable_actions}")
+            print(f"  Actions: {readable_actions}")
             
-            print(f"  Recompensas: {rewards}")
-            print(f"  Total Acumulado: {total_reward}")
+            print(f"  Rewards: {rewards}")
+            print(f"  Total Accumulated: {total_reward}")
             print(f"  Terminated: {terminations}")
             print(f"  Truncated: {truncations}")
         
         if done:
-            print("\n!!! EPISÓDIO TERMINADO/TRUNCADO !!!")
-            # Mostrar informações sobre as receitas entregues
+            print("\n!!! EPISODE TERMINATED/TRUNCATED !!!")
+            # Show information about delivered recipes
             if infos and "delivered_recipes" in infos["agent_0"]:
-                print(f"Receitas Entregues: {infos['agent_0']['delivered_recipes']}")
+                print(f"Delivered Recipes: {infos['agent_0']['delivered_recipes']}")
             break
 
-    # 4. Fechar o Ambiente
+    # 4. Close the Environment
     env.close()
     print("-" * 30)
-    print("Teste concluído com sucesso (Estrutura verificada).")
+    print("Test completed successfully (Structure verified).")
 
 if __name__ == "__main__":
-    # Certifique-se de que a classe OvercookedMARL está definida no seu env.py
+    # PettingZoo environments are typically created directly, not through gym.make
+    print("Creating PettingZoo ParallelEnv directly...")
+    
+    # Create the environment directly (recommended approach for PettingZoo)
     run_sanity_check(OvercookedMARL)
+    
+    # Run PettingZoo API test if PettingZoo is available
+    if HAS_PETTINGZOO:
+        print("\n--- Running PettingZoo API test ---")
+        env = OvercookedMARL()
+        try:
+            parallel_api_test(env, num_cycles=10)
+            print("PettingZoo API test passed!")
+        except Exception as e:
+            print(f"PettingZoo API test failed: {e}")
+        finally:
+            env.close()

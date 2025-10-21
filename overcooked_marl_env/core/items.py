@@ -4,18 +4,18 @@ class ItemType(IntEnum):
     NONE = 0
     DISH = auto()
     
-    # Itens Finais (Processados)
+    # Final Items (Processed)
     TOMATO = auto()
     LETTUCE = auto()
     MEAT = auto()
     
-    # Itens em Processamento
+    # Items in Processing
     TOMATO_RAW = auto()
     LETTUCE_RAW = auto()
     MEAT_RAW = auto()
     MEAT_CUT = auto()
     
-    # Código de Receita Completa
+    # Complete Recipe Code
     RECIPE_FULL = 15
 
 class ItemManager:
