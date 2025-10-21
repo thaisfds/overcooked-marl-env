@@ -1,6 +1,6 @@
 from enum import Enum, auto
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict
 from .items import ItemType
 
 @dataclass
@@ -14,6 +14,21 @@ class Recipe:
     def type(self):
         """Recipe type is its name in uppercase for consistency"""
         return self.name.upper()
+
+# Definições de receitas disponíveis no ambiente
+RECIPE_DEFINITIONS: Dict[str, Recipe] = {
+    "SALAD": Recipe(
+        name="SALAD",
+        ingredients=[ItemType.TOMATO, ItemType.LETTUCE],
+        reward=10.0
+    ),
+    "BURGUER": Recipe(
+        name="BURGUER", 
+        ingredients=[ItemType.LETTUCE, ItemType.MEAT],
+        reward=15.0
+    )
+    # Para adicionar novas receitas, basta adicioná-las aqui seguindo o mesmo formato
+}
 
 class RecipeManager:
     def __init__(self, item_manager):
@@ -51,3 +66,13 @@ class RecipeManager:
         """Combina um código base com um novo ingrediente."""
         bit_value = self.FINAL_TO_BIT.get(ingredient_code, 0)
         return base_code + bit_value
+
+
+# Funções auxiliares para gerenciamento de receitas
+def get_available_recipes() -> List[str]:
+    """Retorna uma lista com os nomes de todas as receitas disponíveis"""
+    return list(RECIPE_DEFINITIONS.keys())
+
+def get_default_recipe() -> str:
+    """Retorna o nome da receita padrão"""
+    return list(RECIPE_DEFINITIONS.keys())[0] if RECIPE_DEFINITIONS else "SALAD"

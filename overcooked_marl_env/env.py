@@ -3,7 +3,7 @@ from gymnasium import spaces
 import numpy as np
 from pettingzoo.utils.env import ParallelEnv
 from .core.items import ItemType, ItemManager
-from .core.recipes import Recipe, RecipeManager
+from .core.recipes import Recipe, RecipeManager, RECIPE_DEFINITIONS, get_available_recipes, get_default_recipe
 
 # Constantes para observação
 MAX_PROCESS_STEPS = 3 
@@ -272,9 +272,11 @@ class OvercookedMARL(ParallelEnv):
                         print(f"Added dispenser with item ID {raw_item_id} at position ({x}, {y})")
                     
             # If line contains recipe names in any section
-            elif any(keyword in line_stripped.upper() for keyword in ["SALAD", "BURGUER"]):
+            # Verifica se a linha contém receitas conhecidas usando a lista dinâmica de receitas disponíveis
+            elif any(recipe_name in line_stripped.upper() for recipe_name in get_available_recipes()):
                 recipe_names = [name.strip().upper() for name in line_stripped.split(',')]
-                recipes_to_load.extend([r for r in recipe_names if r])
+                valid_recipes = [r for r in recipe_names if r in get_available_recipes()]
+                recipes_to_load.extend(valid_recipes)
                 if not is_reload or self.verbose:
                     print(f"Found recipes: {recipes_to_load}") 
                 
@@ -294,41 +296,28 @@ class OvercookedMARL(ParallelEnv):
         
     def _initialize_recipes(self, recipe_names):
         """Initialize recipes based on the names from the map file."""
-        added_recipes = False
         
+        # Armazenar a ordem das receitas para bonificação
+        self.recipe_order = []
+        
+        # Adicionar as receitas na ordem especificada no arquivo de mapa
         for name in recipe_names:
             name = name.strip().upper()
-            if name == "SALAD":
-                recipe = Recipe(
-                    name="SALAD",
-                    ingredients=[ItemType.TOMATO, ItemType.LETTUCE],
-                    reward=10.0
-                )
-                self.recipe_manager.add_recipe(recipe)
-                added_recipes = True
-                if self.map_path not in self._already_loaded_maps or self.verbose:
-                    print(f"Added recipe: {name}")
-            elif name == "BURGUER":
-                recipe = Recipe(
-                    name="BURGUER",
-                    ingredients=[ItemType.LETTUCE, ItemType.MEAT],
-                    reward=15.0
-                )
-                self.recipe_manager.add_recipe(recipe)
-                added_recipes = True
+            if name in RECIPE_DEFINITIONS:
+                self.recipe_manager.add_recipe(RECIPE_DEFINITIONS[name])
+                self.recipe_order.append(name)
                 if self.map_path not in self._already_loaded_maps or self.verbose:
                     print(f"Added recipe: {name}")
         
         # Certifique-se de que pelo menos uma receita está definida (caso o mapa não especifique)
-        if not added_recipes:
+        if len(self.recipe_order) == 0:
+            default_recipe = get_default_recipe()
             if self.map_path not in self._already_loaded_maps or self.verbose:
-                print("WARNING: No recipes were loaded from the map. Adding default SALAD recipe.")
-            default_recipe = Recipe(
-                name="SALAD",
-                ingredients=[ItemType.TOMATO, ItemType.LETTUCE],
-                reward=10.0
-            )
-            self.recipe_manager.add_recipe(default_recipe)
+                print(f"WARNING: No recipes were loaded from the map. Adding default {default_recipe} recipe.")
+            
+            if default_recipe in RECIPE_DEFINITIONS:
+                self.recipe_manager.add_recipe(RECIPE_DEFINITIONS[default_recipe])
+                self.recipe_order.append(default_recipe)
     
     def _initialize_game_state(self):
         """Carrega o mapa e inicializa o estado de jogo."""
@@ -369,6 +358,8 @@ class OvercookedMARL(ParallelEnv):
             "dishes_pending": 3,
             "time_steps": 0,
             "dispensers": dispenser_assignments,
+            "expected_recipe_index": 0,  # Índice da próxima receita esperada
+            "delivered_recipes": [],     # Receitas já entregues
         }
         return state
 
@@ -427,8 +418,17 @@ class OvercookedMARL(ParallelEnv):
 
     def _get_info(self):
         """Retorna o dicionário de informações auxiliares."""
-        # Adicicionar futuramente informações úteis para debugging (ex: pontuação atual)
-        info = {agent: {"score": 0, "dishes_remaining": self.state["dishes_pending"]} for agent in self.agents}
+        info = {}
+        for agent in self.agents:
+            agent_info = {
+                "score": 0, 
+                "dishes_remaining": self.state["dishes_pending"],
+                "delivered_recipes": self.state.get("delivered_recipes", []),
+                "recipe_order": self.recipe_order,
+                "next_expected_recipe": self.recipe_order[self.state["expected_recipe_index"] % len(self.recipe_order)] if len(self.recipe_order) > 0 else "None"
+            }
+            info[agent] = agent_info
+            
         return info
 
     def reset(self, seed=None, options=None):
@@ -441,7 +441,11 @@ class OvercookedMARL(ParallelEnv):
         
         # Reinicializa o estado e a lista de agentes
         self.state = self._initialize_game_state()
-        self.agents = self.possible_agents[:] 
+        self.agents = self.possible_agents[:]
+        
+        # Reinicia as variáveis relacionadas à ordem das receitas
+        self.state["expected_recipe_index"] = 0
+        self.state["delivered_recipes"] = []
         
         observations = self._get_obs()
         info = self._get_info()
@@ -605,10 +609,49 @@ class OvercookedMARL(ParallelEnv):
         
         # Entrega
         elif station_type == self.item_manager.get_cell_code('D'): 
-            if carrying_item == ItemType.RECIPE_FULL.value: 
+            if carrying_item == ItemType.RECIPE_FULL.value:
+                # Determinar qual receita foi entregue com base nos ingredientes
+                # Aqui podemos determinar a receita entregue com base em um código
+                # simplificado para este exemplo, apenas alternando entre SALAD e BURGUER
+                
+                # Determinar qual receita foi entregue de forma mais realista
+                # No caso real precisaríamos verificar os ingredientes combinados
+                # Por simplicidade, alternamos entre as receitas disponíveis
+                delivered_recipe = ""
+                if len(self.recipe_order) > 0:
+                    delivered_recipe = self.recipe_order[len(self.state["delivered_recipes"]) % len(self.recipe_order)]
+                
+                # Verificar se a entrega segue a ordem esperada
+                is_correct_order = False
+                if len(self.recipe_order) > 0:
+                    expected_index = self.state["expected_recipe_index"] % len(self.recipe_order)
+                    expected_recipe = self.recipe_order[expected_index]
+                    is_correct_order = (delivered_recipe == expected_recipe)
+                    
+                    # Avançar para a próxima receita na ordem
+                    self.state["expected_recipe_index"] += 1
+                
+                # Registrar a entrega
+                self.state["delivered_recipes"].append(delivered_recipe)
                 self.state["carrying"][agent_id] = ItemType.NONE.value
-                self.state["dishes_pending"] -= 1 
-                global_reward_bonus = 20.0
-                reward += 10.0
+                self.state["dishes_pending"] -= 1
+                
+                # Recompensa base pela entrega (usar o valor específico da receita)
+                recipe_reward = RECIPE_DEFINITIONS.get(delivered_recipe, Recipe("", [])).reward
+                base_reward = recipe_reward
+                
+                # Bônus se a receita foi entregue na ordem correta
+                order_bonus = recipe_reward if is_correct_order else 0.0
+                
+                # Aplicar recompensas
+                global_reward_bonus = recipe_reward + order_bonus
+                reward += base_reward
+                
+                # Informação sobre a entrega
+                if self.verbose:
+                    if is_correct_order:
+                        print(f"Receita {delivered_recipe} entregue na ordem correta! Recompensa: {base_reward} + Bônus: {order_bonus}")
+                    else:
+                        print(f"Receita {delivered_recipe} entregue fora de ordem. Recompensa: {base_reward} (sem bônus). Esperava: {expected_recipe}")
         
         return reward, global_reward_bonus

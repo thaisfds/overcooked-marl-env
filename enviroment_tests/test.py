@@ -39,6 +39,11 @@ def run_sanity_check(env_class, max_steps=100):
     observations, info = env.reset(seed=42)
     print(f"Observações Iniciais: {len(observations)} agentes")
     print(f"Info Inicial: {info.keys()}")
+    
+    # Exibir informações sobre receitas se disponível
+    if "recipe_order" in info["agent_0"]:
+        print(f"Ordem de Receitas Esperada: {info['agent_0']['recipe_order']}")
+        print(f"Receita Esperada Agora: {info['agent_0']['next_expected_recipe']}")
     print("-" * 30)
     
     total_reward = {agent: 0 for agent in env.agents}
@@ -81,6 +86,9 @@ def run_sanity_check(env_class, max_steps=100):
         
         if done:
             print("\n!!! EPISÓDIO TERMINADO/TRUNCADO !!!")
+            # Mostrar informações sobre as receitas entregues
+            if infos and "delivered_recipes" in infos["agent_0"]:
+                print(f"Receitas Entregues: {infos['agent_0']['delivered_recipes']}")
             break
 
     # 4. Fechar o Ambiente
