@@ -37,7 +37,7 @@
     - [x] Processing interactions (cutting, cooking)
     - [x] Delivery and scoring
 
-## Phase 5: Testing and Refinement (In Progress)
+## Phase 5: Testing and Refinement (Completed)
 - [x] Basic Testing
     - [x] Sanity checks for environment structure
     - [x] PettingZoo API compliance tests
@@ -45,10 +45,11 @@
 - [x] Code Quality
     - [x] Standardize comments in English
     - [x] Improve error handling
-- [ ] Visualization and Debugging
-    - [ ] Implement render() method
-    - [ ] ASCII rendering for "human" mode
-    - [ ] RGB array rendering for "rgb_array" mode
+- [x] Visualization and Debugging
+    - [x] Implement render() method
+    - [x] ASCII rendering for "human" mode
+    - [x] RGB array rendering for "rgb_array" mode (using pygame)
+    - [x] Add visualization dependencies to setup.py
 
 ## Phase 6: Extensions (Future)
 - [ ] Advanced Features

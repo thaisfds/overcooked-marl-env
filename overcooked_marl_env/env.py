@@ -1,9 +1,15 @@
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
+import os
+import sys
 from pettingzoo.utils.env import ParallelEnv
 from .core.items import ItemType, ItemManager
 from .core.recipes import Recipe, RecipeManager, RECIPE_DEFINITIONS, get_available_recipes, get_default_recipe
+
+# For rendering
+import pygame
+from pygame import gfxdraw
 
 # Constants for observation
 MAX_PROCESS_STEPS = 3 
@@ -532,13 +538,316 @@ class OvercookedMARL(ParallelEnv):
 
     # Function required by ParallelEnv
     def render(self):
-        # TODO: Implementation of rendering in Phase 3
-        pass
+        """
+        Renders the environment. Supports two modes:
+        - "human": renders ASCII representation to console
+        - "rgb_array": returns RGB array for visualization
+        """
+        if self.render_mode is None:
+            return
+            
+        if self.render_mode == "human":
+            return self._render_text()
+        elif self.render_mode == "rgb_array":
+            return self._render_rgb_array()
+    
+    def _render_text(self):
+        """Renders the environment as ASCII art to the console."""
+        H, W = self.map_size
+        grid = [[' ' for _ in range(W)] for _ in range(H)]
+        
+        # Original character map
+        char_map = {
+            self.item_manager.get_cell_code(' '): ' ',  # Empty space
+            self.item_manager.get_cell_code('#'): '#',  # Wall (using # as in map)
+            self.item_manager.get_cell_code('C'): 'C',  # Chopping board
+            self.item_manager.get_cell_code('P'): 'P',  # Plate dispenser
+            self.item_manager.get_cell_code('D'): 'D',  # Delivery point
+            self.item_manager.get_cell_code('I'): 'I',  # Ingredient dispenser
+            self.item_manager.get_cell_code('T'): 'T',  # Table/Counter
+        }
+        
+        # Item visualization
+        item_char_map = {
+            ItemType.TOMATO: 'T',
+            ItemType.LETTUCE: 'L',
+            ItemType.MEAT: 'M',  # Cooked meat
+            ItemType.DISH: 'p',  # Empty plate (lowercase to differentiate from plate dispenser)
+            ItemType.TOMATO_RAW: 't',
+            ItemType.LETTUCE_RAW: 'l',
+            ItemType.MEAT_RAW: 'm',
+            ItemType.MEAT_CUT: 'c',  # Cut meat
+            ItemType.RECIPE_FULL: 'R',  # Recipe complete
+        }
+        
+        # Draw static map elements
+        for y in range(H):
+            for x in range(W):
+                cell_code = self.state["map_static"][y, x]
+                grid[y][x] = char_map.get(cell_code, '?')
+                
+                # Draw items on ground
+                item_code = self.state["items_on_ground"][y, x]
+                if item_code > 0:
+                    try:
+                        item_type = ItemType(item_code)
+                        grid[y][x] = item_char_map.get(item_type, '?')
+                    except ValueError:
+                        # Special case for recipe (value 15)
+                        if item_code == ItemType.RECIPE_FULL:
+                            if "SALAD" in self.recipe_order:
+                                grid[y][x] = 'S'
+                            elif "BURGUER" in self.recipe_order:
+                                grid[y][x] = 'B'
+                            else:
+                                grid[y][x] = 'R'  # Generic recipe
+        
+        # Draw agents
+        for agent_id, pos in self.state["agent_pos"].items():
+            x, y = pos
+            agent_num = int(agent_id.split('_')[1])  # Extract number from agent_id
+            
+            # Check if agent is carrying something
+            carrying_item = self.state["carrying"][agent_id]
+            if carrying_item == 0:
+                # Just show the agent number
+                grid[y][x] = str(agent_num)
+            else:
+                # Show agent carrying item
+                try:
+                    item_type = ItemType(carrying_item)
+                    item_char = item_char_map.get(item_type, '?')
+                    grid[y][x] = f"{agent_num}"  # Just show the agent, we'll indicate carrying below
+                except ValueError:
+                    # Special case for recipe (value 15)
+                    if carrying_item == ItemType.RECIPE_FULL:
+                        if "SALAD" in self.recipe_order:
+                            item_char = 'S'
+                        elif "BURGUER" in self.recipe_order:
+                            item_char = 'B'
+                        else:
+                            item_char = 'R'
+                    else:
+                        item_char = '?'
+                    grid[y][x] = f"{agent_num}"
+                
+                # Print what the agent is carrying next to the grid
+                print(f"Agent {agent_num} is carrying: {item_char}")
+        
+        # Print the grid to console
+        print("\n" + "-" * (W + 2))
+        for row in grid:
+            print("|" + "".join(row) + "|")
+        print("-" * (W + 2))
+        
+        # Print game state information
+        print(f"Step: {self.state['time_steps']}")
+        print(f"Remaining Dishes: {self.state['dishes_pending']}")
+        print(f"Next Recipe: {self.recipe_order[self.state['expected_recipe_index']] if self.state['expected_recipe_index'] < len(self.recipe_order) else 'None'}")
+        print(f"Delivered: {self.state['delivered_recipes']}")
+        
+        return None
+
+    def _render_rgb_array(self):
+        """
+        Renders the environment as an RGB array using Pygame.
+        Returns a numpy array of shape (H, W, 3) with RGB values.
+        """
+        if self.window is None:
+            pygame.init()
+            pygame.display.init()
+            
+            H, W = self.map_size
+            cell_size = 60  # Size of each cell in pixels
+            
+            self.window_size = (W * cell_size, H * cell_size)
+            self.window = pygame.Surface(self.window_size)
+            self.cell_size = cell_size
+            
+            # Load or create assets
+            self.colors = {
+                'wall': (50, 50, 50),       # Dark gray
+                'floor': (200, 200, 200),    # Light gray
+                'chopping': (220, 170, 110), # Light brown
+                'plates': (150, 150, 220),   # Light blue
+                'delivery': (50, 180, 50),   # Green
+                'counter': (180, 180, 150),  # Beige
+                'agent0': (220, 50, 50),     # Red
+                'agent1': (50, 50, 220),     # Blue
+                'tomato': (220, 50, 50),     # Red
+                'lettuce': (50, 180, 50),    # Green
+                'patty': (139, 69, 19),      # Brown
+                'plate': (250, 250, 250),    # White
+                'salad': (120, 200, 80),     # Light green
+                'burger': (200, 150, 100),   # Tan
+                'text': (0, 0, 0)            # Black
+            }
+        
+        # Clear the surface
+        self.window.fill((200, 200, 200))
+        
+        H, W = self.map_size
+        
+        # Draw static map elements
+        for y in range(H):
+            for x in range(W):
+                rect = pygame.Rect(
+                    x * self.cell_size,
+                    y * self.cell_size,
+                    self.cell_size,
+                    self.cell_size
+                )
+                
+                cell_code = self.state["map_static"][y, x]
+                
+                # Draw cell background based on type
+                if cell_code == self.item_manager.get_cell_code('#'):
+                    pygame.draw.rect(self.window, self.colors['wall'], rect)
+                elif cell_code == self.item_manager.get_cell_code(' '):
+                    pygame.draw.rect(self.window, self.colors['floor'], rect)
+                    pygame.draw.rect(self.window, (150, 150, 150), rect, 1)  # Grid lines
+                elif cell_code == self.item_manager.get_cell_code('C'):
+                    pygame.draw.rect(self.window, self.colors['chopping'], rect)
+                    pygame.draw.rect(self.window, (100, 100, 100), rect, 2)  # Border
+                    # Draw knife symbol
+                    pygame.draw.line(self.window, (100, 100, 100), 
+                                    (x * self.cell_size + 15, y * self.cell_size + 30),
+                                    (x * self.cell_size + self.cell_size - 15, y * self.cell_size + 30), 3)
+                elif cell_code == self.item_manager.get_cell_code('P'):
+                    pygame.draw.rect(self.window, self.colors['plates'], rect)
+                    # Draw plate symbol
+                    pygame.draw.circle(self.window, (250, 250, 250), 
+                                    (x * self.cell_size + self.cell_size//2, y * self.cell_size + self.cell_size//2), 
+                                    self.cell_size//3, 2)
+                elif cell_code == self.item_manager.get_cell_code('D'):
+                    pygame.draw.rect(self.window, self.colors['delivery'], rect)
+                    # Draw serving symbol
+                    pygame.draw.polygon(self.window, (250, 250, 250), [
+                        (x * self.cell_size + 20, y * self.cell_size + 20),
+                        (x * self.cell_size + self.cell_size//2, y * self.cell_size + 10),
+                        (x * self.cell_size + self.cell_size - 20, y * self.cell_size + 20),
+                        (x * self.cell_size + self.cell_size//2, y * self.cell_size + self.cell_size - 10)
+                    ], 2)
+                elif cell_code in [self.item_manager.get_cell_code('T'), self.item_manager.get_cell_code('I')]:
+                    pygame.draw.rect(self.window, self.colors['counter'], rect)
+                    pygame.draw.rect(self.window, (100, 100, 100), rect, 1)  # Border
+                
+                # Draw items on ground
+                item_code = self.state["items_on_ground"][y, x]
+                if item_code > 0:
+                    self._draw_item(x, y, item_code)
+        
+        # Draw agents
+        for agent_id, pos in self.state["agent_pos"].items():
+            x, y = pos
+            agent_num = int(agent_id.split('_')[1])  # Extract number from agent_id
+            
+            # Draw agent circle
+            pygame.draw.circle(
+                self.window, 
+                self.colors[f'agent{agent_num}'], 
+                (x * self.cell_size + self.cell_size//2, y * self.cell_size + self.cell_size//2), 
+                self.cell_size//3
+            )
+            
+            # Draw agent ID
+            font = pygame.font.SysFont(None, 24)
+            text = font.render(str(agent_num), True, (255, 255, 255))
+            text_rect = text.get_rect(center=(x * self.cell_size + self.cell_size//2, y * self.cell_size + self.cell_size//2))
+            self.window.blit(text, text_rect)
+            
+            # Draw carried item (if any)
+            carrying_item = self.state["carrying"][agent_id]
+            if carrying_item > 0:
+                item_offset = self.cell_size//4
+                self._draw_item(x, y, carrying_item, offset=item_offset)
+        
+        # Draw game info at the bottom
+        font = pygame.font.SysFont(None, 24)
+        
+        # Convert Pygame surface to numpy array
+        rgb_array = pygame.surfarray.array3d(self.window)
+        return np.transpose(rgb_array, (1, 0, 2))
+    
+    def _draw_item(self, x, y, item_code, offset=0):
+        """Helper method to draw an item at the specified position."""
+        try:
+            item_type = ItemType(item_code)
+        except ValueError:
+            # Handle special recipe codes that aren't in ItemType enum
+            item_type = None
+            
+        item_size = self.cell_size // 3
+        
+        center_x = x * self.cell_size + self.cell_size//2
+        center_y = y * self.cell_size + self.cell_size//2
+        
+        # Draw different items with different shapes and colors
+        if item_type == ItemType.TOMATO:
+            pygame.draw.circle(self.window, self.colors['tomato'], 
+                              (center_x, center_y - offset), item_size)
+        elif item_type == ItemType.TOMATO_RAW:
+            # Raw tomato (red circle with black outline)
+            pygame.draw.circle(self.window, self.colors['tomato'], 
+                              (center_x, center_y - offset), item_size)
+            pygame.draw.circle(self.window, (0, 0, 0), 
+                              (center_x, center_y - offset), item_size, 2)
+        elif item_type == ItemType.LETTUCE:
+            # Processed lettuce (green)
+            pygame.draw.circle(self.window, self.colors['lettuce'], 
+                              (center_x, center_y - offset), item_size)
+        elif item_type == ItemType.LETTUCE_RAW:
+            # Raw lettuce (green with black outline)
+            pygame.draw.circle(self.window, self.colors['lettuce'], 
+                              (center_x, center_y - offset), item_size)
+            pygame.draw.circle(self.window, (0, 0, 0), 
+                              (center_x, center_y - offset), item_size, 2)
+        elif item_type == ItemType.MEAT_RAW:
+            # Raw meat (brown circle with outline)
+            pygame.draw.circle(self.window, self.colors['patty'], 
+                              (center_x, center_y - offset), item_size)
+            pygame.draw.circle(self.window, (0, 0, 0), 
+                              (center_x, center_y - offset), item_size, 2)
+        elif item_type == ItemType.MEAT_CUT:
+            # Cut meat (brown with pattern)
+            pygame.draw.circle(self.window, self.colors['patty'], 
+                              (center_x, center_y - offset), item_size)
+            pygame.draw.line(self.window, (50, 25, 0),
+                           (center_x-item_size//2, center_y-offset),
+                           (center_x+item_size//2, center_y-offset), 2)
+        elif item_type == ItemType.MEAT:
+            # Cooked meat (darker brown)
+            pygame.draw.circle(self.window, (100, 50, 10), 
+                              (center_x, center_y - offset), item_size)
+        elif item_type == ItemType.DISH:
+            # Empty plate/dish (white circle)
+            pygame.draw.circle(self.window, self.colors['plate'], 
+                              (center_x, center_y - offset), item_size)
+            pygame.draw.circle(self.window, (200, 200, 200), 
+                              (center_x, center_y - offset), item_size, 2)
+        elif item_code == ItemType.RECIPE_FULL:  # Completed recipes
+            # Generic recipe visualization (plate with content)
+            pygame.draw.circle(self.window, self.colors['plate'], 
+                              (center_x, center_y - offset), item_size)
+            
+            # Check which recipe it might be based on environment state
+            if "SALAD" in self.recipe_order:
+                # Draw as salad (green content)
+                pygame.draw.circle(self.window, self.colors['lettuce'], 
+                                  (center_x, center_y - offset), item_size-4)
+            elif "BURGUER" in self.recipe_order:
+                # Draw as burger (brown content)
+                pygame.draw.rect(self.window, self.colors['patty'],
+                               (center_x-item_size+4, center_y-item_size+4-offset, 
+                                2*item_size-8, item_size-4))
 
     # Function required by ParallelEnv
     def close(self):
-        # TODO: Implementation to close the rendering window
-        pass
+        """Closes any open rendering windows."""
+        if self.window is not None:
+            pygame.display.quit()
+            pygame.quit()
+            self.window = None
 
     # Function required by ParallelEnv
     def observation_space(self, agent):

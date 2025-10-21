@@ -19,6 +19,8 @@ setup(
         "gymnasium>=0.29.1", # The most recent version of Gymnasium
         "numpy",             # For handling arrays and observations
         "pettingzoo>=1.24.0",# Essential for the ParallelEnv base class
+        "pygame>=2.5.0",     # For rendering (rgb_array mode)
+        "matplotlib>=3.7.0", # For visualization in tests
     ],
     
     # Minimum Python version
