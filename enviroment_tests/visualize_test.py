@@ -200,7 +200,7 @@ def test_rgb_rendering_pygame():
     try:
         running = True
         step_count = 0
-        max_steps = 500  # Aumentado para permitir mais tempo de visualização
+        max_steps = 500  # Increased to allow more visualization time
         clock = pygame.time.Clock()
         
         while running and step_count < max_steps:
@@ -208,7 +208,7 @@ def test_rgb_rendering_pygame():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:  # Pressione ESC para sair
+                    if event.key == pygame.K_ESCAPE:  # Press ESC to exit
                         running = False
             
             # Take random actions
@@ -234,9 +234,9 @@ def test_rgb_rendering_pygame():
                 frame_surface = pygame.surfarray.make_surface(frame.swapaxes(0, 1))
                 screen.blit(frame_surface, (0, 0))
                 
-                # Adiciona texto informativo na parte superior da tela
+                # Add informative text at the top of the screen
                 font = pygame.font.SysFont(None, 24)
-                text_surface = font.render("Pressione ESC para sair", True, (255, 255, 255), (0, 0, 0))
+                text_surface = font.render("Press ESC to exit", True, (255, 255, 255), (0, 0, 0))
                 screen.blit(text_surface, (10, 10))
                 
                 pygame.display.flip()
@@ -257,23 +257,23 @@ def test_rgb_rendering_pygame():
 if __name__ == "__main__":
     import argparse
     
-    # Por padrão, apenas ASCII e pygame
+    # By default, only ASCII and pygame
     
-    # Teste de renderização ASCII (texto)
-    print("\n=== INICIANDO TESTE DE RENDERIZAÇÃO ASCII ===")
+    # ASCII rendering test (text)
+    print("\n=== STARTING ASCII RENDERING TEST ===")
     test_ascii_rendering()
-    print("\n=== TESTE DE RENDERIZAÇÃO ASCII CONCLUÍDO ===")
+    print("\n=== ASCII RENDERING TEST COMPLETED ===")
     
-    # Pular teste de Matplotlib
+    # Skip Matplotlib test
     if HAS_MATPLOTLIB:
-        print("\nPulando teste de visualização Matplotlib (não solicitado)")
+        print("\nSkipping Matplotlib visualization test (not requested)")
     
-    # Teste de renderização Pygame (interativa)
+    # Pygame rendering test (interactive)
     if HAS_PYGAME:
-        print("\n=== INICIANDO TESTE DE RENDERIZAÇÃO PYGAME ===")
-        print("Pressione ESC ou feche a janela para encerrar o teste.")
+        print("\n=== STARTING PYGAME RENDERING TEST ===")
+        print("Press ESC or close the window to end the test.")
         test_rgb_rendering_pygame()
-        print("\n=== TESTE DE RENDERIZAÇÃO PYGAME CONCLUÍDO ===")
+        print("\n=== PYGAME RENDERING TEST COMPLETED ===")
     else:
-        print("\nNão foi possível executar o teste Pygame (pygame não encontrado)")
-        print("Execute 'pip install pygame' para habilitar a visualização interativa.")
+        print("\nCould not run Pygame test (pygame not found)")
+        print("Run 'pip install pygame' to enable interactive visualization.")

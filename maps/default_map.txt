@@ -5,9 +5,9 @@
 # 1 #
 #IIT#
 
-# Dispensers (item_id x y)
-2 4 1
-4 4 2
+# Dispensers (name x y)
+tomato 1 4
+lettuce 2 4
 
 # Recipes
 SALAD

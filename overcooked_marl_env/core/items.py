@@ -1,24 +1,213 @@
-from enum import IntEnum, auto
+"""
+Item system using dictionaries with metadata for flexible recipe management.
+"""
 
-class ItemType(IntEnum):
-    NONE = 0
-    DISH = auto()
-    
-    # Final Items (Processed)
-    TOMATO = auto()
-    LETTUCE = auto()
-    MEAT = auto()
-    
-    # Items in Processing
-    TOMATO_RAW = auto()
-    LETTUCE_RAW = auto()
-    MEAT_RAW = auto()
-    MEAT_CUT = auto()
-    
-    # Complete Recipe Code
-    RECIPE_FULL = 15
+class ItemState:
+    """Constants for item processing states."""
+    RAW = "RAW"
+    CHOPPING_1 = "CHOPPING_1"
+    CHOPPING_2 = "CHOPPING_2"
+    CHOPPING_3 = "CHOPPING_3"
+    READY = "READY"
+    EMPTY = "EMPTY"
+    BUILDING = "BUILDING"
+    COMPLETE = "COMPLETE"
 
+
+class ItemType:
+    """Constants for item types."""
+    INGREDIENT = "ingredient"
+    DISH = "dish"
+    RECIPE = "recipe"
+
+
+def create_ingredient(name, cuts_needed=3):
+    """
+    Creates a basic ingredient that needs processing.
+    
+    Args:
+        name: Name of the ingredient (e.g., "tomato", "lettuce")
+        cuts_needed: Number of cuts required to process (default: 3)
+    
+    Returns:
+        Dictionary representing the ingredient
+    """
+    return {
+        "name": name,
+        "type": ItemType.INGREDIENT,
+        "state": ItemState.RAW,
+        "cuts_needed": cuts_needed,
+        "cuts_done": 0,
+        "combinable": False
+    }
+
+
+def create_plate():
+    """
+    Creates an empty plate.
+    
+    Returns:
+        Dictionary representing an empty plate
+    """
+    return {
+        "name": "plate",
+        "type": ItemType.DISH,
+        "state": ItemState.EMPTY,
+        "ingredients": []
+    }
+
+
+def advance_processing(item):
+    """
+    Advances the processing state of an item by one step.
+    
+    Args:
+        item: Item dictionary to process
+    
+    Returns:
+        Updated item dictionary
+    """
+    if item["type"] != ItemType.INGREDIENT:
+        return item
+    
+    item["cuts_done"] += 1
+    cuts_done = item["cuts_done"]
+    cuts_needed = item["cuts_needed"]
+    
+    # Update state based on progress
+    if cuts_done >= cuts_needed:
+        item["state"] = ItemState.READY
+        item["combinable"] = True
+    elif cuts_done == 1:
+        item["state"] = ItemState.CHOPPING_1
+    elif cuts_done == 2:
+        item["state"] = ItemState.CHOPPING_2
+    elif cuts_done == 3:
+        item["state"] = ItemState.CHOPPING_3
+    
+    return item
+
+
+def is_ready(item):
+    """
+    Checks if item is ready to be combined.
+    
+    Args:
+        item: Item dictionary to check
+    
+    Returns:
+        True if item is in READY state
+    """
+    return item.get("state") == ItemState.READY
+
+
+def can_combine(item):
+    """
+    Checks if item can be combined into a plate.
+    
+    Args:
+        item: Item dictionary to check
+    
+    Returns:
+        True if item can be combined
+    """
+    return item.get("combinable", False)
+
+
+def is_processing(item):
+    """
+    Checks if item is currently being processed.
+    
+    Args:
+        item: Item dictionary to check
+    
+    Returns:
+        True if item is in a CHOPPING state
+    """
+    state = item.get("state", "")
+    return state in [ItemState.CHOPPING_1, ItemState.CHOPPING_2, ItemState.CHOPPING_3]
+
+
+def can_process(item):
+    """
+    Checks if item can be processed further.
+    
+    Args:
+        item: Item dictionary to check
+    
+    Returns:
+        True if item is RAW or in a CHOPPING state
+    """
+    if item["type"] != ItemType.INGREDIENT:
+        return False
+    
+    state = item.get("state", "")
+    return state == ItemState.RAW or is_processing(item)
+
+
+def add_ingredient_to_plate(plate, ingredient_name):
+    """
+    Adds an ingredient to a plate.
+    
+    Args:
+        plate: Plate dictionary
+        ingredient_name: Name of the ingredient to add
+    
+    Returns:
+        Updated plate dictionary
+    """
+    if plate["type"] != ItemType.DISH:
+        return plate
+    
+    if "ingredients" not in plate:
+        plate["ingredients"] = []
+    
+    plate["ingredients"].append(ingredient_name)
+    
+    # Update state
+    if plate["state"] == ItemState.EMPTY:
+        plate["state"] = ItemState.BUILDING
+    
+    return plate
+
+
+def get_ingredient_display_name(item):
+    """
+    Gets a display-friendly name for an item including its state.
+    
+    Args:
+        item: Item dictionary
+    
+    Returns:
+        String representation for display
+    """
+    if item["type"] == ItemType.INGREDIENT:
+        name = item["name"].capitalize()
+        state = item["state"]
+        
+        if state == ItemState.RAW:
+            return f"{name} (raw)"
+        elif state == ItemState.READY:
+            return f"{name} (ready)"
+        elif is_processing(item):
+            cuts = item["cuts_done"]
+            total = item["cuts_needed"]
+            return f"{name} ({cuts}/{total})"
+    
+    elif item["type"] == ItemType.DISH:
+        if item["state"] == ItemState.EMPTY:
+            return "Empty Plate"
+        else:
+            ingredients = ", ".join(item["ingredients"])
+            return f"Plate ({ingredients})"
+    
+    return str(item)
+
+
+# Legacy support - map old item codes to new system
 class ItemManager:
+    """Manager for handling item codes and cell codes (for map compatibility)."""
+    
     def __init__(self):
         self.CHAR_TO_NUM = {
             ' ': 0,
@@ -30,44 +219,22 @@ class ItemManager:
             'D': 6,
             'T': 7,
         }
-
-        self.PROCESSING_MAP = {
-            ItemType.TOMATO_RAW: ItemType.TOMATO,
-            ItemType.LETTUCE_RAW: ItemType.LETTUCE,
-            ItemType.MEAT_RAW: ItemType.MEAT_CUT,
-            ItemType.MEAT_CUT: ItemType.MEAT,
-        }
-
-        self.STATION_PROCESSOR = {
-            self.CHAR_TO_NUM['C']: [
-                ItemType.TOMATO_RAW,
-                ItemType.LETTUCE_RAW,
-                ItemType.MEAT_RAW
-            ],
-            self.CHAR_TO_NUM['F']: [ItemType.MEAT_CUT],
-        }
-
-        self.PROCESSING_VECTOR_MAP = self._initialize_processing_vectors()
-
-    def _initialize_processing_vectors(self):
-        vectors = {
-            ItemType.TOMATO_RAW: [1, 0, 0],
-            ItemType.LETTUCE_RAW: [1, 0, 0],
-            ItemType.MEAT_RAW: [1, 0, 0],
-            ItemType.MEAT_CUT: [1, 1, 0],
-            ItemType.TOMATO: [1, 1, 0],
-            ItemType.LETTUCE: [1, 1, 0],
-            ItemType.MEAT: [1, 1, 1],
-            ItemType.DISH: [0, 0, 0],
-            ItemType.NONE: [0, 0, 0],
-        }
         
-        # Adiciona códigos bit-wise (1-15)
-        vectors.update({code: [0, 0, 0] for code in range(1, 16)})
-        return vectors
-
-    def get_item_code(self, item_type: ItemType) -> int:
-        return item_type.value
-
+        # Map ingredient names to create functions
+        self.INGREDIENT_CREATORS = {
+            "tomato": lambda: create_ingredient("tomato", cuts_needed=3),
+            "lettuce": lambda: create_ingredient("lettuce", cuts_needed=3),
+            "onion": lambda: create_ingredient("onion", cuts_needed=3),
+            "meat": lambda: create_ingredient("meat", cuts_needed=3),
+        }
+    
     def get_cell_code(self, char: str) -> int:
+        """Get numeric code for a map cell character."""
         return self.CHAR_TO_NUM.get(char, 0)
+    
+    def create_ingredient_by_name(self, name: str):
+        """Create an ingredient by name."""
+        creator = self.INGREDIENT_CREATORS.get(name.lower())
+        if creator:
+            return creator()
+        return create_ingredient(name, cuts_needed=3)

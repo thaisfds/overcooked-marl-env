@@ -96,4 +96,87 @@ Phase 3: Finalization and Testing
 
 The Golden Rule: Don't move to the next phase until the code for the current phase works perfectly with your test code.
 
+---
+
+# Sistema Refatorado (Outubro 2025)
+
+## Visão Geral da Refatoração
+
+O sistema de itens e receitas foi completamente refatorado, migrando de um sistema baseado em enums e códigos numéricos para um sistema flexível baseado em dicionários e classes Python.
+
+## Principais Mudanças
+
+### 1. Sistema de Itens (items.py)
+- **Antes**: ItemType enum com valores fixos
+- **Depois**: Dicionários com metadados e estados nomeados
+  - Estados: `RAW` → `CHOPPING_1` → `CHOPPING_2` → `CHOPPING_3` → `READY`
+  - Processamento progressivo: 3 interações para processar
+  - Progresso armazenado no item (permite corte cooperativo)
+
+### 2. Sistema de Receitas (recipes.py)
+- **Antes**: Códigos bitwise e validação numérica
+- **Depois**: Classes Python e RecipeManager
+  - `Recipe` base class com método `matches()`
+  - `RecipeManager.validate_delivery()` para validação
+  - Fácil adicionar novas receitas
+
+### 3. Sistema de Instâncias (env.py)
+- Cada item tem ID único e dicionário completo
+- Progresso de corte mantido ao mover items
+- Suporte a corte cooperativo entre agentes
+
+### 4. Interações Atualizadas
+- **Processamento**: 3 cortes necessários (0.1 pts cada, 1.0 ao completar)
+- **Prato**: Pode pegar com mãos vazias ou com item READY (combina automaticamente)
+- **Bancadas**: Combinação flexível de pratos e ingredientes READY
+- **Entrega**: Validação baseada em lista de ingredientes (receitas inválidas = 0 pontos)
+
+### 5. Visualização Melhorada
+- **ASCII**: Letras indicam estado (minúscula=RAW, maiúscula=READY, números=processando)
+- **Pygame**: Cores gradientes por estado, progresso visual de cortes, ingredientes em pratos
+
+## Arquivos Modificados
+- `overcooked_marl_env/core/items.py` - Sistema novo de itens
+- `overcooked_marl_env/core/recipes.py` - Classes de receitas
+- `overcooked_marl_env/env.py` - Lógica de interação atualizada
+- `maps/default_map.txt` - Novo formato de dispensadores (nomes em vez de IDs)
+
+## Arquivos Criados
+- `enviroment_tests/test_new_system.py` - Testes do sistema refatorado
+- `REFACTORING_SUMMARY.md` - Documentação completa da refatoração
+
+## Como Usar
+
+### Executar Testes
+```bash
+venv\Scripts\activate
+python enviroment_tests/test_new_system.py
+```
+
+### Exemplo de Código
+```python
+from overcooked_marl_env.env import OvercookedMARL
+
+env = OvercookedMARL(render_mode="human", verbose=True)
+obs, info = env.reset()
+
+# Agente 0 pega tomate e corta 3 vezes
+actions = {
+    "agent_0": 3  # RIGHT
+}
+obs, rewards, dones, truncs, info = env.step(actions)
+
+# Info agora contém dados completos do item
+print(info["agent_0"]["carrying_item_data"])
+# {'name': 'tomato', 'state': 'RAW', 'cuts_done': 0, ...}
+```
+
+## Compatibilidade
+
+O sistema mantém backwards compatibility:
+- IDs numéricos de dispensadores ainda funcionam
+- Código antigo deve funcionar sem alterações
+- Novos recursos são opcionais
+
+Ver `REFACTORING_SUMMARY.md` para documentação completa.
 
