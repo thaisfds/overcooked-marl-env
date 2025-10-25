@@ -10,4 +10,4 @@
 4 4 2
 
 # Recipes
-SALAD, BURGUER
+SALAD

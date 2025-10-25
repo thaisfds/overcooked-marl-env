@@ -39,7 +39,7 @@ class OvercookedMARL(ParallelEnv):
             raise ValueError("Map size was not properly initialized")
         
         # 0: Up, 1: Down, 2: Left, 3: Right, 4: Interact
-        self._action_to_direction = {0: (0, 1), 1: (0, -1), 2: (-1, 0), 3: (1, 0)}
+        self._action_to_direction = {0: (0, -1), 1: (0, 1), 2: (-1, 0), 3: (1, 0)}
         
         action_space_single = spaces.Discrete(5) 
         
@@ -426,12 +426,26 @@ class OvercookedMARL(ParallelEnv):
         """Returns the dictionary of auxiliary information."""
         info = {}
         for agent in self.agents:
+            # Obter o item que o agente está carregando
+            carrying_item = self.state["carrying"][agent]
+            
+            # Tentar converter para o tipo de item
+            try:
+                if carrying_item > 0:
+                    item_name = str(ItemType(carrying_item)).split('.')[-1] if carrying_item != ItemType.RECIPE_FULL.value else "RECIPE_FULL"
+                else:
+                    item_name = "NONE"
+            except ValueError:
+                item_name = f"UNKNOWN_ITEM_{carrying_item}"
+            
             agent_info = {
                 "score": 0, 
                 "dishes_remaining": self.state["dishes_pending"],
                 "delivered_recipes": self.state.get("delivered_recipes", []),
                 "recipe_order": self.recipe_order,
-                "next_expected_recipe": self.recipe_order[self.state["expected_recipe_index"] % len(self.recipe_order)] if len(self.recipe_order) > 0 else "None"
+                "next_expected_recipe": self.recipe_order[self.state["expected_recipe_index"] % len(self.recipe_order)] if len(self.recipe_order) > 0 else "None",
+                "inventory": item_name,  # Adiciona informação do inventário
+                "carrying_item_code": carrying_item  # Adiciona código numérico do item
             }
             info[agent] = agent_info
             
@@ -470,30 +484,124 @@ class OvercookedMARL(ParallelEnv):
         episode_truncated = False
         global_reward = 0.0 # Global reward accumulator
         
-        # Processing Actions and Movement/Interaction Logic
+        # Certifique-se de que o dicionário last_direction existe
+        if not hasattr(self, 'last_direction'):
+            self.last_direction = {}
+        
+        # Abordagem simplificada: processar todos os movimentos de forma mais simples
+        # Passo 1: Coletar todas as intenções de movimento
+        intended_positions = {}
         
         for agent_id, action in actions.items():
-            current_pos = self.state["agent_pos"][agent_id]
-            current_x, current_y = current_pos
+            rewards[agent_id] -= 0.01  # Penalidade base por qualquer ação
             
-            rewards[agent_id] += -0.01 
-            
-            if action < 4:  # Actions 0, 1, 2, 3: Movement
+            # Processar apenas ações de movimento (0-3)
+            if action < 4:  
+                current_pos = self.state["agent_pos"][agent_id]
+                current_x, current_y = current_pos
+                
                 dx, dy = self._action_to_direction[action]
+                # Salva a direção do movimento para uso nas interações
+                self.last_direction[agent_id] = (dx, dy)
+                
                 new_x, new_y = current_x + dx, current_y + dy
                 max_x, max_y = self.map_size[1] - 1, self.map_size[0] - 1
                 new_x, new_y = np.clip(new_x, 0, max_x), np.clip(new_y, 0, max_y)
                 
+                # Verificar colisões com paredes/estações
                 cell_type = self.state["map_static"][new_y, new_x]
-                is_collision = (cell_type != self.item_manager.get_cell_code(' '))
-                other_agent_pos = [pos for id, pos in self.state["agent_pos"].items() if id != agent_id]
+                space_code = self.item_manager.get_cell_code(' ')  # Código para espaço vazio
                 
-                if (new_x, new_y) in other_agent_pos: is_collision = True
+                if cell_type == space_code:  # Só pode andar em espaços vazios
+                    intended_positions[agent_id] = (new_x, new_y)
+                else:
+                    # Manter na posição atual se colidiu com parede/estação
+                    intended_positions[agent_id] = current_pos
+                    rewards[agent_id] -= 0.005  # Penalidade por colisão
+        
+        # Passo 2: Encontrar e resolver conflitos
+        current_positions = {agent: pos for agent, pos in self.state["agent_pos"].items()}
+        final_positions = current_positions.copy()  # Começar com as posições atuais
+        temp_positions = {}  # Para armazenar posições intermediárias antes de resolver conflitos
+        
+        # Primeiro verificar se as posições pretendidas não colidem com outros agentes atuais
+        for agent_id, intended_pos in intended_positions.items():
+            # Verificar se outro agente já está na posição pretendida
+            other_agent_there = any(pos == intended_pos for other_id, pos in current_positions.items() 
+                                   if other_id != agent_id)
+            if not other_agent_there:
+                temp_positions[agent_id] = intended_pos
+            else:
+                # Se já existe um agente na célula, não podemos mover para lá
+                temp_positions[agent_id] = current_positions[agent_id]
+                rewards[agent_id] -= 0.005  # Penalidade por tentativa de movimento inválido
+                if self.verbose:
+                    print(f"Agente {agent_id} não pode se mover para {intended_pos} porque outro agente já está nessa posição")
                 
-                if not is_collision: self.state["agent_pos"][agent_id] = (new_x, new_y)
-                else: rewards[agent_id] += -0.005
-            
-            elif action == 4: # Action 4: Interact
+        # Detectar conflitos - dois agentes tentando ir para o mesmo espaço
+        position_agents = {}  # Mapa de posição -> lista de agentes tentando ir para lá
+        
+        for agent_id, pos in temp_positions.items():
+            # Só considere conflitos para posições que não são as posições atuais dos agentes
+            if pos != current_positions[agent_id]:
+                if pos in position_agents:
+                    position_agents[pos].append(agent_id)
+                else:
+                    position_agents[pos] = [agent_id]
+        
+        # Resolver conflitos
+        for pos, agents in position_agents.items():
+            if len(agents) == 1:  # Não há conflito
+                agent_id = agents[0]
+                final_positions[agent_id] = pos  # Permitir o movimento
+            else:
+                # Conflito: nenhum agente se move
+                for agent_id in agents:
+                    rewards[agent_id] -= 0.005  # Penalidade adicional por conflito
+                    # Manter na posição atual
+                    final_positions[agent_id] = current_positions[agent_id]
+                if self.verbose:
+                    print(f"Conflito de movimento: agentes {agents} tentaram ir para {pos}, nenhum se moveu")
+        
+        # Passo 3: Atualizar as posições dos agentes
+        for agent_id, pos in final_positions.items():
+            self.state["agent_pos"][agent_id] = pos
+        
+        # Depuração de movimento (quando verbose=True)
+        if self.verbose:
+            print("\n--- Informações de Movimento ---")
+            for agent_id, action in actions.items():
+                if action < 4:
+                    old_pos = current_positions.get(agent_id, (0, 0))
+                    new_pos = final_positions.get(agent_id, (0, 0))
+                    dx, dy = self._action_to_direction.get(action, (0, 0))
+                    intended_pos = (old_pos[0] + dx, old_pos[1] + dy)
+                    
+                    # Converter para int regular antes de imprimir (para evitar np.int64 nos logs)
+                    old_pos_print = (int(old_pos[0]), int(old_pos[1]))
+                    new_pos_print = (int(new_pos[0]), int(new_pos[1]))
+                    intended_pos_print = (int(intended_pos[0]), int(intended_pos[1]))
+                    
+                    if old_pos != new_pos:
+                        print(f"Agente {agent_id} moveu de {old_pos_print} para {new_pos_print}")
+                    else:
+                        if intended_pos != old_pos:
+                            # Verificar por que falhou
+                            cell_type = self.state["map_static"][intended_pos[1], intended_pos[0]]
+                            if cell_type != self.item_manager.get_cell_code(' '):
+                                print(f"Agente {agent_id} não moveu para {intended_pos_print} porque a célula não é um espaço vazio")
+                            else:
+                                other_agent_there = any(pos == intended_pos for other_id, pos in current_positions.items() if other_id != agent_id)
+                                if other_agent_there:
+                                    print(f"Agente {agent_id} não moveu para {intended_pos_print} porque outro agente já está lá")
+                                else:
+                                    print(f"Agente {agent_id} não moveu para {intended_pos_print} por conflito de movimento")
+                        else:
+                            print(f"Agente {agent_id} não tentou se mover (ação inválida)")
+        
+        # Processar ações de interação (4)
+        for agent_id, action in actions.items():
+            if action == 4:  # Action 4: Interact
                 local_reward, interaction_global_reward = self._handle_interaction(agent_id)
                 rewards[agent_id] += local_reward
                 global_reward += interaction_global_reward # Accumulate global bonus
@@ -860,8 +968,49 @@ class OvercookedMARL(ParallelEnv):
         return self.action_spaces[agent]
     
     def _get_tile_in_front(self, agent_id):
-        """Returns the current position of the agent. (Simplified: Interacts with what is under it)."""
-        return self.state["agent_pos"][agent_id]
+        """Returns the position in front of the agent based on its last movement direction."""
+        agent_pos = self.state["agent_pos"][agent_id]
+        x, y = agent_pos
+        
+        # Tenta obter a última direção do agente (se existir)
+        if hasattr(self, 'last_direction') and agent_id in self.last_direction:
+            dx, dy = self.last_direction[agent_id]
+            # Verifica se a posição à frente está dentro dos limites do mapa
+            new_x, new_y = x + dx, y + dy
+            if 0 <= new_x < self.map_size[1] and 0 <= new_y < self.map_size[0]:
+                return (new_x, new_y)
+                
+        # Se não há direção registrada ou a posição está fora dos limites,
+        # interage com a própria posição ou posições adjacentes
+        # Verificar primeira a posição atual
+        if self.state["map_static"][y, x] in [
+            self.item_manager.get_cell_code('C'),  # Chopping board
+            self.item_manager.get_cell_code('P'),  # Plate dispenser
+            self.item_manager.get_cell_code('D'),  # Delivery point
+            self.item_manager.get_cell_code('I'),  # Ingredient dispenser
+            self.item_manager.get_cell_code('T')   # Table/Counter
+        ] or (x, y) in self.state["dispensers"]:
+            return agent_pos
+            
+        # Verificar posições adjacentes em ordem: direita, esquerda, cima, baixo
+        directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        
+        for dx, dy in directions:
+            new_x, new_y = x + dx, y + dy
+            # Verificar se está dentro dos limites do mapa
+            if 0 <= new_x < self.map_size[1] and 0 <= new_y < self.map_size[0]:
+                # Verificar se é uma estação interativa ou dispensador
+                if self.state["map_static"][new_y, new_x] in [
+                    self.item_manager.get_cell_code('C'),  # Chopping board
+                    self.item_manager.get_cell_code('P'),  # Plate dispenser
+                    self.item_manager.get_cell_code('D'),  # Delivery point
+                    self.item_manager.get_cell_code('I'),  # Ingredient dispenser
+                    self.item_manager.get_cell_code('T')   # Table/Counter
+                ] or (new_x, new_y) in self.state["dispensers"] or self.state["items_on_ground"][new_y, new_x] > 0:
+                    return (new_x, new_y)
+                    
+        # Se nenhuma interação for possível, retorna a posição atual
+        return agent_pos
 
     def _handle_interaction(self, agent_id):
         """Executes the logic of Action 4 (Interact) using dynamic dispenser mapping."""
@@ -871,28 +1020,41 @@ class OvercookedMARL(ParallelEnv):
         station_type = self.state["map_static"][iy, ix] 
         item_on_ground = self.state["items_on_ground"][iy, ix] 
         
+        if self.verbose:
+            # Converter para int regular antes de imprimir
+            ix_print, iy_print = int(ix), int(iy)
+            print(f"Agent {agent_id} interacting at position ({ix_print}, {iy_print})")
+            print(f"  Station type: {station_type}")
+            print(f"  Carrying item: {carrying_item}")
+            print(f"  Item on ground: {item_on_ground}")
+        
         reward = -0.005
         global_reward_bonus = 0.0
 
-        # Processing Logic
+        # Processing Logic (estações de corte e cozimento)
         if station_type in self.item_manager.STATION_PROCESSOR:
             if carrying_item in self.item_manager.STATION_PROCESSOR[station_type]:
                 if carrying_item in self.item_manager.PROCESSING_MAP:
                     next_state = self.item_manager.PROCESSING_MAP[carrying_item]
                     self.state["carrying"][agent_id] = next_state
                     reward += 1.0 if next_state in self.recipe_manager.ALL_FINAL_CODES else 0.5
+                    if self.verbose:
+                        print(f"  Processado item {carrying_item} para {next_state}")
                     return reward, 0.0
         
-        # Item Collection Logic
+        # Item Collection Logic (dispensadores)
         if (ix, iy) in self.state["dispensers"]:
             if carrying_item == ItemType.NONE.value:
                 item_to_dispense = self.state["dispensers"][(ix, iy)]
                 self.state["carrying"][agent_id] = item_to_dispense
                 reward += 0.5
+                if self.verbose:
+                    print(f"  Pegou item {item_to_dispense} do dispensador")
                 return reward, 0.0
         
-        # Counter and Combination
-        elif station_type == self.item_manager.get_cell_code('#'):
+        # Counter and Combination (bancadas/mesas)
+        # Trata tanto o código 'T' quanto '#' como bancadas para compatibilidade
+        elif station_type == self.item_manager.get_cell_code('T') or station_type == self.item_manager.get_cell_code('#'):
             is_a_dish = item_on_ground != ItemType.NONE.value and item_on_ground % 2 != 0 
             is_final_ingredient = carrying_item in self.recipe_manager.ALL_FINAL_CODES
             
@@ -903,18 +1065,24 @@ class OvercookedMARL(ParallelEnv):
                 self.state["carrying"][agent_id] = new_bit_code 
                 self.state["items_on_ground"][iy, ix] = ItemType.NONE.value 
                 reward += 2.0
+                if self.verbose:
+                    print(f"  Combinado ingrediente com prato: {new_bit_code}")
                 
             # Place item on counter
             elif carrying_item != ItemType.NONE.value and item_on_ground == ItemType.NONE.value:
                 self.state["items_on_ground"][iy, ix] = carrying_item
                 self.state["carrying"][agent_id] = ItemType.NONE.value
                 reward += 0.2
+                if self.verbose:
+                    print(f"  Colocado item {carrying_item} na bancada")
             
             # Pick up item from counter
             elif carrying_item == ItemType.NONE.value and item_on_ground != ItemType.NONE.value:
                 self.state["carrying"][agent_id] = item_on_ground
                 self.state["items_on_ground"][iy, ix] = ItemType.NONE.value
                 reward += 0.2
+                if self.verbose:
+                    print(f"  Pegado item {item_on_ground} da bancada")
         
         # Delivery
         elif station_type == self.item_manager.get_cell_code('D'): 
@@ -956,4 +1124,8 @@ class OvercookedMARL(ParallelEnv):
                     else:
                         print(f"Recipe {delivered_recipe} delivered out of order. Reward: {base_reward} (no bonus). Expected: {expected_recipe}")
         
+        # Para debugging
+        if self.verbose:
+            print(f"  Reward: {reward}, Global Bonus: {global_reward_bonus}")
+            
         return reward, global_reward_bonus
