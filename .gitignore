@@ -13,3 +13,6 @@ __pycache__/
 .vscode/
 .idea/
 test_log.txt
+POC Proposta Inicial/
+docs
+enviroment_tests/logs/

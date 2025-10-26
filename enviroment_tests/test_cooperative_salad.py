@@ -43,8 +43,12 @@ def test_cooperative_salad():
     print("  5. Agent 1: Deliver salad")
     print("="*60 + "\n")
     
-    env = OvercookedMARL(render_mode="human", verbose=False)
+    env = OvercookedMARL(render_mode="rgb_array", verbose=False)
     obs, info = env.reset()
+    
+    # Render initial state
+    env.render()
+    time.sleep(1.0)  # Pause to see initial setup
     
     # Agent 0 starts at (2,1)
     # Agent 1 starts at (2,3)
@@ -236,7 +240,8 @@ def test_cooperative_salad():
             rew = rewards[agent_id]
             print(f"{agent_id}: Inventory = {inv:30s} | Reward = {rew:+.3f}")
         
-        time.sleep(0.05)
+        # Delay for visualization (pygame events handled by env.render())
+        time.sleep(0.3)
         
         # Check if completed
         if info['agent_0']['dishes_remaining'] < 3:
@@ -251,23 +256,40 @@ def test_cooperative_salad():
     print(f"Remaining dishes: {info['agent_0']['dishes_remaining']}")
     
     # Check success
+    success = False
     if len(info['agent_0']['delivered_recipes']) > 0:
         print("\n[OK] TEST PASSED! Salad delivered successfully!")
-        return True
+        success = True
     else:
         print("\n[FAILED] No recipe was delivered.")
-        return False
+        success = False
     
     print("="*60)
+    
+    # Keep window open to see final result
+    print("\nFinal state rendered. Close the Pygame window to exit.")
+    print("(Window will auto-close in 10 seconds)")
+    
+    # Just wait - env.render() handles pygame events internally
+    for _ in range(100):  # 10 seconds total
+        env.render()
+        time.sleep(0.1)
+    
+    env.close()
+    return success
 
 
 if __name__ == "__main__":
     print("\n" + "="*60)
     print(" COOPERATION TEST - TEAM SALAD")
     print("="*60)
+    print("\nVisualization Mode: RGB (Pygame Graphics)")
+    print("The test will display in a graphical window.")
+    print("="*60)
     
     try:
         success = test_cooperative_salad()
+        print(f"\nTest finished with result: {'PASSED' if success else 'FAILED'}")
         
     except Exception as e:
         print(f"\n[ERROR]: {e}")
@@ -275,8 +297,5 @@ if __name__ == "__main__":
         traceback.print_exc()
     
     finally:
-        try:
-            import pygame
-            pygame.quit()
-        except:
-            pass
+        # Environment cleanup handled by env.close() in the test function
+        pass
