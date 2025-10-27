@@ -775,6 +775,8 @@ class OvercookedMARL(ParallelEnv):
             self.item_manager.get_cell_code('D'): 'D',
             self.item_manager.get_cell_code('I'): 'I',
             self.item_manager.get_cell_code('T'): 'T',
+            self.item_manager.get_cell_code('|'): '|',
+            self.item_manager.get_cell_code('_'): '_',
         }
         
         def get_item_char(item_dict):
@@ -962,6 +964,11 @@ class OvercookedMARL(ParallelEnv):
                 
                 # Draw cell background based on type
                 if cell_code == self.item_manager.get_cell_code('#'):
+                    pygame.draw.rect(self.window, self.colors['counter'], rect)
+                    pygame.draw.rect(self.window, (100, 100, 100), rect, 1)  # Border
+                elif cell_code == self.item_manager.get_cell_code('|'):
+                    pygame.draw.rect(self.window, self.colors['wall'], rect)
+                elif cell_code == self.item_manager.get_cell_code('_'):
                     pygame.draw.rect(self.window, self.colors['wall'], rect)
                 elif cell_code == self.item_manager.get_cell_code(' '):
                     pygame.draw.rect(self.window, self.colors['floor'], rect)
@@ -975,8 +982,8 @@ class OvercookedMARL(ParallelEnv):
                                     (x * self.cell_size + self.cell_size - 15, y * self.cell_size + 30), 3)
                 elif cell_code == self.item_manager.get_cell_code('P'):
                     pygame.draw.rect(self.window, self.colors['plates'], rect)
-                    # Draw plate symbol
-                    pygame.draw.circle(self.window, (250, 250, 250), 
+                    # Draw plate symbol (black)
+                    pygame.draw.circle(self.window, (0, 0, 0), 
                                     (x * self.cell_size + self.cell_size//2, y * self.cell_size + self.cell_size//2), 
                                     self.cell_size//3, 2)
                 elif cell_code == self.item_manager.get_cell_code('D'):
@@ -984,6 +991,18 @@ class OvercookedMARL(ParallelEnv):
                 elif cell_code in [self.item_manager.get_cell_code('T'), self.item_manager.get_cell_code('I')]:
                     pygame.draw.rect(self.window, self.colors['counter'], rect)
                     pygame.draw.rect(self.window, (100, 100, 100), rect, 1)  # Border
+                    
+                    # Draw X on trash station
+                    if cell_code == self.item_manager.get_cell_code('T'):
+                        padding = self.cell_size // 4
+                        pygame.draw.line(self.window, (0, 0, 0),
+                                       (x * self.cell_size + padding, y * self.cell_size + padding),
+                                       (x * self.cell_size + self.cell_size - padding, 
+                                        y * self.cell_size + self.cell_size - padding), 4)
+                        pygame.draw.line(self.window, (0, 0, 0),
+                                       (x * self.cell_size + self.cell_size - padding, y * self.cell_size + padding),
+                                       (x * self.cell_size + padding, 
+                                        y * self.cell_size + self.cell_size - padding), 4)
                 
                 # Draw visual indicators on stations
                 center_x = x * self.cell_size + self.cell_size // 2
@@ -1558,23 +1577,22 @@ class OvercookedMARL(ParallelEnv):
             is_ground_dish = ground_item and ground_item.get("type") == ItemType.DISH
             is_ground_ready = ground_item and is_ready(ground_item)
             
-            # Scenario 1: Carrying READY item + plate on counter → pick up plate and combine
+            # Scenario 1: Carrying READY item + plate on counter → combine and leave plate on counter
             if is_carrying_ready and is_ground_dish:
                 # Add ingredient to plate
                 updated_plate = add_ingredient_to_plate(ground_item, carrying_item["name"])
                 
-                # Deletar ingrediente que foi combinado
+                # Delete ingredient that was combined
                 self._delete_item_instance(carrying_instance_id)
                 del self.state["agent_holding_instance"][agent_id]
                 
-                # Agent now carries the updated plate
+                # Update the plate on the counter (stays on counter, doesn't go to agent's hand)
                 self._update_item(ground_instance_id, updated_plate)
-                self.state["agent_holding_instance"][agent_id] = ground_instance_id
-                del self.state["ground_instances"][(ix, iy)]
+                # The plate remains on the ground at (ix, iy)
                 
                 reward += 4.0
                 if self.verbose:
-                    print(f"  Combined {carrying_item['name']} with plate from counter")
+                    print(f"  Combined {carrying_item['name']} with plate on counter (plate stays on counter)")
                 return reward, 0.0
             
             # Scenario 2: Carrying plate + READY item on counter → pick up item and combine

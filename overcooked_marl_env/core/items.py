@@ -218,6 +218,8 @@ class ItemManager:
             'P': 5,
             'D': 6,
             'T': 7,
+            '|': 8,  # Wall (vertical borders)
+            '_': 9,  # Wall (horizontal borders)
         }
         
         # Map ingredient names to create functions

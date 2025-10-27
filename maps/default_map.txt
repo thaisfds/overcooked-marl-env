@@ -1,13 +1,15 @@
 # Grid Map
-#C#P#
-# 0 #
-#   D
-# 1 #
-#IIT#
+_______
+|#C#P#|
+|# 0 #|
+|#   D|
+|# 1 #|
+|#IIT#|
+_______
 
 # Dispensers (name x y)
-tomato 1 4
-lettuce 2 4
+tomato 2 5
+lettuce 3 5
 
 # Recipes
 SIMPLE_SALAD, GARDEN_SALAD, SIMPLE_SALAD
