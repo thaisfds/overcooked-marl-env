@@ -224,8 +224,7 @@ class ItemManager:
         self.INGREDIENT_CREATORS = {
             "tomato": lambda: create_ingredient("tomato", cuts_needed=3),
             "lettuce": lambda: create_ingredient("lettuce", cuts_needed=3),
-            "onion": lambda: create_ingredient("onion", cuts_needed=3),
-            "meat": lambda: create_ingredient("meat", cuts_needed=3),
+            "cucumber": lambda: create_ingredient("cucumber", cuts_needed=3),
         }
     
     def get_cell_code(self, char: str) -> int:

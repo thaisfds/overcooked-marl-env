@@ -10,4 +10,4 @@ tomato 1 4
 lettuce 2 4
 
 # Recipes
-SALAD
+SIMPLE_SALAD, GARDEN_SALAD, SIMPLE_SALAD

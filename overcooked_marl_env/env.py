@@ -789,7 +789,7 @@ class OvercookedMARL(ParallelEnv):
                 state = item_dict.get("state", ItemState.RAW)
                 
                 # Map ingredients to letters
-                name_map = {'tomato': 't', 'lettuce': 'l', 'meat': 'm', 'onion': 'o'}
+                name_map = {'tomato': 't', 'lettuce': 'l', 'cucumber': 'c'}
                 char = name_map.get(name, '?')
                 
                 # Uppercase if READY, lowercase if RAW, number if CHOPPING
@@ -852,8 +852,28 @@ class OvercookedMARL(ParallelEnv):
         # Print game state information
         print(f"Step: {self.state['time_steps']}")
         print(f"Remaining Dishes: {self.state['dishes_pending']}")
-        print(f"Next Recipe: {self.recipe_order[self.state['expected_recipe_index']] if self.state['expected_recipe_index'] < len(self.recipe_order) else 'None'}")
-        print(f"Delivered: {self.state['delivered_recipes']}")
+        
+        # Show orders and delivered
+        if len(self.recipe_order) > 0:
+            # Calculate pending orders: original order minus delivered
+            pending_orders = list(self.recipe_order)
+            for delivered_recipe in self.state['delivered_recipes']:
+                if delivered_recipe in pending_orders:
+                    pending_orders.remove(delivered_recipe)  # Remove first occurrence
+            
+            if len(pending_orders) > 0:
+                orders_str = ", ".join(pending_orders)
+                print(f"Orders: {orders_str}")
+            else:
+                print(f"Orders: (none)")
+            
+            if len(self.state['delivered_recipes']) > 0:
+                delivered_str = ", ".join(self.state['delivered_recipes'])
+                print(f"Delivered: {delivered_str}")
+            else:
+                print(f"Delivered: (none)")
+        else:
+            print(f"Orders: (none)")
         
         # Print all agents' information
         print("\n--- Agent Status ---")
@@ -893,7 +913,10 @@ class OvercookedMARL(ParallelEnv):
             cell_size = 60  # Size of each cell in pixels
             
             # Extra space for info panel
-            self.info_panel_height = 30 * len(self.possible_agents)  # 30 pixels per agent
+            # Space for agents info + recipe progress (2 lines)
+            agent_lines = len(self.possible_agents)
+            recipe_lines = 2  # Two lines: Orders and Delivered
+            self.info_panel_height = (30 * agent_lines) + (25 * recipe_lines)
             self.window_size = (W * cell_size, H * cell_size + self.info_panel_height)
             # Create actual Pygame window for visualization
             self.window = pygame.display.set_mode(self.window_size)
@@ -1071,6 +1094,43 @@ class OvercookedMARL(ParallelEnv):
             text_y = info_panel_y + 5 + (idx * line_height)
             self.window.blit(text_surface, (5, text_y))
         
+        # Render recipe progress below agent info
+        recipe_start_y = info_panel_y + (len(self.agents) * 30) + 5
+        
+        # Draw separator line
+        separator_y = recipe_start_y - 3
+        pygame.draw.line(self.window, (150, 150, 150), 
+                        (0, separator_y), (W * self.cell_size, separator_y), 1)
+        
+        # Line 1: Orders (pending only)
+        if len(self.recipe_order) > 0:
+            # Calculate pending orders: original order minus delivered
+            pending_orders = list(self.recipe_order)
+            for delivered_recipe in self.state['delivered_recipes']:
+                if delivered_recipe in pending_orders:
+                    pending_orders.remove(delivered_recipe)  # Remove first occurrence
+            
+            if len(pending_orders) > 0:
+                orders_str = ", ".join(pending_orders)
+                orders_text = f"Orders: {orders_str}"
+            else:
+                orders_text = "Orders: (none)"
+        else:
+            orders_text = "Orders: (none)"
+        
+        text_surface = font.render(orders_text, True, (0, 0, 0))
+        self.window.blit(text_surface, (5, recipe_start_y))
+        
+        # Line 2: Delivered
+        if len(self.state['delivered_recipes']) > 0:
+            delivered_str = ", ".join(self.state['delivered_recipes'])
+            delivered_text = f"Delivered: {delivered_str}"
+        else:
+            delivered_text = "Delivered: (none)"
+        
+        text_surface = font.render(delivered_text, True, (0, 0, 0))
+        self.window.blit(text_surface, (5, recipe_start_y + 20))
+        
         # Update the Pygame window
         pygame.display.flip()
         
@@ -1098,8 +1158,7 @@ class OvercookedMARL(ParallelEnv):
             base_colors = {
                 "tomato": (220, 50, 50),    # Red
                 "lettuce": (50, 180, 50),   # Green
-                "meat": (139, 69, 19),      # Brown
-                "onion": (200, 200, 100),   # Light yellow
+                "cucumber": (100, 220, 100), # Light green
             }
             
             base_color = base_colors.get(name, (150, 150, 150))
@@ -1388,8 +1447,7 @@ class OvercookedMARL(ParallelEnv):
                 ingredient_map = {
                     5: "tomato",
                     6: "lettuce",
-                    7: "onion",
-                    8: "meat",
+                    7: "cucumber",
                 }
                 ingredient_name = ingredient_map.get(dispenser_data, "tomato")
                 ingredient = self.item_manager.create_ingredient_by_name(ingredient_name)
@@ -1494,13 +1552,18 @@ class OvercookedMARL(ParallelEnv):
             
             if is_valid:
                 # Valid recipe!
-                # Check if delivered in correct order
+                # Check if delivered recipe is the first in pending orders
                 is_correct_order = False
                 if len(self.recipe_order) > 0:
-                    expected_index = self.state["expected_recipe_index"] % len(self.recipe_order)
-                    expected_recipe = self.recipe_order[expected_index]
-                    is_correct_order = (recipe_name == expected_recipe)
-                    self.state["expected_recipe_index"] += 1
+                    # Calculate pending orders (original minus delivered)
+                    pending_orders = list(self.recipe_order)
+                    for delivered_recipe in self.state['delivered_recipes']:
+                        if delivered_recipe in pending_orders:
+                            pending_orders.remove(delivered_recipe)
+                    
+                    # Bonus only if it's the FIRST pending recipe
+                    if len(pending_orders) > 0:
+                        is_correct_order = (recipe_name == pending_orders[0])
                 
                 # Register delivery
                 self.state["delivered_recipes"].append(recipe_name)
@@ -1523,8 +1586,8 @@ class OvercookedMARL(ParallelEnv):
                     else:
                         print(f"  Recipe {recipe_name} delivered out of order")
                         print(f"  Reward: {base_reward} (no bonus)")
-                        if len(self.recipe_order) > 0:
-                            print(f"  Expected: {expected_recipe}")
+                        if len(pending_orders) > 0:
+                            print(f"  Expected: {pending_orders[0]}")
                 
                 return reward, global_reward_bonus
             else:

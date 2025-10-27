@@ -34,35 +34,35 @@ class Recipe:
         return f"Recipe({self.name}, {self.ingredients}, reward={self.reward})"
 
 
-class SaladRecipe(Recipe):
-    """Simple salad with tomato and lettuce."""
+class SimpleSaladRecipe(Recipe):
+    """Simple salad with just lettuce."""
     
     def __init__(self):
         super().__init__(
-            name="SALAD",
-            ingredients=["tomato", "lettuce"],
+            name="SIMPLE_SALAD",
+            ingredients=["lettuce"],
             reward=10.0
         )
 
 
-class BurgerRecipe(Recipe):
-    """Burger with meat and lettuce."""
+class GardenSaladRecipe(Recipe):
+    """Garden salad with lettuce and tomato."""
     
     def __init__(self):
         super().__init__(
-            name="BURGER",
-            ingredients=["meat", "lettuce"],
+            name="GARDEN_SALAD",
+            ingredients=["lettuce", "tomato"],
             reward=20.0
         )
 
 
-class ComplexSaladRecipe(Recipe):
-    """Complex salad with tomato, lettuce and onion."""
+class FreshSaladRecipe(Recipe):
+    """Fresh salad with lettuce, tomato and cucumber."""
     
     def __init__(self):
         super().__init__(
-            name="COMPLEX_SALAD",
-            ingredients=["tomato", "lettuce", "onion"],
+            name="FRESH_SALAD",
+            ingredients=["lettuce", "tomato", "cucumber"],
             reward=30.0
         )
 
@@ -78,9 +78,9 @@ class RecipeManager:
     def _register_default_recipes(self):
         """Register all default recipes."""
         self.recipes = [
-            SaladRecipe(),
-            BurgerRecipe(),
-            ComplexSaladRecipe(),
+            SimpleSaladRecipe(),
+            GardenSaladRecipe(),
+            FreshSaladRecipe(),
         ]
     
     def register_recipe(self, recipe):
@@ -175,12 +175,12 @@ def get_available_recipes():
 
 def get_default_recipe():
     """Get the default recipe name."""
-    return "SALAD"
+    return "SIMPLE_SALAD"
 
 
 # Recipe definitions for backwards compatibility
 RECIPE_DEFINITIONS = {
-    "SALAD": SaladRecipe(),
-    "BURGER": BurgerRecipe(),
-    "COMPLEX_SALAD": ComplexSaladRecipe(),
+    "SIMPLE_SALAD": SimpleSaladRecipe(),
+    "GARDEN_SALAD": GardenSaladRecipe(),
+    "FRESH_SALAD": FreshSaladRecipe(),
 }
