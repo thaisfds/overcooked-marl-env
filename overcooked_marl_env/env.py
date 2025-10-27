@@ -14,6 +14,9 @@ from .core.recipes import (
     Recipe, RecipeManager, RECIPE_DEFINITIONS,
     get_available_recipes, get_default_recipe
 )
+from .map.map_loader import MapLoader
+from .environment.game_state import MapData
+from .environment.observation_builder import ObservationBuilder
 
 # For rendering
 import pygame
@@ -36,6 +39,8 @@ class OvercookedMARL(ParallelEnv):
         
         self.item_manager = ItemManager()
         self.recipe_manager = RecipeManager()
+        self.map_loader = MapLoader()
+        self.observation_builder = ObservationBuilder(max_process_steps=MAX_PROCESS_STEPS)
         
         self.possible_agents = [f"agent_{i}" for i in range(num_fixed_agents)]
         self.agents = self.possible_agents[:]
@@ -79,241 +84,37 @@ class OvercookedMARL(ParallelEnv):
 # =================================================================
 
     def _load_map_from_file(self, map_path):
+        """
+        Load map using the new MapLoader system.
+        Returns tuple of (static_map, agent_positions, dispensers).
+        """
         is_reload = map_path in self._already_loaded_maps
         self._already_loaded_maps.add(map_path)
         
-        static_map = []
-        agent_start_pos = {}
-        dispenser_assignments = {}
-        recipes_to_load = []
+        if not is_reload or self.verbose:
+            print(f"[ENV] Loading map from: {map_path}")
         
-        import os
-        if not os.path.isabs(map_path):
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            map_path = os.path.join(base_dir, map_path)
+        # Use MapLoader to load and validate the map
+        try:
+            map_data = self.map_loader.load_map(map_path, use_default_on_error=False)
+        except Exception as e:
+            if self.verbose:
+                print(f"[ENV] Error loading map: {e}")
+                print(f"[ENV] Falling back to default map")
+            # Fallback to default map
+            map_data = self.map_loader.load_map()
+        
+        # Initialize recipes from map data
+        self._initialize_recipes(map_data.recipes)
         
         if not is_reload or self.verbose:
-            print(f"Loading map from: {map_path}")
+            print(f"[ENV] Map loaded successfully:")
+            print(f"  - Size: {map_data.size}")
+            print(f"  - Agents: {list(map_data.agent_positions.keys())}")
+            print(f"  - Dispensers: {len(map_data.dispensers)}")
+            print(f"  - Recipes: {map_data.recipes}")
         
-        if not os.path.exists(map_path):
-            available_dirs = os.listdir(os.path.dirname(map_path))
-            print(f"WARNING: Map file not found! Available files in directory: {available_dirs}")
-            raise FileNotFoundError(f"Map file not found at {map_path}")
-        
-        with open(map_path, 'r') as f:
-            lines = f.readlines()
-            
-            if not is_reload and self.verbose:
-                print(f"Map file loaded with {len(lines)} lines")
-                print(f"First few lines: {[line.strip() for line in lines[:3]]}")
-
-        # --- 1. Process Grid Map and Agents ---
-        # First, find the actual grid map section between headers
-        grid_lines = []
-        in_grid_section = False
-        
-        for i, line in enumerate(lines):
-            line_stripped = line.strip()
-            
-            if not line_stripped:
-                if in_grid_section:
-                    in_grid_section = False
-                continue
-                
-            if line_stripped == "# Grid Map":
-                in_grid_section = True
-                continue
-                
-            if line_stripped.startswith("# Dispensers") or line_stripped.startswith("# Recipes"):
-                in_grid_section = False
-                continue
-                
-            if in_grid_section and not (line_stripped[0].isdigit() and ' ' in line_stripped):
-                grid_lines.append(line)
-        
-        if not is_reload or self.verbose:
-            print(f"Found {len(grid_lines)} grid lines in map file")
-        
-        # Fallback for grid without explicit markers
-        if len(grid_lines) == 0:
-            in_grid_section = True
-            for i, line in enumerate(lines):
-                line_stripped = line.strip()
-                
-                if not line_stripped or (i == 0 and line_stripped.startswith('#')):
-                    continue
-                    
-                if not line_stripped or (line_stripped[0].isdigit() and ' ' in line_stripped):
-                    in_grid_section = False
-                    break
-                    
-                if any(marker in line_stripped for marker in ["# Dispensers", "# Recipes"]):
-                    in_grid_section = False
-                    break
-                    
-                if not line_stripped.startswith('#'):
-                    grid_lines.append(line)
-                    
-            if not is_reload or self.verbose:
-                print(f"Found {len(grid_lines)} grid lines using fallback method")
-        
-        # Process the grid lines
-        for y, line in enumerate(grid_lines):
-            row = []
-            if not is_reload or self.verbose:
-                print(f"Processing map row {y}: '{line.strip()}'")
-            
-            for x, char in enumerate(line):
-                # Handle agent positions (0, 1, etc.)
-                if char.isdigit() and 0 <= int(char) < self.num_fixed_agents:
-                    agent_id = f"agent_{char}"
-                    agent_start_pos[agent_id] = (x, y)
-                    if not is_reload or self.verbose:
-                        print(f"Found agent {agent_id} at position ({x}, {y})")
-                    row.append(self.item_manager.get_cell_code(' '))  # Agent stands on empty space
-                    
-                # Handle map cells
-                elif char in self.item_manager.CHAR_TO_NUM:
-                    row.append(self.item_manager.get_cell_code(char))
-                    
-                # Empty space
-                elif char == ' ':
-                    row.append(self.item_manager.get_cell_code(' '))
-                    
-                # Skip newline characters without warning
-                elif char == '\n' or char == '\r':
-                    continue
-                    
-                # Skip characters we don't understand (like '#' comment marker)
-                else:
-                    if not is_reload or self.verbose:
-                        print(f"WARNING: Unknown character '{char}' at ({x}, {y}), treating as empty space")
-                    row.append(self.item_manager.get_cell_code(' '))
-            
-            if row:  # Only add non-empty rows
-                static_map.append(row)
-                
-        if not static_map:
-            print("WARNING: No map data was successfully processed!")
-            # Create a minimal default map to avoid crashes
-            static_map = [
-                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#')],
-                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code('#')],
-                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('#')]
-            ]
-            if not is_reload or self.verbose:
-                print("Created a minimal default map as a fallback")
-
-        static_map_np = np.array(static_map, dtype=np.uint8)
-        
-        # Check if we have starting positions for all agents
-        for i in range(self.num_fixed_agents):
-            agent_id = f"agent_{i}"
-            if agent_id not in agent_start_pos:
-                if not is_reload or self.verbose:
-                    print(f"Note: No explicit position found for {agent_id} in map. Finding suitable position...")
-                # Find an empty space to position the agent
-                found_position = False
-                for y in range(len(static_map)):
-                    for x in range(len(static_map[0])):
-                        if static_map[y][x] == self.item_manager.get_cell_code(' '):
-                            agent_start_pos[agent_id] = (x, y)
-                            found_position = True
-                            if not is_reload or self.verbose:
-                                print(f"Assigned {agent_id} to position ({x}, {y})")
-                            break
-                    if found_position:
-                        break
-                        
-                # If position still not found, place at (0,0)
-                if not found_position:
-                    agent_start_pos[agent_id] = (0, 0)
-                    if not is_reload or self.verbose:
-                        print(f"No suitable position found for {agent_id}. Using default (0,0)")
-                    
-        if not is_reload or self.verbose:
-            print(f"Final agent positions: {agent_start_pos}")
-        
-        # --- 2. Process Dispenser Assignments (RAW_ITEM_ID X Y) and Recipes ---
-        # Process the remaining lines for dispensers and recipes
-        dispenser_section = False
-        recipe_section = False
-        
-        for line in lines:
-            line_stripped = line.strip()
-            
-            if not line_stripped:
-                continue
-                
-            if line_stripped.startswith('# Dispensers'):
-                dispenser_section = True
-                recipe_section = False
-                continue
-                
-            if line_stripped.startswith('# Recipes'):
-                dispenser_section = False
-                recipe_section = True
-                continue
-                
-            if line_stripped.startswith('#'):
-                continue
-
-            # Parse based on current section
-            if dispenser_section:
-                parts = line_stripped.split()
-                if len(parts) >= 3:
-                    # New format: name x y (e.g., "tomato 1 4")
-                    if not parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
-                        ingredient_name = parts[0].lower()
-                        x, y = int(parts[1]), int(parts[2])
-                        dispenser_assignments[(x, y)] = ingredient_name
-                        if not is_reload or self.verbose:
-                            print(f"Added dispenser with ingredient '{ingredient_name}' at position ({x}, {y})")
-                    # Legacy format: ID x y (e.g., "5 1 4")
-                    elif all(p.isdigit() for p in parts[:3]):
-                        raw_item_id = int(parts[0])
-                        x, y = int(parts[1]), int(parts[2])
-                        dispenser_assignments[(x, y)] = raw_item_id
-                        if not is_reload or self.verbose:
-                            print(f"Added dispenser with item ID {raw_item_id} at position ({x}, {y}) [legacy]")
-                    
-            elif recipe_section:
-                # Recipes can be comma-separated values like "SALAD, BURGUER"
-                recipe_names = [name.strip().upper() for name in line_stripped.split(',')]
-                recipes_to_load.extend([r for r in recipe_names if r])
-                if not is_reload or self.verbose:
-                    print(f"Found recipes: {recipes_to_load}")
-            
-            # If line contains digits in any section, it might be dispenser data
-            elif line_stripped[0].isdigit():
-                parts = line_stripped.split()
-                if len(parts) == 3 and all(p.isdigit() for p in parts):
-                    raw_item_id = int(parts[0])
-                    x, y = int(parts[1]), int(parts[2])
-                    dispenser_assignments[(x, y)] = raw_item_id
-                    if not is_reload or self.verbose:
-                        print(f"Added dispenser with item ID {raw_item_id} at position ({x}, {y})")
-                    
-            # If line contains recipe names in any section
-            # Check if the line contains known recipes using the dynamic list of available recipes
-            elif any(recipe_name in line_stripped.upper() for recipe_name in get_available_recipes()):
-                recipe_names = [name.strip().upper() for name in line_stripped.split(',')]
-                valid_recipes = [r for r in recipe_names if r in get_available_recipes()]
-                recipes_to_load.extend(valid_recipes)
-                if not is_reload or self.verbose:
-                    print(f"Found recipes: {recipes_to_load}") 
-                
-        # Make sure we have valid data
-        if len(static_map) == 0:
-            print("WARNING: No valid grid map was found in the file. Creating a default map.")
-            static_map = [
-                [self.item_manager.get_cell_code('#'), self.item_manager.get_cell_code('C'), self.item_manager.get_cell_code('#')],
-                [self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code('D')],
-                [self.item_manager.get_cell_code('I'), self.item_manager.get_cell_code(' '), self.item_manager.get_cell_code('#')]
-            ]
-        
-        # Initialize recipes
-        self._initialize_recipes(recipes_to_load)
+        return map_data.static_map, map_data.agent_positions, map_data.dispensers
             
         return static_map_np, agent_start_pos, dispenser_assignments
         
@@ -401,79 +202,14 @@ class OvercookedMARL(ParallelEnv):
         """
         Generates observations for all agents, encoding the game state
         in channels (N x M x TOTAL_CHANNELS).
+        
+        Uses ObservationBuilder to construct multi-channel observations following SRP.
         """
-        H, W = self.map_size 
-        NUM_BASE_CHANNELS = 5 
-        NUM_VECTOR_CHANNELS = MAX_PROCESS_STEPS
-        
-        observations = {}
-        base_observation = np.zeros((H, W, TOTAL_CHANNELS), dtype=np.uint8)
-
-        # Layer 0: Static Map
-        base_observation[:, :, 0] = self.state["map_static"]
-
-        # Layer 1: Items on Ground/Counter
-        base_observation[:, :, 1] = self.state["items_on_ground"]
-        
-        # Layer 4: Delivery Point (Binary)
-        delivery_code = self.item_manager.get_cell_code('D')
-        base_observation[:, :, 4] = np.where(self.state["map_static"] == delivery_code, 1, 0)
-        
-        
-        for agent_id in self.agents:
-            obs = base_observation.copy()
-            ax, ay = self.state["agent_pos"][agent_id]
-            
-            # Layer 2: Position of the Observing Agent
-            obs[ay, ax, 2] = 1 
-            
-            # Layer 3: Position of OTHER Agents
-            for other_id, other_pos in self.state["agent_pos"].items():
-                if other_id != agent_id:
-                    ox, oy = other_pos
-                    obs[oy, ox, 3] = 1
-                    
-            # -------------------------------------------------------------------
-            # CHANNELS 5-7: PROCESSING VECTOR (Inventory)
-            # -------------------------------------------------------------------
-            
-            # Get the item instance that the agent is carrying
-            carrying_instance_id = self.state["agent_holding_instance"].get(agent_id, None)
-            carrying_item = self._get_item(carrying_instance_id) if carrying_instance_id is not None else None
-            
-            # Convert item to progress vector
-            progress_vector = [0, 0, 0]
-            if carrying_item:
-                item_type = carrying_item.get("type")
-                if item_type == ItemType.INGREDIENT:
-                    # Vector based on cutting progress
-                    cuts_done = carrying_item.get("cuts_done", 0)
-                    cuts_needed = carrying_item.get("cuts_needed", 3)
-                    
-                    if cuts_done == 0:
-                        progress_vector = [1, 0, 0]  # RAW
-                    elif cuts_done < cuts_needed:
-                        progress_vector = [0, 1, 0]  # CHOPPING
-                    else:
-                        progress_vector = [0, 0, 1]  # READY
-                        
-                elif item_type == ItemType.DISH:
-                    # Plate: vector based on number of ingredients
-                    num_ingredients = len(carrying_item.get("ingredients", []))
-                    if num_ingredients == 0:
-                        progress_vector = [1, 0, 0]  # Empty
-                    elif num_ingredients == 1:
-                        progress_vector = [0, 1, 0]  # 1 ingredient
-                    else:
-                        progress_vector = [0, 0, 1]  # 2+ ingredients (recipe)
-            
-            # Encodes the vector in layers 5, 6 and 7 (at the agent's position)
-            for i in range(NUM_VECTOR_CHANNELS):
-                obs[ay, ax, 5 + i] = progress_vector[i] 
-            
-            observations[agent_id] = obs
-            
-        return observations
+        return self.observation_builder.build_observations(
+            self.state, 
+            self.agents, 
+            self.item_manager
+        )
 
     def _get_info(self):
         """Returns the dictionary of auxiliary information."""

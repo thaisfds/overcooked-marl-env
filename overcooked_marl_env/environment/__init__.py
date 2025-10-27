@@ -10,5 +10,6 @@ and moved into this directory (Phase 8), we can consider renaming back to 'env/'
 """
 
 from .game_state import GameState, MapData
+from .observation_builder import ObservationBuilder
 
-__all__ = ['GameState', 'MapData']
+__all__ = ['GameState', 'MapData', 'ObservationBuilder']
