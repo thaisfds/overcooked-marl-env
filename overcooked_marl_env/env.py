@@ -981,16 +981,79 @@ class OvercookedMARL(ParallelEnv):
                                     self.cell_size//3, 2)
                 elif cell_code == self.item_manager.get_cell_code('D'):
                     pygame.draw.rect(self.window, self.colors['delivery'], rect)
-                    # Draw serving symbol
-                    pygame.draw.polygon(self.window, (250, 250, 250), [
-                        (x * self.cell_size + 20, y * self.cell_size + 20),
-                        (x * self.cell_size + self.cell_size//2, y * self.cell_size + 10),
-                        (x * self.cell_size + self.cell_size - 20, y * self.cell_size + 20),
-                        (x * self.cell_size + self.cell_size//2, y * self.cell_size + self.cell_size - 10)
-                    ], 2)
                 elif cell_code in [self.item_manager.get_cell_code('T'), self.item_manager.get_cell_code('I')]:
                     pygame.draw.rect(self.window, self.colors['counter'], rect)
                     pygame.draw.rect(self.window, (100, 100, 100), rect, 1)  # Border
+                
+                # Draw visual indicators on stations
+                center_x = x * self.cell_size + self.cell_size // 2
+                center_y = y * self.cell_size + self.cell_size // 2
+                
+                # Dispenser indicators
+                if (x, y) in self.state["dispensers"]:
+                    dispenser_data = self.state["dispensers"][(x, y)]
+                    
+                    # Get ingredient name
+                    if isinstance(dispenser_data, str):
+                        ingredient_name = dispenser_data
+                    else:
+                        ingredient_map = {5: "tomato", 6: "lettuce", 7: "cucumber"}
+                        ingredient_name = ingredient_map.get(dispenser_data, "tomato")
+                    
+                    # Color mapping for dispensers
+                    dispenser_colors = {
+                        "tomato": (220, 50, 50),      # Red
+                        "lettuce": (50, 180, 50),     # Green
+                        "cucumber": (255, 200, 0),    # Yellow
+                    }
+                    
+                    indicator_color = dispenser_colors.get(ingredient_name, (150, 150, 150))
+                    indicator_radius = self.cell_size // 4
+                    
+                    pygame.draw.circle(self.window, indicator_color, 
+                                      (center_x, center_y), indicator_radius)
+                
+                # Plate dispenser indicator
+                if cell_code == self.item_manager.get_cell_code('P'):
+                    indicator_radius = self.cell_size // 4
+                    pygame.draw.circle(self.window, (250, 250, 250), 
+                                      (center_x, center_y), indicator_radius)
+                
+                # Chopping board with ingredient on it
+                if cell_code == self.item_manager.get_cell_code('C'):
+                    # Check if there's an item on this chopping board
+                    ground_instance_id = self.state["ground_instances"].get((x, y), None)
+                    if ground_instance_id is not None:
+                        ground_item = self._get_item(ground_instance_id)
+                        if ground_item and ground_item["type"] == ItemType.INGREDIENT:
+                            # Draw ingredient on chopping board
+                            item_color = self._get_item_color(ground_item)
+                            item_radius = self.cell_size // 3
+                            
+                            pygame.draw.circle(self.window, item_color,
+                                             (center_x, center_y), item_radius)
+                            
+                            # Draw progress indicator (small lines)
+                            cuts_done = ground_item.get("cuts_done", 0)
+                            for i in range(cuts_done):
+                                line_x = center_x - 10 + (i * 10)
+                                pygame.draw.line(self.window, (50, 50, 50),
+                                               (line_x, center_y - 15),
+                                               (line_x, center_y + 15), 2)
+                
+                # Delivery station arrow (simple triangle pointing right)
+                if cell_code == self.item_manager.get_cell_code('D'):
+                    arrow_size = self.cell_size // 4
+                    
+                    # Simple triangle arrow pointing right (→)
+                    arrow_points = [
+                        (center_x - arrow_size, center_y - arrow_size),  # Top left
+                        (center_x - arrow_size, center_y + arrow_size),  # Bottom left
+                        (center_x + arrow_size, center_y),               # Right tip
+                    ]
+                    
+                    pygame.draw.polygon(self.window, (255, 255, 255), arrow_points)
+                    pygame.draw.polygon(self.window, (100, 100, 100), arrow_points, 2)
                 
                 # Draw items on ground
                 ground_instance_id = self.state["ground_instances"].get((x, y), None)
@@ -1018,16 +1081,17 @@ class OvercookedMARL(ParallelEnv):
             carrying_instance_id = self.state["agent_holding_instance"].get(agent_id, None)
             if carrying_instance_id is not None:
                 carrying_item = self._get_item(carrying_instance_id)
-                item_radius = agent_radius // 2  # Small circle half the size of the agent
-                item_color = self._get_item_color(carrying_item)
-                
-                # Draw item circle inside the agent
-                pygame.draw.circle(
-                    self.window,
-                    item_color,
-                    agent_center,
-                    item_radius
-                )
+                if carrying_item:
+                    item_radius = agent_radius // 2  # Small circle half the size of the agent
+                    item_color = self._get_item_color(carrying_item)
+                    
+                    # Draw item circle inside the agent
+                    pygame.draw.circle(
+                        self.window,
+                        item_color,
+                        agent_center,
+                        item_radius
+                    )
             
             # Draw agent ID on top
             font = pygame.font.SysFont(None, 20)
@@ -1158,7 +1222,7 @@ class OvercookedMARL(ParallelEnv):
             base_colors = {
                 "tomato": (220, 50, 50),    # Red
                 "lettuce": (50, 180, 50),   # Green
-                "cucumber": (100, 220, 100), # Light green
+                "cucumber": (255, 200, 0),  # Yellow
             }
             
             base_color = base_colors.get(name, (150, 150, 150))
@@ -1384,10 +1448,22 @@ class OvercookedMARL(ParallelEnv):
 
         # Processing Logic (chopping board C)
         if station_type == self.item_manager.get_cell_code('C'):
-            if carrying_item and can_process(carrying_item):
+            # Scenario 1: Place ingredient on chopping board
+            if carrying_item and can_process(carrying_item) and not ground_item:
+                # Transfer item from agent to chopping board
+                self.state["ground_instances"][(ix, iy)] = carrying_instance_id
+                del self.state["agent_holding_instance"][agent_id]
+                
+                reward += 2.0
+                if self.verbose:
+                    print(f"  Placed {carrying_item['name']} on chopping board")
+                return reward, 0.0
+            
+            # Scenario 2: Chop ingredient on chopping board
+            elif not carrying_item and ground_item and can_process(ground_item):
                 # Advance processing
-                updated_item = advance_processing(carrying_item)
-                self._update_item(carrying_instance_id, updated_item)
+                updated_item = advance_processing(ground_item)
+                self._update_item(ground_instance_id, updated_item)
                 
                 if self.verbose:
                     cuts_done = updated_item["cuts_done"]
@@ -1402,6 +1478,17 @@ class OvercookedMARL(ParallelEnv):
                 else:
                     reward += 2.0  # Partial progress
                 
+                return reward, 0.0
+            
+            # Scenario 3: Pick up processed ingredient from chopping board
+            elif not carrying_item and ground_item and is_ready(ground_item):
+                # Transfer item from chopping board to agent
+                self.state["agent_holding_instance"][agent_id] = ground_instance_id
+                del self.state["ground_instances"][(ix, iy)]
+                
+                reward += 2.0
+                if self.verbose:
+                    print(f"  Picked up {ground_item['name']} from chopping board")
                 return reward, 0.0
         
         # Plate Dispenser (P)

@@ -133,6 +133,12 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
         ("PARALLEL: 0 wait and 1 interact", {
             "agent_1": 4   
         }),
+        ("PARALLEL: 0 wait and 1 interact", {
+            "agent_1": 4   
+        }),
+        ("PARALLEL: 0 wait and 1 interact", {
+            "agent_1": 4   
+        }),
         ("PARALLEL: 0 wait and 1 moves", {
             "agent_1": 3   
         }),
@@ -152,15 +158,20 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
             "agent_0": 4,
             "agent_1": 3   
         }),
-        ("PARALLEL: 0 moves and 1 interact", {
-            "agent_0": 3,
+        ("PARALLEL: 0 interact and 1 interact", {
+            "agent_0": 4,
             "agent_1": 4   
+        }),
+        ("PARALLEL: 0 interact and 1 moves", {
+            "agent_0": 4,
+            "agent_1": 1   
         }),
         ("PARALLEL: 0 moves and 1 moves", {
             "agent_0": 3,
             "agent_1": 1   
         }),
-        ("PARALLEL: 0 wait and 1 moves", {
+        ("PARALLEL: 0 moves and 1 moves", {
+            "agent_0": 3,
             "agent_1": 1   
         }),
         ("PARALLEL: 0 moves and 1 wait", {
