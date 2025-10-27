@@ -7,4 +7,7 @@ This module contains the core game mechanics:
 - Interaction handling
 """
 
-__all__ = []
+from .movement_system import MovementSystem
+from .collision_resolver import CollisionResolver
+
+__all__ = ['MovementSystem', 'CollisionResolver']

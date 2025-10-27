@@ -17,6 +17,7 @@ from .core.recipes import (
 from .map.map_loader import MapLoader
 from .environment.game_state import MapData
 from .environment.observation_builder import ObservationBuilder
+from .mechanics import MovementSystem, CollisionResolver
 
 # For rendering
 import pygame
@@ -53,6 +54,10 @@ class OvercookedMARL(ParallelEnv):
         
         # 0: Up, 1: Down, 2: Left, 3: Right, 4: Interact
         self._action_to_direction = {0: (0, -1), 1: (0, 1), 2: (-1, 0), 3: (1, 0)}
+        
+        # Movement and Collision Systems (Phase 5)
+        self.movement_system = MovementSystem(self._action_to_direction)
+        self.collision_resolver = CollisionResolver(collision_penalty=0.5)
         
         action_space_single = spaces.Discrete(5) 
         
@@ -279,81 +284,36 @@ class OvercookedMARL(ParallelEnv):
         episode_truncated = False
         global_reward = 0.0 # Global reward accumulator
         
-        # Simplified approach: process all movements in a simpler way
-        # Step 1: Collect all movement intentions
-        intended_positions = {}
+        # Apply base penalty for any action
+        for agent_id in actions.keys():
+            rewards[agent_id] -= 0.5
         
-        for agent_id, action in actions.items():
-            rewards[agent_id] -= 0.5  # Base penalty for any action
-            
-            # Process only movement actions (0-3)
-            if action < 4:  
-                dx, dy = self._action_to_direction[action]
-                
-                # ALWAYS update orientation based on action
-                self.state["agent_orientation"][agent_id] = (dx, dy)
-                
-                current_pos = self.state["agent_pos"][agent_id]
-                current_x, current_y = current_pos
-                
-                new_x, new_y = current_x + dx, current_y + dy
-                max_x, max_y = self.map_size[1] - 1, self.map_size[0] - 1
-                new_x, new_y = np.clip(new_x, 0, max_x), np.clip(new_y, 0, max_y)
-                
-                # Check collisions with walls/stations
-                cell_type = self.state["map_static"][new_y, new_x]
-                space_code = self.item_manager.get_cell_code(' ')  # Code for empty space
-                
-                if cell_type == space_code:  # Can only walk on empty spaces
-                    intended_positions[agent_id] = (new_x, new_y)
-                else:
-                    # Keep current position if collided with wall/station
-                    intended_positions[agent_id] = current_pos
+        # ============================================================
+        # MOVEMENT PROCESSING (Using MovementSystem and CollisionResolver)
+        # ============================================================
         
-        # Step 2: Find and resolve conflicts
+        # Step 1: Process movement actions and get intended positions
+        intended_positions = self.movement_system.process_movement_actions(
+            actions,
+            self.state,
+            self.map_size,
+            self.item_manager
+        )
+        
+        # Step 2: Resolve collisions and conflicts
         current_positions = {agent: pos for agent, pos in self.state["agent_pos"].items()}
-        final_positions = current_positions.copy()  # Start with current positions
-        temp_positions = {}  # To store intermediate positions before resolving conflicts
+        final_positions, collision_penalties = self.collision_resolver.resolve_collisions(
+            intended_positions,
+            current_positions,
+            verbose=self.verbose
+        )
         
-        # First check if intended positions don't collide with other current agents
-        for agent_id, intended_pos in intended_positions.items():
-            # Check if another agent is already at the intended position
-            other_agent_there = any(pos == intended_pos for other_id, pos in current_positions.items() 
-                                   if other_id != agent_id)
-            if not other_agent_there:
-                temp_positions[agent_id] = intended_pos
-            else:
-                # If an agent already exists in the cell, we can't move there
-                temp_positions[agent_id] = current_positions[agent_id]
-                if self.verbose:
-                    print(f"Agent {agent_id} cannot move to {intended_pos} because another agent is already at that position")
-                
-        # Detect conflicts - two agents trying to go to the same space
-        position_agents = {}  # Map of position -> list of agents trying to go there
+        # Step 3: Apply collision penalties
+        for agent_id, penalty in collision_penalties.items():
+            if penalty > 0:
+                rewards[agent_id] -= penalty
         
-        for agent_id, pos in temp_positions.items():
-            # Only consider conflicts for positions that are not current agent positions
-            if pos != current_positions[agent_id]:
-                if pos in position_agents:
-                    position_agents[pos].append(agent_id)
-                else:
-                    position_agents[pos] = [agent_id]
-        
-        # Resolver conflitos
-        for pos, agents in position_agents.items():
-            if len(agents) == 1:  # No conflict
-                agent_id = agents[0]
-                final_positions[agent_id] = pos  # Allow movement
-            else:
-                # Conflict: no agent moves
-                for agent_id in agents:
-                    rewards[agent_id] -= 0.5  # Additional penalty for conflict
-                    # Keep current position
-                    final_positions[agent_id] = current_positions[agent_id]
-                if self.verbose:
-                    print(f"Movement conflict: agents {agents} tried to go to {pos}, none moved")
-        
-        # Step 3: Update agent positions
+        # Step 4: Update agent positions in state
         for agent_id, pos in final_positions.items():
             self.state["agent_pos"][agent_id] = pos
         
@@ -361,33 +321,15 @@ class OvercookedMARL(ParallelEnv):
         if self.verbose:
             print("\n--- Movement Information ---")
             for agent_id, action in actions.items():
-                if action < 4:
+                if action < 4:  # Movement action
                     old_pos = current_positions.get(agent_id, (0, 0))
                     new_pos = final_positions.get(agent_id, (0, 0))
-                    dx, dy = self._action_to_direction.get(action, (0, 0))
-                    intended_pos = (old_pos[0] + dx, old_pos[1] + dy)
                     
-                    # Convert to regular int before printing (to avoid np.int64 in logs)
-                    old_pos_print = (int(old_pos[0]), int(old_pos[1]))
-                    new_pos_print = (int(new_pos[0]), int(new_pos[1]))
-                    intended_pos_print = (int(intended_pos[0]), int(intended_pos[1]))
-                    
-                    if old_pos != new_pos:
-                        print(f"Agent {agent_id} moved from {old_pos_print} to {new_pos_print}")
-                    else:
-                        if intended_pos != old_pos:
-                            # Check why it failed
-                            cell_type = self.state["map_static"][intended_pos[1], intended_pos[0]]
-                            if cell_type != self.item_manager.get_cell_code(' '):
-                                print(f"Agent {agent_id} did not move to {intended_pos_print} because the cell is not empty space")
-                            else:
-                                other_agent_there = any(pos == intended_pos for other_id, pos in current_positions.items() if other_id != agent_id)
-                                if other_agent_there:
-                                    print(f"Agent {agent_id} did not move to {intended_pos_print} because another agent is already there")
-                                else:
-                                    print(f"Agent {agent_id} did not move to {intended_pos_print} due to movement conflict")
-                        else:
-                            print(f"Agent {agent_id} did not attempt to move (invalid action)")
+                    info = self.movement_system.get_movement_info(
+                        agent_id, action, old_pos, new_pos,
+                        self.state, self.item_manager
+                    )
+                    print(info)
         
         # Process interaction actions (4)
         for agent_id, action in actions.items():
