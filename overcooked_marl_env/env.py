@@ -894,7 +894,9 @@ class OvercookedMARL(ParallelEnv):
             H, W = self.map_size
             cell_size = 60  # Size of each cell in pixels
             
-            self.window_size = (W * cell_size, H * cell_size)
+            # Extra space for info panel
+            self.info_panel_height = 30 * len(self.possible_agents)  # 30 pixels per agent
+            self.window_size = (W * cell_size, H * cell_size + self.info_panel_height)
             # Create actual Pygame window for visualization
             self.window = pygame.display.set_mode(self.window_size)
             pygame.display.set_caption("Overcooked MARL Environment")
@@ -1013,7 +1015,63 @@ class OvercookedMARL(ParallelEnv):
             self.window.blit(text, text_rect)
         
         # Draw game info at the bottom
-        font = pygame.font.SysFont(None, 24)
+        H, W = self.map_size
+        info_panel_y = H * self.cell_size
+        
+        # Draw info panel background
+        info_panel_rect = pygame.Rect(0, info_panel_y, W * self.cell_size, self.info_panel_height)
+        pygame.draw.rect(self.window, (240, 240, 240), info_panel_rect)
+        pygame.draw.line(self.window, (100, 100, 100), (0, info_panel_y), (W * self.cell_size, info_panel_y), 2)
+        
+        # Render agent information (one line per agent)
+        font = pygame.font.SysFont(None, 18)
+        line_height = 30
+        
+        for idx, agent_id in enumerate(sorted(self.agents)):
+            # Get agent information
+            step_reward = self.state["last_step_rewards"].get(agent_id, 0.0)
+            total_reward = self.state["accumulated_rewards"].get(agent_id, 0.0)
+            
+            # Get inventory - compact version
+            carrying_instance_id = self.state["agent_holding_instance"].get(agent_id, None)
+            if carrying_instance_id is not None:
+                carrying_item = self._get_item(carrying_instance_id)
+                item_type = carrying_item.get("type")
+                
+                if item_type == ItemType.INGREDIENT:
+                    # For ingredients: name + state
+                    name = carrying_item["name"].capitalize()
+                    state = carrying_item.get("state", ItemState.RAW)
+                    if state == ItemState.RAW:
+                        inventory = f"{name}(raw)"
+                    elif state == ItemState.READY:
+                        inventory = f"{name}(ok)"
+                    else:
+                        cuts = carrying_item["cuts_done"]
+                        inventory = f"{name}({cuts}/3)"
+                        
+                elif item_type == ItemType.DISH:
+                    # For plates: show ingredient initials
+                    ingredients = carrying_item.get("ingredients", [])
+                    if not ingredients:
+                        inventory = "Plate(empty)"
+                    else:
+                        # Use ingredient initials: t=tomato, l=lettuce, m=meat, o=onion
+                        initials = "".join([ing[0].upper() for ing in ingredients])
+                        inventory = f"Plate({initials})"
+                else:
+                    inventory = str(carrying_item.get("name", "?"))
+            else:
+                inventory = "Empty"
+            
+            # Format text in compact form: "A0 | T: 10.00 | S: 0.50 | I: Tomato"
+            agent_num = int(agent_id.split('_')[1])
+            info_text = f"A{agent_num} | T:{total_reward:7.2f} | S:{step_reward:6.2f} | I: {inventory}"
+            
+            # Render text
+            text_surface = font.render(info_text, True, (0, 0, 0))
+            text_y = info_panel_y + 5 + (idx * line_height)
+            self.window.blit(text_surface, (5, text_y))
         
         # Update the Pygame window
         pygame.display.flip()
