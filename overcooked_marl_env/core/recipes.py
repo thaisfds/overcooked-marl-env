@@ -52,7 +52,7 @@ class BurgerRecipe(Recipe):
         super().__init__(
             name="BURGER",
             ingredients=["meat", "lettuce"],
-            reward=12.0
+            reward=20.0
         )
 
 
@@ -63,7 +63,7 @@ class ComplexSaladRecipe(Recipe):
         super().__init__(
             name="COMPLEX_SALAD",
             ingredients=["tomato", "lettuce", "onion"],
-            reward=15.0
+            reward=30.0
         )
 
 

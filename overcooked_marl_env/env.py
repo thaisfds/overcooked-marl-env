@@ -548,7 +548,7 @@ class OvercookedMARL(ParallelEnv):
         intended_positions = {}
         
         for agent_id, action in actions.items():
-            rewards[agent_id] -= 0.01  # Base penalty for any action
+            rewards[agent_id] -= 0.5  # Base penalty for any action
             
             # Process only movement actions (0-3)
             if action < 4:  
@@ -573,7 +573,6 @@ class OvercookedMARL(ParallelEnv):
                 else:
                     # Keep current position if collided with wall/station
                     intended_positions[agent_id] = current_pos
-                    rewards[agent_id] -= 0.005  # Collision penalty
         
         # Step 2: Find and resolve conflicts
         current_positions = {agent: pos for agent, pos in self.state["agent_pos"].items()}
@@ -590,7 +589,6 @@ class OvercookedMARL(ParallelEnv):
             else:
                 # If an agent already exists in the cell, we can't move there
                 temp_positions[agent_id] = current_positions[agent_id]
-                rewards[agent_id] -= 0.005  # Penalty for invalid movement attempt
                 if self.verbose:
                     print(f"Agent {agent_id} cannot move to {intended_pos} because another agent is already at that position")
                 
@@ -613,7 +611,7 @@ class OvercookedMARL(ParallelEnv):
             else:
                 # Conflict: no agent moves
                 for agent_id in agents:
-                    rewards[agent_id] -= 0.005  # Additional penalty for conflict
+                    rewards[agent_id] -= 0.5  # Additional penalty for conflict
                     # Keep current position
                     final_positions[agent_id] = current_positions[agent_id]
                 if self.verbose:
@@ -1322,7 +1320,7 @@ class OvercookedMARL(ParallelEnv):
             else:
                 print(f"  Ground: nothing")
         
-        reward = -0.005
+        reward = 0.0  # No base penalty for interaction
         global_reward_bonus = 0.0
 
         # Processing Logic (chopping board C)
@@ -1339,11 +1337,11 @@ class OvercookedMARL(ParallelEnv):
                 
                 # Check if processing is complete
                 if is_ready(updated_item):
-                    reward += 1.0  # Completed processing
+                    reward += 2.0  # Completed processing
                     if self.verbose:
                         print(f"  Item processed and ready to use!")
                 else:
-                    reward += 0.1  # Partial progress
+                    reward += 2.0  # Partial progress
                 
                 return reward, 0.0
         
@@ -1354,7 +1352,7 @@ class OvercookedMARL(ParallelEnv):
                 plate = create_plate()
                 plate_instance = self._create_item_instance(plate)
                 self.state["agent_holding_instance"][agent_id] = plate_instance
-                reward += 0.5
+                reward += 2.0
                 if self.verbose:
                     print(f"  Picked up an empty plate from dispenser (instance: {plate_instance})")
                 return reward, 0.0
@@ -1371,7 +1369,7 @@ class OvercookedMARL(ParallelEnv):
                 
                 # Now carry the plate
                 self.state["agent_holding_instance"][agent_id] = plate_instance
-                reward += 0.5 + 2.0  # Pick up + combine
+                reward += 2.0 + 4.0  # Pick up + combine
                 if self.verbose:
                     print(f"  Picked up plate and combined with {carrying_item['name']} (instance: {plate_instance})")
                 return reward, 0.0
@@ -1398,7 +1396,7 @@ class OvercookedMARL(ParallelEnv):
             
             item_instance = self._create_item_instance(ingredient)
             self.state["agent_holding_instance"][agent_id] = item_instance
-            reward += 0.5
+            reward += 2.0
             if self.verbose:
                 print(f"  Picked up {ingredient['name']} from dispenser (instance: {item_instance})")
             return reward, 0.0
@@ -1429,7 +1427,7 @@ class OvercookedMARL(ParallelEnv):
                 self.state["agent_holding_instance"][agent_id] = ground_instance_id
                 del self.state["ground_instances"][(ix, iy)]
                 
-                reward += 2.0
+                reward += 4.0
                 if self.verbose:
                     print(f"  Combined {carrying_item['name']} with plate from counter")
                 return reward, 0.0
@@ -1444,7 +1442,7 @@ class OvercookedMARL(ParallelEnv):
                 self._delete_item_instance(ground_instance_id)
                 del self.state["ground_instances"][(ix, iy)]
                 
-                reward += 2.0
+                reward += 4.0
                 if self.verbose:
                     print(f"  Combined {ground_item['name']} from counter with plate")
                 return reward, 0.0
@@ -1460,7 +1458,7 @@ class OvercookedMARL(ParallelEnv):
                 self.state["ground_instances"][(ix, iy)] = carrying_instance_id
                 del self.state["agent_holding_instance"][agent_id]
                 
-                reward += 0.2
+                reward += 2.0
                 if self.verbose:
                     print(f"  Placed {get_ingredient_display_name(carrying_item)} on counter")
                 return reward, 0.0
@@ -1471,7 +1469,7 @@ class OvercookedMARL(ParallelEnv):
                 self.state["agent_holding_instance"][agent_id] = ground_instance_id
                 del self.state["ground_instances"][(ix, iy)]
                 
-                reward += 0.2
+                reward += 2.0
                 if self.verbose:
                     print(f"  Picked up {get_ingredient_display_name(ground_item)} from counter")
                 return reward, 0.0
@@ -1514,7 +1512,7 @@ class OvercookedMARL(ParallelEnv):
                 
                 # Calculate rewards
                 base_reward = recipe_reward
-                order_bonus = recipe_reward if is_correct_order else 0.0
+                order_bonus = recipe_reward * 0.3 if is_correct_order else 0.0
                 global_reward_bonus = recipe_reward + order_bonus
                 reward += base_reward
                 
@@ -1539,8 +1537,12 @@ class OvercookedMARL(ParallelEnv):
                 # No reward (or penalty)
                 return reward, 0.0
         
+        # Invalid interaction - apply penalty
+        reward -= 2.0
+        
         # For debugging
         if self.verbose:
+            print(f"  Invalid interaction - no valid action performed")
             print(f"  Reward: {reward}, Global Bonus: {global_reward_bonus}")
             
         return reward, global_reward_bonus
