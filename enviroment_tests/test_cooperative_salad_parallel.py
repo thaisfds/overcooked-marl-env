@@ -105,149 +105,80 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
     actions = [
         # ===== PHASE 1: PARALLEL Ingredient Collection =====
         ("PARALLEL: Both move toward dispensers", {
-            "agent_0": 2,  # LEFT: (2,1) -> (1,1) [heading to tomato]
-            "agent_1": 1   # DOWN: (2,3) -> (2,4) [arrived at lettuce!]
+            "agent_0": 2, 
+            "agent_1": 1   
         }),
-        ("PARALLEL: Agent 0 continues, Agent 1 turns", {
-            "agent_0": 1,  # DOWN: (1,1) -> (1,2)
-            "agent_1": 1   # DOWN: turn South to point to (2,4)
+        ("PARALLEL: 0 moves and 1 interact", {
+            "agent_0": 1, 
+            "agent_1": 4   
         }),
-        ("PARALLEL: Agent 0 continues, Agent 1 picks lettuce", {
-            "agent_0": 1,  # DOWN: (1,2) -> (1,3)
-            "agent_1": 4   # INTERACT: pick lettuce! [First ingredient collected!]
+        ("PARALLEL: 0 moves and 1 moves", {
+            "agent_0": 1, 
+            "agent_1": 0   
         }),
-        ("PARALLEL: Agent 0 turns, Agent 1 returns", {
-            "agent_0": 1,  # DOWN: turn South to point to (1,4)
-            "agent_1": 0   # UP: (2,4) -> (2,3)
+        ("PARALLEL: 0 interact and 1 moves", {
+            "agent_0": 4, 
+            "agent_1": 2   
         }),
-        ("PARALLEL: Agent 0 picks tomato, Agent 1 continues back", {
-            "agent_0": 4,  # INTERACT: pick tomato! [Second ingredient collected!]
-            "agent_1": 0   # UP: (2,3) -> (2,2)
+        ("PARALLEL: 0 wait and 1 moves", {
+            "agent_1": 0   
         }),
-        
-        # ===== PHASE 2a: Agent 0 Chops Tomato =====
-        ("PARALLEL: Agent 0 goes to chopping, Agent 1 clears path", {
-            "agent_0": 0,  # UP: (1,3) -> (1,2)
-            "agent_1": 3   # RIGHT: (2,2) -> (3,2) [CLEARING PATH for agent_0!]
+        ("PARALLEL: 0 moves and 1 interact", {
+            "agent_0": 0,
+            "agent_1": 4   
         }),
-        ("PARALLEL: Agent 0 reaches chopping position, Agent 1 waits", {
-            "agent_0": 0,  # UP: (1,2) -> (1,1) [adjacent to chopping!]
-            "agent_1": 2   # LEFT: (3,2) -> (2,2) [moving but NOT interacting with items]
+        ("PARALLEL: 0 wait and 1 interact", {
+            "agent_1": 4   
         }),
-        ("PARALLEL: Agent 0 faces chopping board, Agent 1 waits", {
-            "agent_0": 0,  # UP: turn North to point to (1,0) chopping board
-            "agent_1": 3   # RIGHT: (2,2) -> (3,2) [moving back and forth, no interact!]
+        ("PARALLEL: 0 wait and 1 interact", {
+            "agent_1": 4   
         }),
-        ("PARALLEL: Agent 0 cuts tomato 1/3, Agent 1 waits", {
-            "agent_0": 4,  # INTERACT: cut tomato 1/3
-            "agent_1": 2   # LEFT: (3,2) -> (2,2) [keep moving to avoid dropping items]
+        ("PARALLEL: 0 wait and 1 moves", {
+            "agent_1": 3   
         }),
-        ("PARALLEL: Agent 0 cuts tomato 2/3, Agent 1 waits", {
-            "agent_0": 4,  # INTERACT: cut tomato 2/3
-            "agent_1": 3   # RIGHT: (2,2) -> (3,2) [keep moving]
+        ("PARALLEL: 0 moves and 1 moves", {
+            "agent_0": 0,
+            "agent_1": 3   
         }),
-        ("PARALLEL: Agent 0 cuts tomato 3/3 READY!, Agent 1 prepares", {
-            "agent_0": 4,  # INTERACT: cut tomato 3/3 - READY!
-            "agent_1": 2   # LEFT: (3,2) -> (2,2) [moving toward chopping]
+        ("PARALLEL: 0 interact and 1 moves", {
+            "agent_0": 4,
+            "agent_1": 0   
         }),
-        
-        # ===== PHASE 2b: Transition - Agent 0 leaves, Agent 1 enters =====
-        ("PARALLEL: Agent 0 exits chopping DOWN, Agent 1 approaches", {
-            "agent_0": 1,  # DOWN: (1,1) -> (1,2) [leaving chopping area going down]
-            "agent_1": 2   # LEFT: (2,2) -> (1,2) CONFLICT! Will stay at (2,2)
+        ("PARALLEL: 0 interact and 1 interact", {
+            "agent_0": 4,
+            "agent_1": 4   
         }),
-        ("PARALLEL: Agent 0 moves right, Agent 1 to chopping", {
-            "agent_0": 3,  # RIGHT: (1,2) -> (2,2) CONFLICT with Agent_1!
-            "agent_1": 2   # LEFT: (2,2) -> (1,2)
+        ("PARALLEL: 0 interact and 1 moves", {
+            "agent_0": 4,
+            "agent_1": 3   
         }),
-        ("PARALLEL: Agent 0 continues, Agent 1 reaches chopping", {
-            "agent_0": 3,  # RIGHT: (2,2) -> (3,2) [now clear]
-            "agent_1": 0   # UP: (1,2) -> (1,1) [adjacent to chopping!]
+        ("PARALLEL: 0 moves and 1 interact", {
+            "agent_0": 3,
+            "agent_1": 4   
         }),
-        
-        # ===== PHASE 2c: Agent 1 Chops Lettuce =====
-        ("PARALLEL: Agent 0 waits, Agent 1 faces chopping", {
-            "agent_0": 3,  # RIGHT: collide with wall, stay at (3,2)
-            "agent_1": 0   # UP: turn North to point to (1,0) chopping board
+        ("PARALLEL: 0 moves and 1 moves", {
+            "agent_0": 3,
+            "agent_1": 1   
         }),
-        ("PARALLEL: Agent 0 waits, Agent 1 cuts lettuce 1/3", {
-            "agent_0": 0,  # UP: (3,2) -> (3,1) [going to plate dispenser area]
-            "agent_1": 4   # INTERACT: cut lettuce 1/3
+        ("PARALLEL: 0 wait and 1 moves", {
+            "agent_1": 1   
         }),
-        ("PARALLEL: Agent 0 waits, Agent 1 cuts lettuce 2/3", {
-            "agent_0": 0,  # UP: collide, turn North to point to (3,0)
-            "agent_1": 4   # INTERACT: cut lettuce 2/3
+        ("PARALLEL: 0 moves and 1 wait", {
+            "agent_0": 3,
         }),
-        ("PARALLEL: Agent 0 prepares, Agent 1 cuts lettuce 3/3 READY!", {
-            "agent_0": 2,  # LEFT: (3,1) -> (2,1) [clearing path before plate pickup]
-            "agent_1": 4   # INTERACT: cut lettuce 3/3 - READY!
+        ("PARALLEL: 0 interact and 1 wait", {
+            "agent_0": 4,
         }),
-        
-        # ===== PHASE 3a: Agent 0 Gets Plate and Combines with Tomato =====
-        ("PARALLEL: Agent 0 to plate position, Agent 1 exits chopping", {
-            "agent_0": 3,  # RIGHT: (2,1) -> (3,1) [adjacent to plate dispenser!]
-            "agent_1": 1   # DOWN: (1,1) -> (1,2) [leaving chopping]
+        ("PARALLEL: 0 moves and 1 wait", {
+            "agent_0": 1,
         }),
-        ("PARALLEL: Agent 0 faces plate, Agent 1 moves", {
-            "agent_0": 0,  # UP: turn North to point to (3,0) plate dispenser
-            "agent_1": 3   # RIGHT: (1,2) -> (2,2) [moving away]
+        ("PARALLEL: 0 moves and 1 wait", {
+            "agent_0": 3,
         }),
-        ("PARALLEL: Agent 0 gets plate+tomato, Agent 1 continues", {
-            "agent_0": 4,  # INTERACT: pick plate and AUTO-combine with READY tomato!
-            "agent_1": 3   # RIGHT: (2,2) -> (3,2) [positioning]
+        ("PARALLEL: 0 interact and 1 wait", {
+            "agent_0": 4,
         }),
-        
-        # ===== PHASE 3b: Agent 0 Places Plate+Tomato on Counter =====
-        ("PARALLEL: Agent 0 moves toward counter, Agent 1 clears", {
-            "agent_0": 1,  # DOWN: (3,1) -> (3,2)
-            "agent_1": 1   # DOWN: (3,2) -> (3,3) [moving out of the way]
-        }),
-        ("PARALLEL: Agent 0 to counter, Agent 1 waits", {
-            "agent_0": 1,  # DOWN: (3,2) -> (3,3) CONFLICT! Will stay or resolve
-            "agent_1": 2   # LEFT: (3,3) -> (2,3) [clearing space]
-        }),
-        ("PARALLEL: Agent 0 faces counter, Agent 1 waits", {
-            "agent_0": 1,  # DOWN: turn South to point to (3,4) counter
-            "agent_1": 0   # UP: (2,3) -> (2,2) [staying clear]
-        }),
-        ("PARALLEL: Agent 0 places plate+tomato, Agent 1 moves closer", {
-            "agent_0": 4,  # INTERACT: place plate+tomato on counter at (3,4)
-            "agent_1": 3   # RIGHT: (2,2) -> (3,2) [getting closer to counter]
-        }),
-        
-        # ===== PHASE 4: Agent 1 Picks Plate+Tomato, Combines with Lettuce, and Delivers =====
-        ("PARALLEL: Agent 0 backs away, Agent 1 waits", {
-            "agent_0": 2,  # LEFT: (3,3) -> (2,3) [moving left out of column 3]
-            "agent_1": 2   # LEFT: (3,2) -> (2,2) [moving left to clear path]
-        }),
-        ("PARALLEL: Agent 0 continues away, Agent 1 waits", {
-            "agent_0": 2,  # LEFT: (2,3) -> (1,3) [continuing away]
-            "agent_1": 1   # DOWN: (2,2) -> (2,3) [moving down]
-        }),
-        ("PARALLEL: Agent 0 far away, Agent 1 to counter column", {
-            "agent_0": 0,  # UP: (1,3) -> (1,2) [moving away]
-            "agent_1": 3   # RIGHT: (2,3) -> (3,3) [adjacent to counter!]
-        }),
-        ("PARALLEL: Agent 0 away, Agent 1 faces counter", {
-            "agent_0": 0,  # UP: (1,2) -> (1,1) [very far away]
-            "agent_1": 1   # DOWN: turn South to point to (3,4) counter
-        }),
-        ("PARALLEL: Agent 0 away, Agent 1 picks plate and combines!", {
-            "agent_0": 2,  # LEFT: stay at (1,1)
-            "agent_1": 4   # INTERACT: pick plate+tomato, AUTO-combine with READY lettuce!
-        }),
-        ("PARALLEL: Agent 0 stays, Agent 1 moves to delivery", {
-            "agent_0": 2,  # LEFT: stay still
-            "agent_1": 0   # UP: (3,3) -> (3,2) [heading to delivery]
-        }),
-        ("PARALLEL: Agent 0 stays, Agent 1 faces delivery", {
-            "agent_0": 2,  # LEFT: stay still
-            "agent_1": 3   # RIGHT: turn East to point to (4,2) delivery
-        }),
-        ("PARALLEL: Agent 1 DELIVERS COMPLETE SALAD!!!", {
-            "agent_0": 2,  # LEFT: (celebrating!)
-            "agent_1": 4   # INTERACT: DELIVER COMPLETE SALAD!!!
-        }),
+
     ]
     
     step_count = 0
@@ -330,7 +261,7 @@ if __name__ == "__main__":
     print("="*70)
     
     # Easy configuration - just change these lines!
-    RENDER_MODE = "human"  # Change to "rgb_array" for graphical visualization
+    RENDER_MODE = "rgb_array"  # Change to "rgb_array" for graphical visualization
     SAVE_LOG = False  # Change to False to disable log file creation
     
     try:

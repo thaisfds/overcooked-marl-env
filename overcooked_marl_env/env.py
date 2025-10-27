@@ -909,8 +909,8 @@ class OvercookedMARL(ParallelEnv):
                 'plates': (150, 150, 220),   # Light blue
                 'delivery': (50, 180, 50),   # Green
                 'counter': (180, 180, 150),  # Beige
-                'agent0': (220, 50, 50),     # Red
-                'agent1': (50, 50, 220),     # Blue
+                'agent0': (0, 0, 0),         # Black
+                'agent1': (0, 0, 0),         # Black
                 'tomato': (220, 50, 50),     # Red
                 'lettuce': (50, 180, 50),    # Green
                 'patty': (139, 69, 19),      # Brown
