@@ -72,11 +72,11 @@ class MapLoader:
         # Try to load the requested map
         try:
             map_data = self._load_and_validate(map_path)
-            print("[MAP LOADER] ✓ Map loaded successfully")
+            print("[MAP LOADER] Map loaded successfully")
             return map_data
             
         except (FileNotFoundError, MapValidationError, Exception) as e:
-            print(f"[MAP LOADER] ✗ Error loading map: {e}")
+            print(f"[MAP LOADER] Error loading map: {e}")
             
             # Try default map as fallback
             if use_default_on_error and map_path != self._get_default_map_path():
@@ -84,10 +84,10 @@ class MapLoader:
                 try:
                     default_path = self._get_default_map_path()
                     map_data = self._load_and_validate(default_path)
-                    print("[MAP LOADER] ✓ Default map loaded successfully")
+                    print("[MAP LOADER] Default map loaded successfully")
                     return map_data
                 except Exception as fallback_error:
-                    print(f"[MAP LOADER] ✗ Default map also failed: {fallback_error}")
+                    print(f"[MAP LOADER] Default map also failed: {fallback_error}")
             
             # No fallback or fallback failed
             raise

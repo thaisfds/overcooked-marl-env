@@ -338,17 +338,17 @@ class MapValidator:
         report = ["Map Validation Report", "=" * 50]
         
         if not self.validation_errors and not self.validation_warnings:
-            report.append("✓ All validations passed")
+            report.append("[OK] All validations passed")
         else:
             if self.validation_errors:
                 report.append(f"\nErrors ({len(self.validation_errors)}):")
                 for error in self.validation_errors:
-                    report.append(f"  ✗ {error}")
+                    report.append(f"  [ERROR] {error}")
             
             if self.validation_warnings:
                 report.append(f"\nWarnings ({len(self.validation_warnings)}):")
                 for warning in self.validation_warnings:
-                    report.append(f"  ⚠ {warning}")
+                    report.append(f"  [WARNING] {warning}")
         
         report.append("=" * 50)
         return "\n".join(report)

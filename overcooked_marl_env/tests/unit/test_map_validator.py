@@ -197,7 +197,7 @@ class TestMapValidator(unittest.TestCase):
         
         report = self.validator_strict.get_validation_report()
         
-        self.assertIn('✓', report)
+        self.assertIn('[OK]', report)
         self.assertIn('passed', report.lower())
     
     def test_validation_report_with_errors(self):
@@ -213,7 +213,7 @@ class TestMapValidator(unittest.TestCase):
         report = self.validator_strict.get_validation_report()
         
         self.assertIn('Error', report)
-        self.assertIn('✗', report)
+        self.assertIn('[ERROR]', report)
     
     def test_validation_report_with_warnings(self):
         """Test validation report shows warnings."""
@@ -224,7 +224,7 @@ class TestMapValidator(unittest.TestCase):
         report = self.validator_strict.get_validation_report()
         
         self.assertIn('Warning', report)
-        self.assertIn('⚠', report)
+        self.assertIn('[WARNING]', report)
     
     def test_multiple_validation_runs(self):
         """Test that validator can be reused for multiple maps."""

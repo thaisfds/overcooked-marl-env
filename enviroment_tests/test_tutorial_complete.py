@@ -28,14 +28,14 @@ KEY POSITIONS (based on actual parsing):
 - Dispensers (I): lettuce (2,8), tomato (3,8), cucumber (11,8)
 
 MECHANICS TESTED:
-1. ✓ Place ingredient on counter
-2. ✓ Pick ingredient from counter
-3. ✓ Place ingredient on chopping board and chop completely (3 cuts)
-4. ✓ Place ingredient on chopping board and partial chop (1 cut)
-5. ✓ Try to add unprocessed ingredient to plate (should fail)
-6. ✓ Add processed (READY) ingredient to plate
-7. ✓ Pick up ingredient with plate in hand (auto-combine)
-8. ✓ Transfer items between agents via counter
+1. [OK] Place ingredient on counter
+2. [OK] Pick ingredient from counter
+3. [OK] Place ingredient on chopping board and chop completely (3 cuts)
+4. [OK] Place ingredient on chopping board and partial chop (1 cut)
+5. [OK] Try to add unprocessed ingredient to plate (should fail)
+6. [OK] Add processed (READY) ingredient to plate
+7. [OK] Pick up ingredient with plate in hand (auto-combine)
+8. [OK] Transfer items between agents via counter
 
 RECIPES TO COMPLETE:
 1. SIMPLE_SALAD (lettuce)
@@ -575,6 +575,7 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
             "agent_1": 4
         }),
 
+
     ]
     
     step_count = 0
@@ -641,13 +642,13 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
     
     if success:
         print("\n" + "="*80)
-        print("✓✓✓ TEST PASSED! ✓✓✓")
+        print("[SUCCESS] TEST PASSED!")
         print("All mechanics tested successfully:")
-        print("  ✓ Item dispensing and counter placement")
-        print("  ✓ Progressive chopping (partial and complete)")
-        print("  ✓ Plate + ingredient combinations")
-        print("  ✓ Item transfer between agents via counters")
-        print("  ✓ Multiple recipe completion")
+        print("  [OK] Item dispensing and counter placement")
+        print("  [OK] Progressive chopping (partial and complete)")
+        print("  [OK] Plate + ingredient combinations")
+        print("  [OK] Item transfer between agents via counters")
+        print("  [OK] Multiple recipe completion")
         print("="*80)
     else:
         print("\n[FAILED] Not all recipes were completed.")
@@ -689,11 +690,11 @@ if __name__ == "__main__":
     
     # Configuration
     RENDER_MODE = "rgb_array"  # Change to "rgb_array" for graphical visualization
-    SAVE_LOG = True  # Change to False to disable log file
+    SAVE_LOG = False  # Change to False to disable log file
     
     try:
         success = test_tutorial_complete(render_mode=RENDER_MODE, log_to_file=SAVE_LOG)
-        print(f"\nTest finished with result: {'PASSED ✓' if success else 'FAILED ✗'}")
+        print(f"\nTest finished with result: {'PASSED [OK]' if success else 'FAILED [X]'}")
         
     except Exception as e:
         print(f"\n[ERROR]: {e}")

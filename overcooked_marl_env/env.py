@@ -18,6 +18,7 @@ from .map.map_loader import MapLoader
 from .environment.game_state import MapData
 from .environment.observation_builder import ObservationBuilder
 from .mechanics import MovementSystem, CollisionResolver
+from .mechanics.interaction_handler import InteractionHandler
 
 # For rendering
 import pygame
@@ -58,6 +59,9 @@ class OvercookedMARL(ParallelEnv):
         # Movement and Collision Systems (Phase 5)
         self.movement_system = MovementSystem(self._action_to_direction)
         self.collision_resolver = CollisionResolver(collision_penalty=0.5)
+        
+        # Interaction System (Phase 6)
+        self.interaction_handler = InteractionHandler(self.item_manager, self.recipe_manager)
         
         action_space_single = spaces.Discrete(5) 
         
@@ -334,7 +338,9 @@ class OvercookedMARL(ParallelEnv):
         # Process interaction actions (4)
         for agent_id, action in actions.items():
             if action == 4:  # Action 4: Interact
-                local_reward, interaction_global_reward = self._handle_interaction(agent_id)
+                local_reward, interaction_global_reward = self.interaction_handler.handle_interaction(
+                    agent_id, self.state, verbose=self.verbose
+                )
                 rewards[agent_id] += local_reward
                 global_reward += interaction_global_reward # Accumulate global bonus
 
@@ -1111,284 +1117,3 @@ class OvercookedMARL(ParallelEnv):
         
         # If out of bounds, return current position
         return agent_pos
-
-    def _handle_interaction(self, agent_id):
-        """Executes the logic of Action 4 (Interact) using new item system."""
-        
-        ix, iy = self._get_tile_in_front(agent_id)
-        
-        # Get the item instance that the agent is carrying
-        carrying_instance_id = self.state["agent_holding_instance"].get(agent_id, None)
-        carrying_item = self._get_item(carrying_instance_id) if carrying_instance_id is not None else None
-        
-        # Get the item instance on the ground
-        ground_instance_id = self.state["ground_instances"].get((ix, iy), None)
-        ground_item = self._get_item(ground_instance_id) if ground_instance_id is not None else None
-        
-        station_type = self.state["map_static"][iy, ix] 
-        
-        if self.verbose:
-            ix_print, iy_print = int(ix), int(iy)
-            print(f"Agent {agent_id} interacting at position ({ix_print}, {iy_print})")
-            print(f"  Station type: {station_type}")
-            if carrying_item:
-                print(f"  Carrying: {get_ingredient_display_name(carrying_item)} (instance: {carrying_instance_id})")
-            else:
-                print(f"  Carrying: nothing")
-            if ground_item:
-                print(f"  Ground: {get_ingredient_display_name(ground_item)} (instance: {ground_instance_id})")
-            else:
-                print(f"  Ground: nothing")
-        
-        reward = 0.0  # No base penalty for interaction
-        global_reward_bonus = 0.0
-
-        # Processing Logic (chopping board C)
-        if station_type == self.item_manager.get_cell_code('C'):
-            # Scenario 1: Place ingredient on chopping board
-            if carrying_item and can_process(carrying_item) and not ground_item:
-                # Transfer item from agent to chopping board
-                self.state["ground_instances"][(ix, iy)] = carrying_instance_id
-                del self.state["agent_holding_instance"][agent_id]
-                
-                reward += 2.0
-                if self.verbose:
-                    print(f"  Placed {carrying_item['name']} on chopping board")
-                return reward, 0.0
-            
-            # Scenario 2: Chop ingredient on chopping board
-            elif not carrying_item and ground_item and can_process(ground_item):
-                # Advance processing
-                updated_item = advance_processing(ground_item)
-                self._update_item(ground_instance_id, updated_item)
-                
-                if self.verbose:
-                    cuts_done = updated_item["cuts_done"]
-                    cuts_needed = updated_item["cuts_needed"]
-                    print(f"  Cutting... {cuts_done}/{cuts_needed} cuts")
-                
-                # Check if processing is complete
-                if is_ready(updated_item):
-                    reward += 2.0  # Completed processing
-                    if self.verbose:
-                        print(f"  Item processed and ready to use!")
-                else:
-                    reward += 2.0  # Partial progress
-                
-                return reward, 0.0
-            
-            # Scenario 3: Pick up processed ingredient from chopping board
-            elif not carrying_item and ground_item and is_ready(ground_item):
-                # Transfer item from chopping board to agent
-                self.state["agent_holding_instance"][agent_id] = ground_instance_id
-                del self.state["ground_instances"][(ix, iy)]
-                
-                reward += 2.0
-                if self.verbose:
-                    print(f"  Picked up {ground_item['name']} from chopping board")
-                return reward, 0.0
-        
-        # Plate Dispenser (P)
-        if station_type == self.item_manager.get_cell_code('P'):
-            # If not carrying anything, pick up an empty plate
-            if not carrying_item:
-                plate = create_plate()
-                plate_instance = self._create_item_instance(plate)
-                self.state["agent_holding_instance"][agent_id] = plate_instance
-                reward += 2.0
-                if self.verbose:
-                    print(f"  Picked up an empty plate from dispenser (instance: {plate_instance})")
-                return reward, 0.0
-            
-            # If carrying a READY ingredient, pick up plate and combine automatically
-            elif carrying_item and is_ready(carrying_item):
-                plate = create_plate()
-                plate = add_ingredient_to_plate(plate, carrying_item["name"])
-                plate_instance = self._create_item_instance(plate)
-                
-                # Delete the ingredient that was combined
-                self._delete_item_instance(carrying_instance_id)
-                del self.state["agent_holding_instance"][agent_id]
-                
-                # Now carry the plate
-                self.state["agent_holding_instance"][agent_id] = plate_instance
-                reward += 2.0 + 4.0  # Pick up + combine
-                if self.verbose:
-                    print(f"  Picked up plate and combined with {carrying_item['name']} (instance: {plate_instance})")
-                return reward, 0.0
-        
-        # Item Collection Logic (dynamic dispensers - defined in map)
-        # Only dispense if agent is not carrying anything
-        if (ix, iy) in self.state["dispensers"] and not carrying_item:
-            dispenser_data = self.state["dispensers"][(ix, iy)]
-            
-            # Support both name (string) and numeric ID (legacy)
-            if isinstance(dispenser_data, str):
-                # New system: ingredient name
-                ingredient = self.item_manager.create_ingredient_by_name(dispenser_data)
-            else:
-                # Legacy: numeric ID - map to ingredient
-                ingredient_map = {
-                    5: "tomato",
-                    6: "lettuce",
-                    7: "cucumber",
-                }
-                ingredient_name = ingredient_map.get(dispenser_data, "tomato")
-                ingredient = self.item_manager.create_ingredient_by_name(ingredient_name)
-            
-            item_instance = self._create_item_instance(ingredient)
-            self.state["agent_holding_instance"][agent_id] = item_instance
-            reward += 2.0
-            if self.verbose:
-                print(f"  Picked up {ingredient['name']} from dispenser (instance: {item_instance})")
-            return reward, 0.0
-        
-        # Counter and Combination (counters/tables)
-        # Treat 'T', '#', and 'I' as counters to allow placing/picking up items
-        elif station_type in [
-            self.item_manager.get_cell_code('T'),
-            self.item_manager.get_cell_code('#'),
-            self.item_manager.get_cell_code('I')
-        ]:
-            is_carrying_dish = carrying_item and carrying_item.get("type") == ItemType.DISH
-            is_carrying_ready = carrying_item and is_ready(carrying_item)
-            is_ground_dish = ground_item and ground_item.get("type") == ItemType.DISH
-            is_ground_ready = ground_item and is_ready(ground_item)
-            
-            # Scenario 1: Carrying READY item + plate on counter → combine and leave plate on counter
-            if is_carrying_ready and is_ground_dish:
-                # Add ingredient to plate
-                updated_plate = add_ingredient_to_plate(ground_item, carrying_item["name"])
-                
-                # Delete ingredient that was combined
-                self._delete_item_instance(carrying_instance_id)
-                del self.state["agent_holding_instance"][agent_id]
-                
-                # Update the plate on the counter (stays on counter, doesn't go to agent's hand)
-                self._update_item(ground_instance_id, updated_plate)
-                # The plate remains on the ground at (ix, iy)
-                
-                reward += 4.0
-                if self.verbose:
-                    print(f"  Combined {carrying_item['name']} with plate on counter (plate stays on counter)")
-                return reward, 0.0
-            
-            # Scenario 2: Carrying plate + READY item on counter → pick up item and combine
-            elif is_carrying_dish and is_ground_ready:
-                # Add ingredient to plate
-                updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"])
-                self._update_item(carrying_instance_id, updated_plate)
-                
-                # Deletar ingrediente que foi combinado
-                self._delete_item_instance(ground_instance_id)
-                del self.state["ground_instances"][(ix, iy)]
-                
-                reward += 4.0
-                if self.verbose:
-                    print(f"  Combined {ground_item['name']} from counter with plate")
-                return reward, 0.0
-            
-            # Scenario 3 & 4: Place item/plate on counter (only if counter is empty)
-            elif carrying_item and not ground_item:
-                # Validation: if placing plate, need to make sure it's allowed
-                if is_carrying_dish:
-                    # Plate can only go on empty counter
-                    pass  # OK, counter is empty
-                
-                # Transfer instance to counter
-                self.state["ground_instances"][(ix, iy)] = carrying_instance_id
-                del self.state["agent_holding_instance"][agent_id]
-                
-                reward += 2.0
-                if self.verbose:
-                    print(f"  Placed {get_ingredient_display_name(carrying_item)} on counter")
-                return reward, 0.0
-            
-            # Scenario 5: Pick up item/plate from counter (if hands are empty)
-            elif not carrying_item and ground_item:
-                # Transfer instance to agent
-                self.state["agent_holding_instance"][agent_id] = ground_instance_id
-                del self.state["ground_instances"][(ix, iy)]
-                
-                reward += 2.0
-                if self.verbose:
-                    print(f"  Picked up {get_ingredient_display_name(ground_item)} from counter")
-                return reward, 0.0
-        
-        # Delivery
-        elif station_type == self.item_manager.get_cell_code('D'):
-            # Can only deliver if carrying a plate
-            if not carrying_item or carrying_item.get("type") != ItemType.DISH:
-                if self.verbose:
-                    print(f"  Cannot deliver: not carrying a plate")
-                return reward, 0.0
-            
-            # Check if plate has ingredients
-            ingredients = carrying_item.get("ingredients", [])
-            if not ingredients:
-                if self.verbose:
-                    print(f"  Cannot deliver: plate is empty")
-                return reward, 0.0
-            
-            # Validate if ingredients form a valid recipe
-            is_valid, recipe_name, recipe_reward = self.recipe_manager.validate_delivery(ingredients)
-            
-            if is_valid:
-                # Valid recipe!
-                # Check if delivered recipe is the first in pending orders
-                is_correct_order = False
-                if len(self.recipe_order) > 0:
-                    # Calculate pending orders (original minus delivered)
-                    pending_orders = list(self.recipe_order)
-                    for delivered_recipe in self.state['delivered_recipes']:
-                        if delivered_recipe in pending_orders:
-                            pending_orders.remove(delivered_recipe)
-                    
-                    # Bonus only if it's the FIRST pending recipe
-                    if len(pending_orders) > 0:
-                        is_correct_order = (recipe_name == pending_orders[0])
-                
-                # Register delivery
-                self.state["delivered_recipes"].append(recipe_name)
-                self.state["dishes_pending"] -= 1
-                
-                # Delete delivered plate instance
-                self._delete_item_instance(carrying_instance_id)
-                del self.state["agent_holding_instance"][agent_id]
-                
-                # Calculate rewards
-                base_reward = recipe_reward
-                order_bonus = recipe_reward * 0.3 if is_correct_order else 0.0
-                global_reward_bonus = recipe_reward + order_bonus
-                reward += base_reward
-                
-                if self.verbose:
-                    if is_correct_order:
-                        print(f"  Recipe {recipe_name} delivered in correct order!")
-                        print(f"  Reward: {base_reward} + Bonus: {order_bonus}")
-                    else:
-                        print(f"  Recipe {recipe_name} delivered out of order")
-                        print(f"  Reward: {base_reward} (no bonus)")
-                        if len(pending_orders) > 0:
-                            print(f"  Expected: {pending_orders[0]}")
-                
-                return reward, global_reward_bonus
-            else:
-                # Invalid recipe!
-                if self.verbose:
-                    ingredients_str = ", ".join(ingredients)
-                    print(f"  Invalid recipe! Ingredients: [{ingredients_str}]")
-                    print(f"  No score")
-                
-                # No reward (or penalty)
-                return reward, 0.0
-        
-        # Invalid interaction - apply penalty
-        reward -= 2.0
-        
-        # For debugging
-        if self.verbose:
-            print(f"  Invalid interaction - no valid action performed")
-            print(f"  Reward: {reward}, Global Bonus: {global_reward_bonus}")
-            
-        return reward, global_reward_bonus
