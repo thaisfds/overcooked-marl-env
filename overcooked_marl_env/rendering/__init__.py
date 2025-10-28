@@ -1,10 +1,10 @@
 """
 Rendering module for Overcooked MARL.
 
-This module will contain rendering implementations:
-- Text/ASCII renderer
-- RGB/Pygame renderer
-- Rendering utilities
+This module contains rendering implementations:
+- Renderer: Main rendering class supporting ASCII and Pygame modes
 """
 
-__all__ = []
+from .renderer import Renderer
+
+__all__ = ['Renderer']
