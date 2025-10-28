@@ -84,7 +84,7 @@ class Renderer:
         if self.render_mode == "human":
             return self.render_text(game_state, map_size, agents, recipe_order)
         elif self.render_mode == "rgb_array":
-            return self.render_rgb_array(game_state, map_size, agents)
+            return self.render_rgb_array(game_state, map_size, agents, recipe_order)
         
         return None
     
@@ -152,7 +152,8 @@ class Renderer:
         self,
         game_state: Dict,
         map_size: Tuple[int, int],
-        agents: list
+        agents: list,
+        recipe_order: list
     ) -> np.ndarray:
         """
         Renders the environment as an RGB array using Pygame.
@@ -161,6 +162,7 @@ class Renderer:
             game_state: Current game state dictionary
             map_size: Tuple of (height, width)
             agents: List of agent IDs
+            recipe_order: List of recipe names in order
         
         Returns:
             numpy array of shape (H, W, 3) with RGB values
@@ -182,6 +184,9 @@ class Renderer:
         for agent_id, pos in game_state["agent_pos"].items():
             self._draw_agent(agent_id, pos, game_state)
         
+        # Draw HUD (Heads-Up Display) with game information
+        self._draw_hud(game_state, agents, recipe_order)
+        
         # Update display
         pygame.event.pump()
         pygame.display.flip()
@@ -191,6 +196,112 @@ class Renderer:
         return np.transpose(
             np.array(pygame.surfarray.pixels3d(self.window)), axes=(1, 0, 2)
         )
+    
+    def _draw_hud(self, game_state: Dict, agents: list, recipe_order: list):
+        """
+        Draw Heads-Up Display with game information below the grid.
+        
+        Args:
+            game_state: Current game state dictionary
+            agents: List of agent IDs
+            recipe_order: List of recipe names in order
+        """
+        # Initialize font if not already done
+        if not hasattr(self, 'font'):
+            pygame.font.init()
+            self.font = pygame.font.Font(None, 24)  # Default font, size 24
+            self.font_small = pygame.font.Font(None, 20)  # Smaller font for details
+        
+        # HUD position - below the game grid
+        map_height = (game_state["map_static"].shape[0] * self.cell_size)
+        hud_y_start = self.grid_offset_y + map_height + self.hud_padding
+        hud_x = self.hud_padding
+        hud_y = hud_y_start
+        line_height = 25
+        
+        # Current step
+        current_step = game_state.get("time_steps", 0)
+        step_text = self.font.render(f"Step: {current_step}", True, (0, 0, 0))
+        self.window.blit(step_text, (hud_x, hud_y))
+        hud_y += line_height + 5
+        
+        # Agent information - one line per agent with well-separated fields
+        for agent_id in sorted(agents):
+            # Get agent data
+            carrying_instance_id = game_state.get("agent_holding_instance", {}).get(agent_id, None)
+            
+            # Get item display
+            if carrying_instance_id is not None and carrying_instance_id in game_state.get("item_instances", {}):
+                carrying_item = game_state["item_instances"][carrying_instance_id]
+                inventory = get_ingredient_display_name(carrying_item)
+            else:
+                inventory = "Empty"
+            
+            # Get rewards
+            step_reward = game_state.get("last_step_rewards", {}).get(agent_id, 0.0)
+            total_reward = game_state.get("accumulated_rewards", {}).get(agent_id, 0.0)
+            
+            # Format with well-defined spacing for each field
+            agent_num = agent_id.split('_')[1]
+            
+            # Agent label
+            agent_label = f"Agent {agent_num}:"
+            label_surface = self.font_small.render(agent_label, True, (0, 0, 0))
+            self.window.blit(label_surface, (hud_x, hud_y))
+            
+            # Step reward field (starting at x=100)
+            step_text = f"Step: {step_reward:+6.2f}"
+            step_surface = self.font_small.render(step_text, True, (80, 0, 80))  # Purple
+            self.window.blit(step_surface, (hud_x + 100, hud_y))
+            
+            # Total reward field (starting at x=250)
+            total_text = f"Total: {total_reward:+7.2f}"
+            total_surface = self.font_small.render(total_text, True, (0, 0, 150))  # Dark blue
+            self.window.blit(total_surface, (hud_x + 250, hud_y))
+            
+            # Inventory field (starting at x=420)
+            inv_text = f"Inv: {inventory}"
+            inv_surface = self.font_small.render(inv_text, True, (0, 80, 0))  # Dark green
+            self.window.blit(inv_surface, (hud_x + 420, hud_y))
+            
+            hud_y += line_height
+        
+        hud_y += 5  # Extra spacing
+        
+        # Orders - show only pending orders (not yet delivered)
+        # Calculate pending orders by removing delivered recipes (respecting duplicates)
+        delivered = game_state.get("delivered_recipes", [])
+        pending_orders = list(recipe_order)  # Make a copy
+        
+        # Count how many of each recipe was delivered
+        delivered_count = {}
+        for delivered_recipe in delivered:
+            delivered_count[delivered_recipe] = delivered_count.get(delivered_recipe, 0) + 1
+        
+        # Remove delivered recipes from pending (respecting count)
+        for recipe_name, count in delivered_count.items():
+            for _ in range(count):
+                if recipe_name in pending_orders:
+                    pending_orders.remove(recipe_name)  # Remove first occurrence
+        
+        # Display pending orders
+        if pending_orders:
+            orders_str = ", ".join(pending_orders)
+            orders_text = self.font_small.render(f"Pending Orders: {orders_str}", True, (0, 0, 0))
+        else:
+            orders_text = self.font_small.render("Pending Orders: All completed!", True, (0, 150, 0))
+        
+        self.window.blit(orders_text, (hud_x, hud_y))
+        hud_y += line_height
+        
+        # Delivered - single line
+        delivered = game_state.get("delivered_recipes", [])
+        if delivered:
+            delivered_str = ", ".join(delivered)
+            delivered_text = self.font_small.render(f"Delivered: {delivered_str}", True, (0, 150, 0))
+        else:
+            delivered_text = self.font_small.render("Delivered: None", True, (120, 120, 120))
+        self.window.blit(delivered_text, (hud_x, hud_y))
     
     def close(self):
         """Clean up Pygame resources."""
@@ -257,17 +368,33 @@ class Renderer:
         
         # Show orders and delivered
         if len(recipe_order) > 0:
+            # Debug: Show original recipe order
+            print(f"\n[DEBUG] Recipe Order (original): {recipe_order}")
+            print(f"[DEBUG] Delivered Recipes: {game_state['delivered_recipes']}")
+            
             # Calculate pending orders: original order minus delivered
             pending_orders = list(recipe_order)
+            delivered_count = {}
+            
+            # Count how many of each recipe was delivered
             for delivered_recipe in game_state['delivered_recipes']:
-                if delivered_recipe in pending_orders:
-                    pending_orders.remove(delivered_recipe)  # Remove first occurrence
+                delivered_count[delivered_recipe] = delivered_count.get(delivered_recipe, 0) + 1
+            
+            print(f"[DEBUG] Delivered Count: {delivered_count}")
+            
+            # Remove delivered recipes from pending (respecting count)
+            for recipe_name, count in delivered_count.items():
+                for _ in range(count):
+                    if recipe_name in pending_orders:
+                        pending_orders.remove(recipe_name)  # Remove first occurrence
+            
+            print(f"[DEBUG] Pending Orders (calculated): {pending_orders}")
             
             if len(pending_orders) > 0:
                 orders_str = ", ".join(pending_orders)
-                print(f"Orders: {orders_str}")
+                print(f"\nOrders (Pending): {orders_str}")
             else:
-                print(f"Orders: (none)")
+                print(f"\nOrders (Pending): (none - all completed!)")
             
             if len(game_state['delivered_recipes']) > 0:
                 delivered_str = ", ".join(game_state['delivered_recipes'])
@@ -357,13 +484,29 @@ class Renderer:
     # ===================================================================
     
     def _initialize_pygame(self, map_size: Tuple[int, int]):
-        """Initialize Pygame window."""
+        """Initialize Pygame window with space for HUD below the grid."""
         pygame.init()
         pygame.display.init()
         
         H, W = map_size
-        window_width = W * self.cell_size
-        window_height = H * self.cell_size
+        # Add space for HUD below the grid (150 pixels for 5 lines) and padding
+        self.hud_height = 150
+        self.hud_padding = 20
+        self.grid_offset_x = self.hud_padding
+        self.grid_offset_y = self.hud_padding
+        
+        # Calculate window dimensions - ensure minimum width for HUD text
+        grid_width = W * self.cell_size
+        grid_height = H * self.cell_size
+        
+        # Minimum width to display HUD text comfortably (around 800px)
+        min_width = 800
+        window_width = max(grid_width + 2 * self.hud_padding, min_width)
+        window_height = self.grid_offset_y + grid_height + self.hud_padding + self.hud_height
+        
+        # Center the grid horizontally if window is wider than grid
+        if window_width > grid_width + 2 * self.hud_padding:
+            self.grid_offset_x = (window_width - grid_width) // 2
         
         self.window = pygame.display.set_mode((window_width, window_height))
         pygame.display.set_caption("Overcooked MARL")
@@ -380,8 +523,8 @@ class Renderer:
         """
         cell_code = game_state["map_static"][y, x]
         rect = pygame.Rect(
-            x * self.cell_size,
-            y * self.cell_size,
+            self.grid_offset_x + x * self.cell_size,
+            self.grid_offset_y + y * self.cell_size,
             self.cell_size,
             self.cell_size
         )
@@ -392,16 +535,16 @@ class Renderer:
         pygame.draw.rect(self.window, (100, 100, 100), rect, 1)  # Border
         
         # Draw visual indicators for stations
-        center_x = x * self.cell_size + self.cell_size // 2
-        center_y = y * self.cell_size + self.cell_size // 2
+        center_x = self.grid_offset_x + x * self.cell_size + self.cell_size // 2
+        center_y = self.grid_offset_y + y * self.cell_size + self.cell_size // 2
         
         # Chopping board - draw knife line
         if cell_code == self.item_manager.get_cell_code('C'):
             pygame.draw.line(
                 self.window, 
                 (100, 100, 100), 
-                (x * self.cell_size + 15, y * self.cell_size + 30),
-                (x * self.cell_size + self.cell_size - 15, y * self.cell_size + 30), 
+                (self.grid_offset_x + x * self.cell_size + 15, self.grid_offset_y + y * self.cell_size + 30),
+                (self.grid_offset_x + x * self.cell_size + self.cell_size - 15, self.grid_offset_y + y * self.cell_size + 30), 
                 3
             )
         
@@ -412,16 +555,16 @@ class Renderer:
             pygame.draw.line(
                 self.window, 
                 (0, 0, 0),
-                (x * self.cell_size + padding, y * self.cell_size + padding),
-                (x * self.cell_size + self.cell_size - padding, y * self.cell_size + self.cell_size - padding), 
+                (self.grid_offset_x + x * self.cell_size + padding, self.grid_offset_y + y * self.cell_size + padding),
+                (self.grid_offset_x + x * self.cell_size + self.cell_size - padding, self.grid_offset_y + y * self.cell_size + self.cell_size - padding), 
                 4
             )
             # Diagonal 2
             pygame.draw.line(
                 self.window, 
                 (0, 0, 0),
-                (x * self.cell_size + self.cell_size - padding, y * self.cell_size + padding),
-                (x * self.cell_size + padding, y * self.cell_size + self.cell_size - padding), 
+                (self.grid_offset_x + x * self.cell_size + self.cell_size - padding, self.grid_offset_y + y * self.cell_size + padding),
+                (self.grid_offset_x + x * self.cell_size + padding, self.grid_offset_y + y * self.cell_size + self.cell_size - padding), 
                 4
             )
         
@@ -504,8 +647,8 @@ class Renderer:
         agent_color = (0, 0, 0)
         
         # Draw agent as circle
-        center_x = x * self.cell_size + self.cell_size // 2
-        center_y = y * self.cell_size + self.cell_size // 2
+        center_x = self.grid_offset_x + x * self.cell_size + self.cell_size // 2
+        center_y = self.grid_offset_y + y * self.cell_size + self.cell_size // 2
         radius = self.cell_size // 3
         
         gfxdraw.filled_circle(self.window, center_x, center_y, radius, agent_color)
@@ -683,8 +826,8 @@ class Renderer:
         
         color = self._get_item_color(item_dict)
         
-        center_x = x * self.cell_size + self.cell_size // 2
-        center_y = y * self.cell_size + self.cell_size // 2 - offset
+        center_x = self.grid_offset_x + x * self.cell_size + self.cell_size // 2
+        center_y = self.grid_offset_y + y * self.cell_size + self.cell_size // 2 - offset
         
         item_type = item_dict.get("type")
         
