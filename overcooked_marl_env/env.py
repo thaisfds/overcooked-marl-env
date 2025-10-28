@@ -21,10 +21,6 @@ from .mechanics import MovementSystem, CollisionResolver
 from .mechanics.interaction_handler import InteractionHandler
 from .rendering import Renderer
 
-# For rendering (backwards compatibility)
-import pygame
-from pygame import gfxdraw
-
 # Constants for observation
 MAX_PROCESS_STEPS = 3 
 TOTAL_CHANNELS = 5 + MAX_PROCESS_STEPS # 5 base channels + 3 channels for processing
@@ -201,9 +197,9 @@ class OvercookedMARL(ParallelEnv):
             "dispensers": dispenser_assignments,
             "expected_recipe_index": 0,  # Index of the next expected recipe
             "delivered_recipes": [],     # Recipes already delivered
-            "item_instances": {},        # Mapeia item_instance_id -> item_dict
-            "agent_holding_instance": {},  # Mapeia agent_id -> item_instance_id
-            "ground_instances": {},      # Mapeia (x, y) -> item_instance_id
+            "item_instances": {},        # Map item_instance_id -> item_dict
+            "agent_holding_instance": {},  # Map agent_id -> item_instance_id
+            "ground_instances": {},      # Map (x, y) -> item_instance_id
             "next_item_id": 0,           # Counter to generate unique item IDs
             "agent_orientation": {agent: (0, -1) for agent in self.possible_agents},  # All agents start facing North
             "accumulated_rewards": {agent: 0.0 for agent in self.possible_agents},
@@ -230,7 +226,7 @@ class OvercookedMARL(ParallelEnv):
         for agent in self.agents:
             # Get the item instance that the agent is carrying
             carrying_instance_id = self.state["agent_holding_instance"].get(agent, None)
-            carrying_item = self._get_item(carrying_instance_id) if carrying_instance_id is not None else None
+            carrying_item = self.interaction_handler._get_item(carrying_instance_id, self.state) if carrying_instance_id is not None else None
             
             # Extract item information
             if carrying_item:
@@ -434,68 +430,3 @@ class OvercookedMARL(ParallelEnv):
     def action_space(self, agent):
         """Returns the action space for a specific agent."""
         return self.action_spaces[agent]
-    
-    def _create_item_instance(self, item_dict):
-        """
-        Creates a new item instance with unique ID.
-        
-        Args:
-            item_dict: Dictionary representing the item
-        
-        Returns:
-            Unique ID of the created instance
-        """
-        item_id = self.state["next_item_id"]
-        self.state["next_item_id"] += 1
-        self.state["item_instances"][item_id] = item_dict.copy()
-        return item_id
-    
-    def _get_item(self, item_instance_id):
-        """
-        Returns the complete item dictionary.
-        
-        Args:
-            item_instance_id: Instance ID
-        
-        Returns:
-            Item dictionary or None if it doesn't exist
-        """
-        return self.state["item_instances"].get(item_instance_id)
-    
-    def _update_item(self, item_instance_id, new_item_dict):
-        """
-        Updates an item completely.
-        
-        Args:
-            item_instance_id: Instance ID
-            new_item_dict: New item dictionary
-        """
-        if item_instance_id in self.state["item_instances"]:
-            self.state["item_instances"][item_instance_id] = new_item_dict.copy()
-    
-    def _delete_item_instance(self, item_instance_id):
-        """Removes an item instance from the game."""
-        if item_instance_id in self.state["item_instances"]:
-            del self.state["item_instances"][item_instance_id]
-    
-    def _get_tile_in_front(self, agent_id):
-        """Returns the position in front of the agent based on its orientation."""
-        agent_pos = self.state["agent_pos"][agent_id]
-        x, y = agent_pos
-        
-        # First, check if there's an item at the agent's current position
-        if self.state["items_on_ground"][y, x] > 0:
-            return agent_pos
-        
-        # Get agent orientation
-        dx, dy = self.state["agent_orientation"][agent_id]
-        
-        # Calculate position in front
-        new_x, new_y = x + dx, y + dy
-        
-        # Check if within bounds
-        if 0 <= new_x < self.map_size[1] and 0 <= new_y < self.map_size[0]:
-            return (new_x, new_y)
-        
-        # If out of bounds, return current position
-        return agent_pos
