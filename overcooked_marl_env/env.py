@@ -28,6 +28,10 @@ TOTAL_CHANNELS = 5 + MAX_PROCESS_STEPS # 5 base channels + 3 channels for proces
 class OvercookedMARL(ParallelEnv):
     metadata = {"render_modes": ["human", "rgb_array"], "name": "overcooked_marl_v0"}
 
+    # =================================================================
+    # PETTINGZOO API METHODS (Public Interface)
+    # Following PettingZoo conventions: https://pettingzoo.farama.org/
+    # =================================================================
 
     def __init__(self, render_mode=None, map_path="maps/default_map.txt", num_fixed_agents=2, verbose=False):
         super().__init__()
@@ -88,9 +92,236 @@ class OvercookedMARL(ParallelEnv):
         self.window = None  # Deprecated - kept for backwards compatibility
         self.clock = None   # Deprecated - kept for backwards compatibility
 
-# =================================================================
-# HELPER FUNCTIONS
-# =================================================================
+    def reset(self, seed=None, options=None):
+        """
+        Resets the environment to start a new episode.
+        
+        Args:
+            seed (int, optional): Random seed for episode initialization
+            options (dict, optional): Additional options for reset
+            
+        Returns:
+            tuple: (observations, infos) for all agents
+        """
+        gym.Env.reset(self, seed=seed) 
+        
+        # Make sure the map is marked as loaded to avoid duplicate logs
+        if not self.map_path in self._already_loaded_maps:
+            self._already_loaded_maps.add(self.map_path)
+        
+        # Reinitialize state and agent list
+        self.state = self._initialize_game_state()
+        self.agents = self.possible_agents[:]
+        
+        # Reset variables related to recipe order
+        self.state["expected_recipe_index"] = 0
+        self.state["delivered_recipes"] = []
+        
+        # Ensure rewards are reset to zero
+        self.state["accumulated_rewards"] = {agent: 0.0 for agent in self.possible_agents}
+        self.state["last_step_rewards"] = {agent: 0.0 for agent in self.possible_agents}
+        
+        observations = self._get_obs()
+        info = self._get_info()
+        
+        return observations, info
+
+    def step(self, actions):
+        """
+        Executes one timestep of the environment.
+        
+        Args:
+            actions (dict): Dictionary mapping agent_id to action
+                Actions: 0=Up, 1=Down, 2=Left, 3=Right, 4=Interact
+        
+        Returns:
+            tuple: (observations, rewards, terminations, truncations, infos)
+                - observations (dict): Agent observations
+                - rewards (dict): Rewards for each agent
+                - terminations (dict): Episode ended naturally
+                - truncations (dict): Episode ended due to time limit
+                - infos (dict): Additional information
+        """
+        
+        # Initialization of return dictionaries
+        rewards = {agent: 0.0 for agent in self.agents}
+        terminations = {agent: False for agent in self.agents}
+        truncations = {agent: False for agent in self.agents}
+        
+        episode_terminated = False
+        episode_truncated = False
+        global_reward = 0.0 # Global reward accumulator
+        
+        # Apply base penalty for any action
+        for agent_id in actions.keys():
+            rewards[agent_id] -= 0.5
+        
+        # Step 1: Process movement actions and get intended positions
+        intended_positions = self.movement_system.process_movement_actions(
+            actions,
+            self.state,
+            self.map_size,
+            self.item_manager
+        )
+        
+        # Step 2: Resolve collisions and conflicts
+        current_positions = {agent: pos for agent, pos in self.state["agent_pos"].items()}
+        final_positions, collision_penalties = self.collision_resolver.resolve_collisions(
+            intended_positions,
+            current_positions,
+            verbose=self.verbose
+        )
+        
+        # Step 3: Apply collision penalties
+        for agent_id, penalty in collision_penalties.items():
+            if penalty > 0:
+                rewards[agent_id] -= penalty
+        
+        # Step 4: Update agent positions in state
+        for agent_id, pos in final_positions.items():
+            self.state["agent_pos"][agent_id] = pos
+        
+        # Movement debugging (when verbose=True)
+        if self.verbose:
+            print("\n--- Movement Information ---")
+            for agent_id, action in actions.items():
+                if action < 4:  # Movement action
+                    old_pos = current_positions.get(agent_id, (0, 0))
+                    new_pos = final_positions.get(agent_id, (0, 0))
+                    
+                    info = self.movement_system.get_movement_info(
+                        agent_id, action, old_pos, new_pos,
+                        self.state, self.item_manager
+                    )
+                    print(info)
+        
+        # Process interaction actions (4)
+        for agent_id, action in actions.items():
+            if action == 4:  # Action 4: Interact
+                local_reward, interaction_global_reward = self.interaction_handler.handle_interaction(
+                    agent_id, self.state, verbose=self.verbose
+                )
+                rewards[agent_id] += local_reward
+                global_reward += interaction_global_reward # Accumulate global bonus
+
+        # Distribute the Accumulated Global Reward
+        if global_reward > 0:
+            for agent_id in self.agents: rewards[agent_id] += global_reward
+                
+        # State Update and Episode Conclusion
+        
+        self.state["time_steps"] += 1
+        MAX_EPISODE_STEPS = 500 
+        
+        # Defeat due to time out
+        if self.state["time_steps"] >= MAX_EPISODE_STEPS:
+            episode_truncated = True
+
+        # Victory
+        if self.state["dishes_pending"] <= 0:
+            episode_terminated = True
+            
+        # Distribute completion status to each agent
+        for agent_id in self.agents:
+            terminations[agent_id] = episode_terminated
+            truncations[agent_id] = episode_truncated
+        
+        # Accumulate rewards
+        for agent_id in self.agents:
+            self.state["accumulated_rewards"][agent_id] += rewards[agent_id]
+        
+        # Save current step rewards
+        self.state["last_step_rewards"] = rewards.copy()
+        
+        # Generate Final Observation and Info
+        observations = self._get_obs() 
+        infos = self._get_info() 
+
+        return observations, rewards, terminations, truncations, infos
+    
+    def render(self):
+        """
+        Renders the current state of the environment.
+        
+        Returns:
+            None (if render_mode="human"): Prints ASCII to console
+            np.ndarray (if render_mode="rgb_array"): RGB image array
+            None (if render_mode=None): No rendering
+        """
+        if self.render_mode is None:
+            return None
+        
+        return self.renderer.render(
+            game_state=self.state,
+            map_size=self.map_size,
+            agents=self.agents,
+            recipe_order=self.recipe_order
+        )
+
+    def observation_space(self, agent):
+        """
+        Returns the observation space for the specified agent.
+        
+        Args:
+            agent (str): Agent identifier
+            
+        Returns:
+            gym.spaces.Box: Observation space (H x W x C)
+        """
+        return self.observation_spaces[agent]
+    
+    def action_space(self, agent):
+        """
+        Returns the action space for the specified agent.
+        
+        Args:
+            agent (str): Agent identifier
+            
+        Returns:
+            gym.spaces.Discrete: Action space with 5 actions
+        """
+        return self.action_spaces[agent]
+
+    # PettingZoo-specific methods
+    def observe(self, agent: str):
+        """
+        Returns observation for a specific agent.
+        
+        Args:
+            agent (str): Agent identifier
+            
+        Returns:
+            np.ndarray: Agent's observation
+        """
+        return self._get_obs()[agent] 
+
+    def get_state(self):
+        """
+        Returns the global state of the environment (PettingZoo API).
+        
+        Note: In PettingZoo, this typically returns a global observation.
+        This implementation returns the internal state dictionary.
+        
+        This method provides the PettingZoo-compatible interface while
+        maintaining backward compatibility with direct `self.state` access.
+        
+        Returns:
+            dict: Complete environment state
+        """
+        return self.state
+
+    def close(self):
+        """
+        Closes the environment and cleans up resources.
+        """
+        self.renderer.close()
+        # Keep for backwards compatibility
+        if self.window is not None:
+            self.window = None
+
+    # =================================================================
+    # PRIVATE HELPER METHODS
+    # =================================================================
 
     def _load_map_from_file(self, map_path):
         """
@@ -124,8 +355,6 @@ class OvercookedMARL(ParallelEnv):
             print(f"  - Recipes: {map_data.recipes}")
         
         return map_data.static_map, map_data.agent_positions, map_data.dispensers
-            
-        return static_map_np, agent_start_pos, dispenser_assignments
         
     def _initialize_recipes(self, recipe_names):
         """Initialize recipes based on the names from the map file."""
@@ -250,183 +479,3 @@ class OvercookedMARL(ParallelEnv):
             info[agent] = agent_info
             
         return info
-
-    def reset(self, seed=None, options=None):
-        """Starts a new episode."""
-        gym.Env.reset(self, seed=seed) 
-        
-        # Make sure the map is marked as loaded to avoid duplicate logs
-        if not self.map_path in self._already_loaded_maps:
-            self._already_loaded_maps.add(self.map_path)
-        
-        # Reinitialize state and agent list
-        self.state = self._initialize_game_state()
-        self.agents = self.possible_agents[:]
-        
-        # Reset variables related to recipe order
-        self.state["expected_recipe_index"] = 0
-        self.state["delivered_recipes"] = []
-        
-        # Ensure rewards are reset to zero
-        self.state["accumulated_rewards"] = {agent: 0.0 for agent in self.possible_agents}
-        self.state["last_step_rewards"] = {agent: 0.0 for agent in self.possible_agents}
-        
-        observations = self._get_obs()
-        info = self._get_info()
-        
-        return observations, info
-
-    def step(self, actions):
-        """Executes a simulation step, processing the action dictionary."""
-        
-        # Initialization of return dictionaries
-        rewards = {agent: 0.0 for agent in self.agents}
-        terminations = {agent: False for agent in self.agents}
-        truncations = {agent: False for agent in self.agents}
-        
-        episode_terminated = False
-        episode_truncated = False
-        global_reward = 0.0 # Global reward accumulator
-        
-        # Apply base penalty for any action
-        for agent_id in actions.keys():
-            rewards[agent_id] -= 0.5
-        
-        # ============================================================
-        # MOVEMENT PROCESSING (Using MovementSystem and CollisionResolver)
-        # ============================================================
-        
-        # Step 1: Process movement actions and get intended positions
-        intended_positions = self.movement_system.process_movement_actions(
-            actions,
-            self.state,
-            self.map_size,
-            self.item_manager
-        )
-        
-        # Step 2: Resolve collisions and conflicts
-        current_positions = {agent: pos for agent, pos in self.state["agent_pos"].items()}
-        final_positions, collision_penalties = self.collision_resolver.resolve_collisions(
-            intended_positions,
-            current_positions,
-            verbose=self.verbose
-        )
-        
-        # Step 3: Apply collision penalties
-        for agent_id, penalty in collision_penalties.items():
-            if penalty > 0:
-                rewards[agent_id] -= penalty
-        
-        # Step 4: Update agent positions in state
-        for agent_id, pos in final_positions.items():
-            self.state["agent_pos"][agent_id] = pos
-        
-        # Movement debugging (when verbose=True)
-        if self.verbose:
-            print("\n--- Movement Information ---")
-            for agent_id, action in actions.items():
-                if action < 4:  # Movement action
-                    old_pos = current_positions.get(agent_id, (0, 0))
-                    new_pos = final_positions.get(agent_id, (0, 0))
-                    
-                    info = self.movement_system.get_movement_info(
-                        agent_id, action, old_pos, new_pos,
-                        self.state, self.item_manager
-                    )
-                    print(info)
-        
-        # Process interaction actions (4)
-        for agent_id, action in actions.items():
-            if action == 4:  # Action 4: Interact
-                local_reward, interaction_global_reward = self.interaction_handler.handle_interaction(
-                    agent_id, self.state, verbose=self.verbose
-                )
-                rewards[agent_id] += local_reward
-                global_reward += interaction_global_reward # Accumulate global bonus
-
-        # Distribute the Accumulated Global Reward
-        if global_reward > 0:
-            for agent_id in self.agents: rewards[agent_id] += global_reward
-                
-        # State Update and Episode Conclusion
-        
-        self.state["time_steps"] += 1
-        MAX_EPISODE_STEPS = 500 
-        
-        # Defeat due to time out
-        if self.state["time_steps"] >= MAX_EPISODE_STEPS:
-            episode_truncated = True
-
-        # Victory
-        if self.state["dishes_pending"] <= 0:
-            episode_terminated = True
-            
-        # Distribute completion status to each agent
-        for agent_id in self.agents:
-            terminations[agent_id] = episode_terminated
-            truncations[agent_id] = episode_truncated
-        
-        # Accumulate rewards
-        for agent_id in self.agents:
-            self.state["accumulated_rewards"][agent_id] += rewards[agent_id]
-        
-        # Save current step rewards
-        self.state["last_step_rewards"] = rewards.copy()
-        
-        # Generate Final Observation and Info
-        observations = self._get_obs() 
-        infos = self._get_info() 
-
-        return observations, rewards, terminations, truncations, infos
-    
-    # Function required by ParallelEnv
-    def observe(self, agent: str):
-        """Required function that returns an agent's observation (accesses _get_obs)."""
-        return self._get_obs()[agent] 
-
-    # Function required by ParallelEnv
-    def state(self):
-        """Required function that returns the GLOBAL state of the environment."""
-        return self.state
-
-    # Function required by ParallelEnv
-    def render(self):
-        """
-        Renders the environment using the Renderer system.
-        Supports two modes:
-        - "human": renders ASCII representation to console
-        - "rgb_array": returns RGB array for visualization
-        """
-        if self.render_mode is None:
-            return None
-        
-        return self.renderer.render(
-            game_state=self.state,
-            map_size=self.map_size,
-            agents=self.agents,
-            recipe_order=self.recipe_order
-        )
-
-    # ===================================================================
-    # DEPRECATED RENDERING METHODS
-    # These methods have been moved to rendering/renderer.py (Phase 7)
-    # Kept here temporarily for backwards compatibility
-    # ===================================================================
-    
-    # Function required by ParallelEnv
-    def close(self):
-        """Closes any open rendering windows."""
-        self.renderer.close()
-        # Keep for backwards compatibility
-        if self.window is not None:
-            self.window = None
-
-    # Function required by ParallelEnv
-    def observation_space(self, agent):
-        """Returns the observation space for a specific agent."""
-        return self.observation_spaces[agent]
-    
-    # Function required by ParallelEnv
-    def action_space(self, agent):
-        """Returns the action space for a specific agent."""
-        return self.action_spaces[agent]
