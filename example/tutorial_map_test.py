@@ -100,7 +100,7 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
     print("  • Multiple recipe completion (3 different salads)")
     print("="*80 + "\n")
     
-    env = OvercookedMARL(render_mode=render_mode, map_path="maps/tutorial.txt", verbose=True)
+    env = OvercookedMARL(render_mode=render_mode, map_path="overcooked_marl_env/map/maps/tutorial.txt", verbose=True)
     obs, info = env.reset()
     
     # Render initial state

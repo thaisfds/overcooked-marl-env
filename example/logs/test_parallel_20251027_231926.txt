@@ -1,0 +1,405 @@
+[Logging to: D:\Github\NewOvercookedEnv\enviroment_tests\logs\test_parallel_20251027_231926.txt]
+
+
+======================================================================
+PARALLEL COOPERATION TEST - TEAM SALAD
+======================================================================
+
+This test demonstrates MAXIMUM PARALLELISM cooperation:
+  • PHASE 1: Both collect ingredients simultaneously
+  • PHASE 2: Coordinate chopping (minimize idle time)
+  • PHASE 3: Parallel assembly and counter placement
+  • PHASE 4: Final pickup and delivery
+======================================================================
+
+[ENV] Loading map from: maps/default_map.txt
+[MAP LOADER] Loading map: maps/default_map.txt
+[MAP LOADER] Error loading map: Map file not found: D:\Github\NewOvercookedEnv\maps\default_map.txt
+[ENV] Error loading map: Map file not found: D:\Github\NewOvercookedEnv\maps\default_map.txt
+[ENV] Falling back to default map
+[MAP LOADER] Loading default map: D:\Github\NewOvercookedEnv\overcooked_marl_env\map\maps\default_map.txt
+[MAP LOADER] Map loaded successfully
+Added recipe: SIMPLE_SALAD
+Added recipe: GARDEN_SALAD
+Added recipe: SIMPLE_SALAD
+[ENV] Map loaded successfully:
+  - Size: (7, 7)
+  - Agents: ['agent_0', 'agent_1']
+  - Dispensers: 2
+  - Recipes: ['SIMPLE_SALAD', 'GARDEN_SALAD', 'SIMPLE_SALAD']
+Map loaded with size: (7, 7)
+[ENV] Loading map from: maps/default_map.txt
+[MAP LOADER] Loading map: maps/default_map.txt
+[MAP LOADER] Error loading map: Map file not found: D:\Github\NewOvercookedEnv\maps\default_map.txt
+[ENV] Error loading map: Map file not found: D:\Github\NewOvercookedEnv\maps\default_map.txt
+[ENV] Falling back to default map
+[MAP LOADER] Loading default map: D:\Github\NewOvercookedEnv\overcooked_marl_env\map\maps\default_map.txt
+[MAP LOADER] Map loaded successfully
+Added recipe: SIMPLE_SALAD
+Added recipe: GARDEN_SALAD
+Added recipe: SIMPLE_SALAD
+[ENV] Map loaded successfully:
+  - Size: (7, 7)
+  - Agents: ['agent_0', 'agent_1']
+  - Dispensers: 2
+  - Recipes: ['SIMPLE_SALAD', 'GARDEN_SALAD', 'SIMPLE_SALAD']
+Map loaded with size: (7, 7)
+
+======================================================================
+>>> PHASE 1 START: Parallel Ingredient Collection
+======================================================================
+
+======================================================================
+STEP 1: Both agents move toward dispensers
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (3, 2) to (2, 2)
+Agent agent_1 blocked by obstacle at (3, 5)
+agent_0: Inventory = NONE                                     | Step Reward = -0.500 | Total = -0.500
+agent_1: Inventory = NONE                                     | Step Reward = -0.500 | Total = -0.500
+
+======================================================================
+STEP 2: Agent 0 continues, Agent 1 gets lettuce
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (2, 2) to (2, 3)
+Agent agent_1 interacting at position (3, 5)
+  Station type: 2
+  Carrying: nothing
+  Ground: nothing
+  Picked up lettuce from dispenser (instance: 0)
+agent_0: Inventory = NONE                                     | Step Reward = -0.500 | Total = -1.000
+agent_1: Inventory = Lettuce (raw)                            | Step Reward = +1.500 | Total = +1.000
+
+======================================================================
+STEP 3: Agent 0 continues, Agent 1 moves up
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (2, 3) to (2, 4)
+Agent agent_1 moved from (3, 4) to (3, 3)
+agent_0: Inventory = NONE                                     | Step Reward = -0.500 | Total = -1.500
+agent_1: Inventory = Lettuce (raw)                            | Step Reward = -0.500 | Total = +0.500
+
+======================================================================
+STEP 4: Agent 0 gets tomato, Agent 1 moves left
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 moved from (3, 3) to (2, 3)
+Agent agent_0 interacting at position (2, 5)
+  Station type: 2
+  Carrying: nothing
+  Ground: nothing
+  Picked up tomato from dispenser (instance: 1)
+agent_0: Inventory = Tomato (raw)                             | Step Reward = +1.500 | Total = +0.000
+agent_1: Inventory = Lettuce (raw)                            | Step Reward = -0.500 | Total = +0.000
+
+======================================================================
+>>> PHASE 2 START: Coordinated Processing
+======================================================================
+
+======================================================================
+STEP 5: Agent 1 moves to chopping board area
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 moved from (2, 3) to (2, 2)
+agent_0: Inventory = Tomato (raw)                             | Step Reward = +0.000 | Total = +0.000
+agent_1: Inventory = Lettuce (raw)                            | Step Reward = -0.500 | Total = -0.500
+
+======================================================================
+STEP 6: Agent 0 moves up, Agent 1 places lettuce
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (2, 4) to (2, 3)
+Agent agent_1 interacting at position (2, 1)
+  Station type: 3
+  Carrying: Lettuce (raw) (instance: 0)
+  Ground: nothing
+  Placed lettuce on chopping board
+agent_0: Inventory = Tomato (raw)                             | Step Reward = -0.500 | Total = -0.500
+agent_1: Inventory = NONE                                     | Step Reward = +1.500 | Total = +1.000
+
+======================================================================
+STEP 7: Agent 1 chops lettuce (1/3)
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Lettuce (raw) (instance: 0)
+  Cutting... 1/3 cuts
+agent_0: Inventory = Tomato (raw)                             | Step Reward = +0.000 | Total = -0.500
+agent_1: Inventory = NONE                                     | Step Reward = +1.500 | Total = +2.500
+
+======================================================================
+STEP 8: Agent 1 chops lettuce (2/3)
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Lettuce (1/3) (instance: 0)
+  Cutting... 2/3 cuts
+agent_0: Inventory = Tomato (raw)                             | Step Reward = +0.000 | Total = -0.500
+agent_1: Inventory = NONE                                     | Step Reward = +1.500 | Total = +4.000
+
+======================================================================
+STEP 9: Agent 1 chops lettuce (3/3)
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Lettuce (2/3) (instance: 0)
+  Cutting... 3/3 cuts
+  Item processed and ready to use!
+agent_0: Inventory = Tomato (raw)                             | Step Reward = +0.000 | Total = -0.500
+agent_1: Inventory = NONE                                     | Step Reward = +1.500 | Total = +5.500
+
+======================================================================
+STEP 10: Agent 1 picks ready lettuce
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Lettuce (ready) (instance: 0)
+  Picked up lettuce from chopping board
+agent_0: Inventory = Tomato (raw)                             | Step Reward = +0.000 | Total = -0.500
+agent_1: Inventory = Lettuce (ready)                          | Step Reward = +1.500 | Total = +7.000
+
+======================================================================
+STEP 11: Agent 1 moves right
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 moved from (2, 2) to (3, 2)
+agent_0: Inventory = Tomato (raw)                             | Step Reward = +0.000 | Total = -0.500
+agent_1: Inventory = Lettuce (ready)                          | Step Reward = -0.500 | Total = +6.500
+
+======================================================================
+STEP 12: Agent 0 moves up, Agent 1 continues right
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (2, 3) to (2, 2)
+Agent agent_1 moved from (3, 2) to (4, 2)
+agent_0: Inventory = Tomato (raw)                             | Step Reward = -0.500 | Total = -1.000
+agent_1: Inventory = Lettuce (ready)                          | Step Reward = -0.500 | Total = +6.000
+
+======================================================================
+STEP 13: Agent 0 places tomato, Agent 1 moves up
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 blocked by obstacle at (4, 1)
+Agent agent_0 interacting at position (2, 1)
+  Station type: 3
+  Carrying: Tomato (raw) (instance: 1)
+  Ground: nothing
+  Placed tomato on chopping board
+agent_0: Inventory = NONE                                     | Step Reward = +1.500 | Total = +0.500
+agent_1: Inventory = Lettuce (ready)                          | Step Reward = -0.500 | Total = +5.500
+
+======================================================================
+STEP 14: Agent 0 chops tomato (1/3), Agent 1 places lettuce on counter
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Tomato (raw) (instance: 1)
+  Cutting... 1/3 cuts
+Agent agent_1 interacting at position (4, 1)
+  Station type: 5
+  Carrying: Lettuce (ready) (instance: 0)
+  Ground: nothing
+  Picked up plate and combined with lettuce (instance: 2)
+agent_0: Inventory = NONE                                     | Step Reward = +1.500 | Total = +2.000
+agent_1: Inventory = Plate (lettuce)                          | Step Reward = +5.500 | Total = +11.000
+
+======================================================================
+STEP 15: Agent 0 chops tomato (2/3), Agent 1 moves right
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 blocked by obstacle at (5, 2)
+Agent agent_0 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Tomato (1/3) (instance: 1)
+  Cutting... 2/3 cuts
+agent_0: Inventory = NONE                                     | Step Reward = +1.500 | Total = +3.500
+agent_1: Inventory = Plate (lettuce)                          | Step Reward = -0.500 | Total = +10.500
+
+======================================================================
+STEP 16: Agent 0 chops tomato (3/3), Agent 1 picks lettuce from counter
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Tomato (2/3) (instance: 1)
+  Cutting... 3/3 cuts
+  Item processed and ready to use!
+Agent agent_1 interacting at position (5, 2)
+  Station type: 1
+  Carrying: Plate (lettuce) (instance: 2)
+  Ground: nothing
+  Placed Plate (lettuce) on counter
+agent_0: Inventory = NONE                                     | Step Reward = +1.500 | Total = +5.000
+agent_1: Inventory = NONE                                     | Step Reward = +1.500 | Total = +12.000
+
+======================================================================
+>>> PHASE 3 START: Parallel Assembly
+======================================================================
+
+======================================================================
+STEP 17: Agent 0 picks tomato, Agent 1 moves down
+======================================================================
+
+--- Movement Information ---
+Agent agent_1 moved from (4, 2) to (4, 3)
+Agent agent_0 interacting at position (2, 1)
+  Station type: 3
+  Carrying: nothing
+  Ground: Tomato (ready) (instance: 1)
+  Picked up tomato from chopping board
+agent_0: Inventory = Tomato (ready)                           | Step Reward = +1.500 | Total = +6.500
+agent_1: Inventory = NONE                                     | Step Reward = -0.500 | Total = +11.500
+
+======================================================================
+STEP 18: Both agents move
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (2, 2) to (3, 2)
+Agent agent_1 moved from (4, 3) to (4, 4)
+agent_0: Inventory = Tomato (ready)                           | Step Reward = -0.500 | Total = +6.000
+agent_1: Inventory = NONE                                     | Step Reward = -0.500 | Total = +11.000
+
+======================================================================
+STEP 19: Both agents continue moving
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (3, 2) to (4, 2)
+Agent agent_1 blocked by obstacle at (4, 5)
+agent_0: Inventory = Tomato (ready)                           | Step Reward = -0.500 | Total = +5.500
+agent_1: Inventory = NONE                                     | Step Reward = -0.500 | Total = +10.500
+
+======================================================================
+STEP 20: Agent 0 moves right
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 blocked by obstacle at (5, 2)
+agent_0: Inventory = Tomato (ready)                           | Step Reward = -0.500 | Total = +5.000
+agent_1: Inventory = NONE                                     | Step Reward = +0.000 | Total = +10.500
+
+======================================================================
+STEP 21: Agent 0 gets plate
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 interacting at position (5, 2)
+  Station type: 1
+  Carrying: Tomato (ready) (instance: 1)
+  Ground: Plate (lettuce) (instance: 2)
+  Combined tomato with plate on counter
+agent_0: Inventory = NONE                                     | Step Reward = +3.500 | Total = +8.500
+agent_1: Inventory = NONE                                     | Step Reward = +0.000 | Total = +10.500
+
+======================================================================
+>>> PHASE 4 START: Final Delivery
+======================================================================
+
+======================================================================
+STEP 22: Agent 0 gets plate
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 interacting at position (5, 2)
+  Station type: 1
+  Carrying: nothing
+  Ground: Plate (lettuce, tomato) (instance: 2)
+  Picked up Plate (lettuce, tomato) from counter
+agent_0: Inventory = Plate (lettuce, tomato)                  | Step Reward = +1.500 | Total = +10.000
+agent_1: Inventory = NONE                                     | Step Reward = +0.000 | Total = +10.500
+
+======================================================================
+STEP 23: Agent 0 moves down
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 moved from (4, 2) to (4, 3)
+agent_0: Inventory = Plate (lettuce, tomato)                  | Step Reward = -0.500 | Total = +9.500
+agent_1: Inventory = NONE                                     | Step Reward = +0.000 | Total = +10.500
+
+======================================================================
+STEP 24: Agent 0 moves right
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 blocked by obstacle at (5, 3)
+agent_0: Inventory = Plate (lettuce, tomato)                  | Step Reward = -0.500 | Total = +9.000
+agent_1: Inventory = NONE                                     | Step Reward = +0.000 | Total = +10.500
+
+======================================================================
+STEP 25: Agent 0 combines plate + tomato
+======================================================================
+
+--- Movement Information ---
+Agent agent_0 interacting at position (5, 3)
+  Station type: 6
+  Carrying: Plate (lettuce, tomato) (instance: 2)
+  Ground: nothing
+  Recipe GARDEN_SALAD delivered out of order
+  Reward: 20.0 (no bonus)
+agent_0: Inventory = NONE                                     | Step Reward = +39.500 | Total = +48.500
+agent_1: Inventory = NONE                                     | Step Reward = +20.000 | Total = +30.500
+
+*** RECIPE DELIVERED! Total: 1 ***
+
+======================================================================
+*** SALAD DELIVERED SUCCESSFULLY! ***
+======================================================================
+
+======================================================================
+PARALLEL COOPERATION TEST - FINAL SUMMARY
+======================================================================
+Total steps taken: 25
+Recipes delivered: ['GARDEN_SALAD']
+Remaining orders: 2
+Agent 0 total reward: +48.50
+Agent 1 total reward: +30.50
+======================================================================
+
+COMPARISON TO SEQUENTIAL VERSION:
+  Sequential test: ~38 steps
+  Parallel test:   25 steps
+  Steps saved:     13 steps (34.2% faster!)
+======================================================================
+
+======================================================================
+✓✓✓ TEST PASSED! ✓✓✓
+Parallel cooperation tested successfully:
+  ✓ Simultaneous ingredient collection
+  ✓ Coordinated processing to minimize wait time
+  ✓ Parallel assembly workflow
+  ✓ Successful recipe delivery
+======================================================================
+
+Final state rendered. Close the Pygame window to exit.
+(Window will auto-close in 3 seconds)
