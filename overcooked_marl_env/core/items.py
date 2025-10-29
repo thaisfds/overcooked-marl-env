@@ -2,6 +2,32 @@
 Item system using dictionaries with metadata for flexible recipe management.
 """
 
+# =================================================================
+# ITEM PROCESSING CONSTANTS
+# =================================================================
+
+# Number of cuts required for each chopping state
+CHOPPING_STATE_1_CUTS = 1
+CHOPPING_STATE_2_CUTS = 2
+CHOPPING_STATE_3_CUTS = 3
+
+# Brightness multipliers for ingredient colors based on state
+BRIGHTNESS_RAW = 0.6          # 60% brightness for raw ingredients
+BRIGHTNESS_CHOPPING = 0.8     # 80% brightness for chopping states
+BRIGHTNESS_READY = 1.0        # 100% brightness for ready ingredients
+
+# Default fallback colors
+DEFAULT_COLOR_UNKNOWN = (200, 200, 200)  # Gray for unknown items
+DEFAULT_COLOR_EMPTY = (255, 255, 255)     # White for empty/None
+DEFAULT_COLOR_PLATE = (240, 240, 240)     # Light gray for plates
+
+# First ingredient index in a dish
+FIRST_INGREDIENT_INDEX = 0
+
+# =================================================================
+# INGREDIENT DEFINITIONS
+# =================================================================
+
 # Ingredient definitions: name -> {color, cuts_needed, char, state_chars}
 INGREDIENTS = {
     'tomato': {
@@ -95,7 +121,7 @@ def create_ingredient(name, cuts_needed=3):
         base_color = ingredient_data['color']
         cuts_needed = ingredient_data['cuts_needed']
     else:
-        base_color = (200, 200, 200)  # Default gray for unknown ingredients
+        base_color = DEFAULT_COLOR_UNKNOWN
     
     return {
         "name": name,
@@ -145,11 +171,11 @@ def advance_processing(item):
     if cuts_done >= cuts_needed:
         item["state"] = ItemState.READY
         item["combinable"] = True
-    elif cuts_done == 1:
+    elif cuts_done == CHOPPING_STATE_1_CUTS:
         item["state"] = ItemState.CHOPPING_1
-    elif cuts_done == 2:
+    elif cuts_done == CHOPPING_STATE_2_CUTS:
         item["state"] = ItemState.CHOPPING_2
-    elif cuts_done == 3:
+    elif cuts_done == CHOPPING_STATE_3_CUTS:
         item["state"] = ItemState.CHOPPING_3
     
     return item
@@ -224,7 +250,7 @@ def get_item_char(item_dict):
             return DISH_CHAR  # empty plate
         else:
             # Show character of first ingredient
-            first_ingredient = ingredients[0]
+            first_ingredient = ingredients[FIRST_INGREDIENT_INDEX]
             return INGREDIENTS[first_ingredient]['char']
     
     return '?'
@@ -317,28 +343,28 @@ def get_item_color(item):
         RGB color tuple (r, g, b)
     """
     if not item:
-        return (255, 255, 255)
+        return DEFAULT_COLOR_EMPTY
     
     item_type = item.get("type")
     
     if item_type == ItemType.INGREDIENT:
         state = item.get("state", ItemState.RAW)
-        base_color = item.get("base_color", (200, 200, 200))
+        base_color = item.get("base_color", DEFAULT_COLOR_UNKNOWN)
         
-        # RAW ingredients are darker (60% brightness)
+        # RAW ingredients are darker
         if state == ItemState.RAW:
-            return tuple(int(c * 0.6) for c in base_color)
+            return tuple(int(c * BRIGHTNESS_RAW) for c in base_color)
         # READY ingredients use full base color
         elif state == ItemState.READY:
-            return base_color
-        # CHOPPING states are intermediate brightness (80%)
+            return tuple(int(c * BRIGHTNESS_READY) for c in base_color)
+        # CHOPPING states are intermediate brightness
         else:  # CHOPPING_1, CHOPPING_2, CHOPPING_3
-            return tuple(int(c * 0.8) for c in base_color)
+            return tuple(int(c * BRIGHTNESS_CHOPPING) for c in base_color)
     
     elif item_type == ItemType.DISH:
-        return item.get("color", (240, 240, 240))
+        return item.get("color", DEFAULT_COLOR_PLATE)
     
-    return (200, 200, 200)
+    return DEFAULT_COLOR_UNKNOWN
 
 
 
@@ -376,7 +402,7 @@ class ItemManager:
     def get_tile_color(self, char: str) -> tuple:
         """Get RGB color for a tile character."""
         tile = TILES.get(char)
-        return tile['color'] if tile else (200, 200, 200)
+        return tile['color'] if tile else DEFAULT_COLOR_UNKNOWN
     
     def get_tile_name(self, char: str) -> str:
         """Get readable name for a tile character."""
