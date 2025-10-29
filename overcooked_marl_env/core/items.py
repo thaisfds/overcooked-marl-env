@@ -2,6 +2,27 @@
 Item system using dictionaries with metadata for flexible recipe management.
 """
 
+# Ingredient definitions: name -> {color, cuts_needed}
+INGREDIENTS = {
+    'tomato': {'color': (255, 0, 0), 'cuts_needed': 3},      # Tomato red
+    'lettuce': {'color': (107,142,35), 'cuts_needed': 3},   # Light green
+    'cucumber': {'color': (0,100,0), 'cuts_needed': 3},   # Medium sea green
+}
+
+# Tile definitions: char -> {code, name, color}
+TILES = {
+    ' ': {'code': 0, 'name': "Empty", 'color': (255, 255, 255)},
+    '#': {'code': 1, 'name': "Counter", 'color': (180, 180, 180)},
+    'I': {'code': 2, 'name': "Ingredient Dispenser", 'color': (210, 180, 140)},
+    'C': {'code': 3, 'name': "Chopping Board", 'color': (210, 180, 140)},
+    'F': {'code': 4, 'name': "Fryer", 'color': (200, 200, 200)},  # Not used yet
+    'P': {'code': 5, 'name': "Plate Dispenser", 'color': (100, 149, 237)},
+    'D': {'code': 6, 'name': "Delivery", 'color': (50, 205, 50)},
+    'T': {'code': 7, 'name': "Trash", 'color': (105, 105, 105)},
+    '|': {'code': 8, 'name': "Wall", 'color': (70, 70, 70)},
+    '_': {'code': 9, 'name': "Wall", 'color': (70, 70, 70)},
+}
+
 class ItemState:
     """Constants for item processing states."""
     RAW = "RAW"
@@ -32,13 +53,22 @@ def create_ingredient(name, cuts_needed=3):
     Returns:
         Dictionary representing the ingredient
     """
+    # Get ingredient data
+    ingredient_data = INGREDIENTS.get(name.lower())
+    if ingredient_data:
+        base_color = ingredient_data['color']
+        cuts_needed = ingredient_data['cuts_needed']
+    else:
+        base_color = (200, 200, 200)  # Default gray for unknown ingredients
+    
     return {
         "name": name,
         "type": ItemType.INGREDIENT,
         "state": ItemState.RAW,
         "cuts_needed": cuts_needed,
         "cuts_done": 0,
-        "combinable": False
+        "combinable": False,
+        "base_color": base_color  # Store base color in item
     }
 
 
@@ -53,7 +83,8 @@ def create_plate():
         "name": "plate",
         "type": ItemType.DISH,
         "state": ItemState.EMPTY,
-        "ingredients": []
+        "ingredients": [],
+        "color": (240, 240, 240)  # Light gray for plate
     }
 
 
@@ -204,34 +235,75 @@ def get_ingredient_display_name(item):
     return str(item)
 
 
+def get_item_color(item):
+    """
+    Gets the RGB color for an item based on its type and state.
+    
+    Args:
+        item: Item dictionary
+    
+    Returns:
+        RGB color tuple (r, g, b)
+    """
+    if not item:
+        return (255, 255, 255)
+    
+    item_type = item.get("type")
+    
+    if item_type == ItemType.INGREDIENT:
+        state = item.get("state", ItemState.RAW)
+        base_color = item.get("base_color", (200, 200, 200))
+        
+        # RAW ingredients are darker (60% brightness)
+        if state == ItemState.RAW:
+            return tuple(int(c * 0.6) for c in base_color)
+        # READY ingredients use full base color
+        elif state == ItemState.READY:
+            return base_color
+        # CHOPPING states are intermediate brightness (80%)
+        else:  # CHOPPING_1, CHOPPING_2, CHOPPING_3
+            return tuple(int(c * 0.8) for c in base_color)
+    
+    elif item_type == ItemType.DISH:
+        return item.get("color", (240, 240, 240))
+    
+    return (200, 200, 200)
+
+
+
 # Legacy support - map old item codes to new system
 class ItemManager:
     """Manager for handling item codes and cell codes (for map compatibility)."""
     
     def __init__(self):
-        self.CHAR_TO_NUM = {
-            ' ': 0,
-            '#': 1,
-            'I': 2,
-            'C': 3,
-            'F': 4,
-            'P': 5,
-            'D': 6,
-            'T': 7,
-            '|': 8,  # Wall (vertical borders)
-            '_': 9,  # Wall (horizontal borders)
+        # Build CHAR_TO_NUM from TILES
+        self.CHAR_TO_NUM = {char: tile['code'] for char, tile in TILES.items()}
+        
+        # Store tiles reference
+        self.TILES = TILES
+        
+        # Build ingredient creators from INGREDIENTS dictionary
+        self.INGREDIENT_CREATORS = {
+            name: lambda n=name: create_ingredient(n)
+            for name in INGREDIENTS.keys()
         }
         
-        # Map ingredient names to create functions
-        self.INGREDIENT_CREATORS = {
-            "tomato": lambda: create_ingredient("tomato", cuts_needed=3),
-            "lettuce": lambda: create_ingredient("lettuce", cuts_needed=3),
-            "cucumber": lambda: create_ingredient("cucumber", cuts_needed=3),
-        }
+        # Store ingredients reference
+        self.INGREDIENTS = INGREDIENTS
     
     def get_cell_code(self, char: str) -> int:
         """Get numeric code for a map cell character."""
         return self.CHAR_TO_NUM.get(char, 0)
+    
+    def get_tile_color(self, char: str) -> tuple:
+        """Get RGB color for a tile character."""
+        tile = TILES.get(char)
+        return tile['color'] if tile else (200, 200, 200)
+    
+    def get_tile_name(self, char: str) -> str:
+        """Get readable name for a tile character."""
+        tile = TILES.get(char)
+        return tile['name'] if tile else "Unknown"
     
     def create_ingredient_by_name(self, name: str):
         """Create an ingredient by name."""
