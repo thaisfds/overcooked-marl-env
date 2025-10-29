@@ -11,11 +11,12 @@ responsible for validation, not parsing or loading.
 import numpy as np
 from typing import Dict, List, Tuple, Set
 from .map_config import (
-    EMPTY_CELL_CODE, GRID_DIMENSIONS, POSITION_TUPLE_SIZE,
+    GRID_DIMENSIONS, POSITION_TUPLE_SIZE,
     REPORT_SEPARATOR_WIDTH, MIN_MAP_WIDTH, MIN_MAP_HEIGHT,
     MAX_MAP_WIDTH, MAX_MAP_HEIGHT,
     MSG_PREFIX_WARNING, MSG_PREFIX_ERROR, MSG_STATUS_OK
 )
+from ..core.items import TILES
 from ..core.recipes import get_available_recipes
 
 
@@ -241,7 +242,7 @@ class MapValidator:
             
             # Check if position is walkable (not a wall)
             cell_value = grid[y, x]
-            if cell_value != EMPTY_CELL_CODE:  # Not empty space
+            if cell_value != TILES[' ']['code']:  # Not empty space
                 self._add_warning(
                     f"Agent {agent_id} starts on non-empty cell at {pos} "
                     f"(cell code: {cell_value})"

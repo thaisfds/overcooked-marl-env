@@ -2,6 +2,8 @@
 Item system using dictionaries with metadata for flexible recipe management.
 """
 
+from .constants import DEFAULT_CUTS_NEEDED
+
 # =================================================================
 # ITEM PROCESSING CONSTANTS
 # =================================================================
@@ -32,7 +34,7 @@ FIRST_INGREDIENT_INDEX = 0
 INGREDIENTS = {
     'tomato': {
         'color': (255, 0, 0), 
-        'cuts_needed': 3, 
+        'cuts_needed': DEFAULT_CUTS_NEEDED, 
         'char': 't',
         'state_chars': {
             'RAW': 't',
@@ -44,7 +46,7 @@ INGREDIENTS = {
     },
     'lettuce': {
         'color': (107,142,35), 
-        'cuts_needed': 3, 
+        'cuts_needed': DEFAULT_CUTS_NEEDED, 
         'char': 'l',
         'state_chars': {
             'RAW': 'l',
@@ -56,7 +58,7 @@ INGREDIENTS = {
     },
     'cucumber': {
         'color': (0,100,0), 
-        'cuts_needed': 3, 
+        'cuts_needed': DEFAULT_CUTS_NEEDED, 
         'char': 'c',
         'state_chars': {
             'RAW': 'c',
@@ -74,9 +76,9 @@ DISH_CHAR = 'p'  # Empty plate character
 # Tile definitions: char -> {code, name, color}
 TILES = {
     ' ': {'code': 0, 'name': "Empty", 'color': (255, 255, 255)},
-    '#': {'code': 1, 'name': "Counter", 'color': (180, 180, 180)},
-    'I': {'code': 2, 'name': "Ingredient Dispenser", 'color': (210, 180, 140)},
-    'C': {'code': 3, 'name': "Chopping Board", 'color': (210, 180, 140)},
+    '#': {'code': 1, 'name': "Counter", 'color': (148, 110, 74)},
+    'I': {'code': 2, 'name': "Ingredient Dispenser", 'color': (193, 154, 107)},
+    'C': {'code': 3, 'name': "Chopping Board", 'color': (193, 154, 107)},
     'F': {'code': 4, 'name': "Fryer", 'color': (200, 200, 200)},  # Not used yet
     'P': {'code': 5, 'name': "Plate Dispenser", 'color': (100, 149, 237)},
     'D': {'code': 6, 'name': "Delivery", 'color': (50, 205, 50)},
@@ -104,13 +106,13 @@ class ItemType:
     RECIPE = "recipe"
 
 
-def create_ingredient(name, cuts_needed=3):
+def create_ingredient(name, cuts_needed=DEFAULT_CUTS_NEEDED):
     """
     Creates a basic ingredient that needs processing.
     
     Args:
         name: Name of the ingredient (e.g., "tomato", "lettuce")
-        cuts_needed: Number of cuts required to process (default: 3)
+        cuts_needed: Number of cuts required to process (default: DEFAULT_CUTS_NEEDED)
     
     Returns:
         Dictionary representing the ingredient
@@ -393,7 +395,7 @@ class ItemManager:
     
     def get_cell_code(self, char: str) -> int:
         """Get numeric code for a map cell character."""
-        return self.CHAR_TO_NUM.get(char, 0)
+        return self.CHAR_TO_NUM.get(char, TILES[' ']['code'])
     
     def get_cell_char(self, code: int) -> str:
         """Get character for a numeric cell code."""
@@ -414,4 +416,4 @@ class ItemManager:
         creator = self.INGREDIENT_CREATORS.get(name.lower())
         if creator:
             return creator()
-        return create_ingredient(name, cuts_needed=3)
+        return create_ingredient(name, cuts_needed=DEFAULT_CUTS_NEEDED)

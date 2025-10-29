@@ -6,13 +6,6 @@ to adjust map parsing, validation, and display without modifying the map code.
 """
 
 # =================================================================
-# CELL CODE CONSTANTS
-# =================================================================
-
-# Cell code for empty/walkable space
-EMPTY_CELL_CODE = 0
-
-# =================================================================
 # MAP PARSING CONSTANTS
 # =================================================================
 

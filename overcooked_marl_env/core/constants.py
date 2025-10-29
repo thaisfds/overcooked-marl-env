@@ -9,7 +9,7 @@ following the Single Responsibility Principle.
 # OBSERVATION CONSTANTS
 # =================================================================
 
-# Maximum number of processing steps for ingredients
+# Maximum number of processing steps for ingredients (processing vector size)
 MAX_PROCESS_STEPS = 3
 
 # Number of base observation channels (before processing vector)
@@ -17,6 +17,17 @@ NUM_BASE_CHANNELS = 5
 
 # Total channels in observation space
 TOTAL_CHANNELS = NUM_BASE_CHANNELS + MAX_PROCESS_STEPS  # 5 + 3 = 8
+
+# Channel indices for observation layers
+CHANNEL_STATIC_MAP = 0
+CHANNEL_ITEMS_GROUND = 1
+CHANNEL_AGENT_SELF = 2
+CHANNEL_AGENTS_OTHER = 3
+CHANNEL_DELIVERY_POINTS = 4
+CHANNEL_PROCESSING_START = 5  # Processing vector starts at channel 5
+
+# Empty processing vector (no item being carried)
+EMPTY_PROCESSING_VECTOR = [0] * MAX_PROCESS_STEPS  # Dynamic based on MAX_PROCESS_STEPS
 
 # =================================================================
 # ACTION CONSTANTS
@@ -60,6 +71,12 @@ MAX_EPISODE_STEPS = 500
 
 # Default number of dishes to complete
 DEFAULT_DISHES_PENDING = 3
+
+# Default number of cuts needed for ingredients
+DEFAULT_CUTS_NEEDED = 3
+
+# Initial orientation for all agents (facing North)
+INITIAL_ORIENTATION = (0, -1)
 
 # =================================================================
 # REWARD CONSTANTS

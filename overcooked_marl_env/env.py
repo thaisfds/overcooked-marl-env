@@ -14,16 +14,17 @@ from .core.recipes import (
     Recipe, RecipeManager, RECIPE_DEFINITIONS,
     get_available_recipes, get_default_recipe
 )
+from .core.constants import (
+    MAX_PROCESS_STEPS,
+    TOTAL_CHANNELS,
+    MAX_EPISODE_STEPS
+)
 from .map.map_loader import MapLoader
 from .environment.game_state import MapData
 from .environment.observation_builder import ObservationBuilder
 from .mechanics import MovementSystem, CollisionResolver
 from .mechanics.interaction_handler import InteractionHandler
 from .rendering import Renderer
-
-# Constants for observation
-MAX_PROCESS_STEPS = 3 
-TOTAL_CHANNELS = 5 + MAX_PROCESS_STEPS # 5 base channels + 3 channels for processing
 
 class OvercookedMARL(ParallelEnv):
     metadata = {"render_modes": ["human", "rgb_array"], "name": "overcooked_marl_v0"}
@@ -211,7 +212,6 @@ class OvercookedMARL(ParallelEnv):
         # State Update and Episode Conclusion
         
         self.state["time_steps"] += 1
-        MAX_EPISODE_STEPS = 500 
         
         # Defeat due to time out
         if self.state["time_steps"] >= MAX_EPISODE_STEPS:

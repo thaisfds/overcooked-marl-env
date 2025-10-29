@@ -12,6 +12,12 @@ making the code more maintainable, testable, and easier to understand.
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass, field
+from .env_config import (
+    INITIAL_ORIENTATION,
+    DEFAULT_DISHES_PENDING,
+)
+from ..core.constants import MAX_EPISODE_STEPS
+from ..core.items import TILES
 
 
 @dataclass
@@ -81,13 +87,13 @@ class GameState:
         # Agent data
         self.agents = agent_ids.copy()
         self.agent_positions = map_data.agent_positions.copy()
-        self.agent_orientations = {agent_id: (0, -1) for agent_id in agent_ids}  # All face North initially
+        self.agent_orientations = {agent_id: INITIAL_ORIENTATION for agent_id in agent_ids}
         
         # Recipe and delivery data
         self.recipe_order = map_data.recipes.copy()
         self.expected_recipe_index = 0
         self.delivered_recipes: List[str] = []
-        self.dishes_pending = 3  # Default value
+        self.dishes_pending = DEFAULT_DISHES_PENDING
         
         # Episode tracking
         self.time_steps = 0
@@ -107,12 +113,12 @@ class GameState:
         self.dispensers = map_data.dispensers.copy()
         
         self.agent_positions = map_data.agent_positions.copy()
-        self.agent_orientations = {agent_id: (0, -1) for agent_id in self.agents}
+        self.agent_orientations = {agent_id: INITIAL_ORIENTATION for agent_id in self.agents}
         
         self.recipe_order = map_data.recipes.copy()
         self.expected_recipe_index = 0
         self.delivered_recipes.clear()
-        self.dishes_pending = 3
+        self.dishes_pending = DEFAULT_DISHES_PENDING
         
         self.time_steps = 0
         self.accumulated_rewards = {agent_id: 0.0 for agent_id in self.agents}
@@ -185,7 +191,7 @@ class GameState:
         """
         x, y = position
         if not self.is_position_valid(position):
-            return 0
+            return TILES[' ']['code']
         return self.items_on_ground[y, x]
     
     def set_ground_item_code(self, position: Tuple[int, int], code: int) -> None:
@@ -194,7 +200,7 @@ class GameState:
         
         Args:
             position: Tuple of (x, y) coordinates
-            code: Item code to set (0 for no item)
+            code: Item code to set (TILES[' ']['code'] for no item)
         """
         x, y = position
         if self.is_position_valid(position):
@@ -202,7 +208,7 @@ class GameState:
     
     def clear_ground_item(self, position: Tuple[int, int]) -> None:
         """Clear the item at a ground position."""
-        self.set_ground_item_code(position, 0)
+        self.set_ground_item_code(position, TILES[' ']['code'])
     
     def has_ground_item(self, position: Tuple[int, int]) -> bool:
         """Check if there's an item at a ground position."""
@@ -224,7 +230,7 @@ class GameState:
         """
         x, y = position
         if not self.is_position_valid(position):
-            return 0
+            return TILES[' ']['code']
         return self.map_static[y, x]
     
     def is_dispenser_position(self, position: Tuple[int, int]) -> bool:
@@ -282,7 +288,7 @@ class GameState:
         """Get the current timestep."""
         return self.time_steps
     
-    def is_episode_complete(self, max_steps: int = 500) -> Tuple[bool, bool]:
+    def is_episode_complete(self, max_steps: int = MAX_EPISODE_STEPS) -> Tuple[bool, bool]:
         """
         Check if the episode should end.
         

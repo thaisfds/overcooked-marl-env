@@ -13,6 +13,18 @@ Responsibilities:
 import numpy as np
 from typing import Dict, Tuple, Any
 from ..core.items import ItemType, ItemState
+from .env_config import (
+    EMPTY_PROCESSING_VECTOR,
+    DEFAULT_CUTS_NEEDED,
+    CHANNEL_STATIC_MAP,
+    CHANNEL_ITEMS_GROUND,
+    CHANNEL_AGENT_SELF,
+    CHANNEL_AGENTS_OTHER,
+    CHANNEL_DELIVERY_POINTS,
+    CHANNEL_PROCESSING_START,
+    NUM_BASE_CHANNELS,
+)
+from ..core.constants import MAX_PROCESS_STEPS
 
 
 class ObservationBuilder:
@@ -31,7 +43,7 @@ class ObservationBuilder:
     delegating state management to GameState and item queries to ItemInstanceManager.
     """
     
-    def __init__(self, max_process_steps: int = 3):
+    def __init__(self, max_process_steps: int = MAX_PROCESS_STEPS):
         """
         Initialize the observation builder.
         
@@ -39,7 +51,7 @@ class ObservationBuilder:
             max_process_steps: Maximum number of processing steps (for inventory channels)
         """
         self.max_process_steps = max_process_steps
-        self.num_base_channels = 5
+        self.num_base_channels = NUM_BASE_CHANNELS
         self.total_channels = self.num_base_channels + max_process_steps
     
     def build_observations(
@@ -102,14 +114,14 @@ class ObservationBuilder:
         base_obs = np.zeros((H, W, self.total_channels), dtype=np.uint8)
         
         # Layer 0: Static Map
-        base_obs[:, :, 0] = game_state["map_static"]
+        base_obs[:, :, CHANNEL_STATIC_MAP] = game_state["map_static"]
         
         # Layer 1: Items on Ground/Counter
-        base_obs[:, :, 1] = game_state["items_on_ground"]
+        base_obs[:, :, CHANNEL_ITEMS_GROUND] = game_state["items_on_ground"]
         
         # Layer 4: Delivery Points (Binary)
         delivery_code = item_manager.get_cell_code('D')
-        base_obs[:, :, 4] = np.where(
+        base_obs[:, :, CHANNEL_DELIVERY_POINTS] = np.where(
             game_state["map_static"] == delivery_code,
             1,
             0
@@ -145,17 +157,17 @@ class ObservationBuilder:
         ax, ay = game_state["agent_pos"][agent_id]
         
         # Layer 2: Position of the Observing Agent
-        base_obs[ay, ax, 2] = 1
+        base_obs[ay, ax, CHANNEL_AGENT_SELF] = 1
         
         # Layer 3: Position of OTHER Agents
         for other_id, (ox, oy) in game_state["agent_pos"].items():
             if other_id != agent_id:
-                base_obs[oy, ox, 3] = 1
+                base_obs[oy, ox, CHANNEL_AGENTS_OTHER] = 1
         
         # Channels 5-7: Processing Vector (Inventory)
         progress_vector = self._build_processing_vector(agent_id, game_state)
         for i in range(self.max_process_steps):
-            base_obs[ay, ax, 5 + i] = progress_vector[i]
+            base_obs[ay, ax, CHANNEL_PROCESSING_START + i] = progress_vector[i]
         
         return base_obs
     
@@ -170,24 +182,24 @@ class ObservationBuilder:
         The vector represents the state of the item being carried:
         - For ingredients: [cuts_done, cuts_needed, is_ready]
         - For dishes: [num_ingredients, 0, 0]
-        - For nothing: [0, 0, 0]
+        - For nothing: EMPTY_PROCESSING_VECTOR
         
         Args:
             agent_id: ID of the agent
             game_state: Game state dictionary
         
         Returns:
-            List of 3 integers representing the processing state
+            List of MAX_PROCESS_STEPS integers representing the processing state
         """
         # Get the item instance that the agent is carrying
         carrying_instance_id = game_state.get("agent_holding_instance", {}).get(agent_id)
         
         if carrying_instance_id is None:
-            return [0, 0, 0]
+            return EMPTY_PROCESSING_VECTOR.copy()
         
         carrying_item = game_state["item_instances"].get(carrying_instance_id)
         if not carrying_item:
-            return [0, 0, 0]
+            return EMPTY_PROCESSING_VECTOR.copy()
         
         item_type = carrying_item.get("type")
         
@@ -196,7 +208,7 @@ class ObservationBuilder:
         elif item_type == ItemType.DISH:
             return self._dish_to_vector(carrying_item)
         
-        return [0, 0, 0]
+        return EMPTY_PROCESSING_VECTOR.copy()
     
     def _ingredient_to_vector(self, item: Dict[str, Any]) -> list:
         """
@@ -210,7 +222,7 @@ class ObservationBuilder:
         """
         state = item.get("state", ItemState.RAW)
         cuts_done = item.get("cuts_done", 0)
-        cuts_needed = item.get("cuts_needed", 3)
+        cuts_needed = item.get("cuts_needed", DEFAULT_CUTS_NEEDED)
         
         # Check if ingredient is ready
         is_ready = 1 if state == ItemState.READY else 0

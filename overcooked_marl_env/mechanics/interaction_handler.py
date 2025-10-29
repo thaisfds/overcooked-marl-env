@@ -21,6 +21,7 @@ from ..core.items import (
     add_ingredient_to_plate, create_plate,
     get_ingredient_display_name
 )
+from ..core.constants import DEFAULT_CUTS_NEEDED
 
 
 class InteractionHandler:
@@ -187,7 +188,7 @@ class InteractionHandler:
             
             if verbose:
                 cuts_done = updated_item.get("cuts_done", 0)
-                cuts_needed = updated_item.get("cuts_needed", 3)
+                cuts_needed = updated_item.get("cuts_needed", DEFAULT_CUTS_NEEDED)
                 print(f"  Cutting... {cuts_done}/{cuts_needed} cuts")
                 
                 if is_ready(updated_item):
