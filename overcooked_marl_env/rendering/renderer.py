@@ -18,9 +18,11 @@ from ..core.items import (
     ItemState, 
     get_ingredient_display_name, 
     get_item_color,
+    get_item_char,
     INGREDIENTS
 )
-from .render_config import *
+from ..core.constants import DIRECTION_NAMES
+from .render_config import RENDER_CONFIG
 
 
 class Renderer:
@@ -52,19 +54,6 @@ class Renderer:
         self.window = None
         self.clock = None
         self.cell_size = RENDER_CONFIG['cell_size']
-        
-        # Character map for ASCII rendering
-        self.char_map = {
-            self.item_manager.get_cell_code(' '): ' ',
-            self.item_manager.get_cell_code('#'): '#',
-            self.item_manager.get_cell_code('C'): 'C',
-            self.item_manager.get_cell_code('P'): 'P',
-            self.item_manager.get_cell_code('D'): 'D',
-            self.item_manager.get_cell_code('I'): 'I',
-            self.item_manager.get_cell_code('T'): 'T',
-            self.item_manager.get_cell_code('|'): '|',
-            self.item_manager.get_cell_code('_'): '_',
-        }
     
     def render(
         self,
@@ -118,18 +107,18 @@ class Renderer:
         for y in range(H):
             for x in range(W):
                 cell_code = game_state["map_static"][y, x]
-                grid[y][x] = self.char_map.get(cell_code, '?')
+                grid[y][x] = self.item_manager.get_cell_char(cell_code)
                 
                 # Draw items on ground
                 ground_instance_id = game_state["ground_instances"].get((x, y), None)
                 if ground_instance_id is not None:
                     ground_item = game_state["item_instances"].get(ground_instance_id)
-                    grid[y][x] = self._get_item_char(ground_item)
+                    grid[y][x] = get_item_char(ground_item)
         
         # Draw agents
         for agent_id, pos in game_state["agent_pos"].items():
             x, y = pos
-            agent_num = int(agent_id.split('_')[1])
+            agent_num = self._get_agent_number(agent_id)
             
             # Show agent number
             grid[y][x] = str(agent_num)
@@ -142,10 +131,11 @@ class Renderer:
                 print(f"Agent {agent_num} is carrying: {get_ingredient_display_name(carrying_item)}")
         
         # Print the grid to console
-        print("\n" + "-" * (W + 2))
+        padding = RENDER_CONFIG['ascii_grid_padding']
+        print("\n" + "-" * (W + padding))
         for row in grid:
             print("|" + "".join(row) + "|")
-        print("-" * (W + 2))
+        print("-" * (W + padding))
         
         # Print game state information
         self._print_game_info(game_state, recipe_order)
@@ -197,7 +187,7 @@ class Renderer:
         # Update display
         pygame.event.pump()
         pygame.display.flip()
-        self.clock.tick(60)  # 60 FPS
+        self.clock.tick(RENDER_CONFIG['fps'])
         
         # Return RGB array
         return np.transpose(
@@ -228,9 +218,9 @@ class Renderer:
         
         # Current step
         current_step = game_state.get("time_steps", 0)
-        step_text = self.font.render(f"Step: {current_step}", True, (0, 0, 0))
+        step_text = self.font.render(f"Step: {current_step}", True, RENDER_CONFIG['text_black'])
         self.window.blit(step_text, (hud_x, hud_y))
-        hud_y += line_height + 5
+        hud_y += line_height + RENDER_CONFIG['hud_extra_spacing']
         
         # Agent information - one line per agent with well-separated fields
         for agent_id in sorted(agents):
@@ -249,54 +239,42 @@ class Renderer:
             total_reward = game_state.get("accumulated_rewards", {}).get(agent_id, 0.0)
             
             # Format with well-defined spacing for each field
-            agent_num = agent_id.split('_')[1]
+            agent_num = self._get_agent_number(agent_id)
             
             # Agent label
             agent_label = f"Agent {agent_num}:"
-            label_surface = self.font_small.render(agent_label, True, (0, 0, 0))
+            label_surface = self.font_small.render(agent_label, True, RENDER_CONFIG['text_black'])
             self.window.blit(label_surface, (hud_x, hud_y))
             
-            # Step reward field (starting at x=100)
+            # Step reward field
             step_text = f"Step: {step_reward:+6.2f}"
-            step_surface = self.font_small.render(step_text, True, (80, 0, 80))  # Purple
-            self.window.blit(step_surface, (hud_x + 100, hud_y))
+            step_surface = self.font_small.render(step_text, True, RENDER_CONFIG['text_step_reward'])
+            self.window.blit(step_surface, (hud_x + RENDER_CONFIG['hud_step_reward_x'], hud_y))
             
-            # Total reward field (starting at x=250)
+            # Total reward field
             total_text = f"Total: {total_reward:+7.2f}"
-            total_surface = self.font_small.render(total_text, True, (0, 0, 150))  # Dark blue
-            self.window.blit(total_surface, (hud_x + 250, hud_y))
+            total_surface = self.font_small.render(total_text, True, RENDER_CONFIG['text_total_reward'])
+            self.window.blit(total_surface, (hud_x + RENDER_CONFIG['hud_total_reward_x'], hud_y))
             
-            # Inventory field (starting at x=420)
+            # Inventory field
             inv_text = f"Inv: {inventory}"
-            inv_surface = self.font_small.render(inv_text, True, (0, 80, 0))  # Dark green
-            self.window.blit(inv_surface, (hud_x + 420, hud_y))
+            inv_surface = self.font_small.render(inv_text, True, RENDER_CONFIG['text_inventory'])
+            self.window.blit(inv_surface, (hud_x + RENDER_CONFIG['hud_inventory_x'], hud_y))
             
             hud_y += line_height
         
-        hud_y += 5  # Extra spacing
+        hud_y += RENDER_CONFIG['hud_extra_spacing']
         
         # Orders - show only pending orders (not yet delivered)
-        # Calculate pending orders by removing delivered recipes (respecting duplicates)
         delivered = game_state.get("delivered_recipes", [])
-        pending_orders = list(recipe_order)  # Make a copy
-        
-        # Count how many of each recipe was delivered
-        delivered_count = {}
-        for delivered_recipe in delivered:
-            delivered_count[delivered_recipe] = delivered_count.get(delivered_recipe, 0) + 1
-        
-        # Remove delivered recipes from pending (respecting count)
-        for recipe_name, count in delivered_count.items():
-            for _ in range(count):
-                if recipe_name in pending_orders:
-                    pending_orders.remove(recipe_name)  # Remove first occurrence
+        pending_orders = self._calculate_pending_orders(recipe_order, delivered)
         
         # Display pending orders
         if pending_orders:
             orders_str = ", ".join(pending_orders)
-            orders_text = self.font_small.render(f"Pending Orders: {orders_str}", True, (0, 0, 0))
+            orders_text = self.font_small.render(f"Pending Orders: {orders_str}", True, RENDER_CONFIG['text_black'])
         else:
-            orders_text = self.font_small.render("Pending Orders: All completed!", True, (0, 150, 0))
+            orders_text = self.font_small.render("Pending Orders: All completed!", True, RENDER_CONFIG['text_success'])
         
         self.window.blit(orders_text, (hud_x, hud_y))
         hud_y += line_height
@@ -305,9 +283,9 @@ class Renderer:
         delivered = game_state.get("delivered_recipes", [])
         if delivered:
             delivered_str = ", ".join(delivered)
-            delivered_text = self.font_small.render(f"Delivered: {delivered_str}", True, (0, 150, 0))
+            delivered_text = self.font_small.render(f"Delivered: {delivered_str}", True, RENDER_CONFIG['text_success'])
         else:
-            delivered_text = self.font_small.render("Delivered: None", True, (120, 120, 120))
+            delivered_text = self.font_small.render("Delivered: None", True, RENDER_CONFIG['text_disabled'])
         self.window.blit(delivered_text, (hud_x, hud_y))
     
     def close(self):
@@ -322,51 +300,35 @@ class Renderer:
     # Helper Methods - ASCII Rendering
     # ===================================================================
     
-    def _get_item_char(self, item_dict: Optional[Dict]) -> str:
+    def _get_agent_number(self, agent_id: str) -> int:
+        """Extract agent number from agent_id (e.g., 'agent_0' -> 0)."""
+        return int(agent_id.split('_')[1])
+    
+    def _calculate_pending_orders(self, recipe_order: list, delivered_recipes: list) -> list:
         """
-        Get character representation for an item.
+        Calculate pending orders by removing delivered recipes from the order list.
         
         Args:
-            item_dict: Item dictionary
-        
+            recipe_order: Original list of recipes to prepare
+            delivered_recipes: List of recipes that have been delivered
+            
         Returns:
-            Single character representing the item
+            List of recipes still pending
         """
-        if not item_dict:
-            return ' '
+        pending_orders = list(recipe_order)  # Make a copy
         
-        item_type = item_dict.get("type")
+        # Count how many of each recipe was delivered
+        delivered_count = {}
+        for delivered_recipe in delivered_recipes:
+            delivered_count[delivered_recipe] = delivered_count.get(delivered_recipe, 0) + 1
         
-        if item_type == ItemType.INGREDIENT:
-            name = item_dict["name"]
-            state = item_dict.get("state", ItemState.RAW)
-            
-            # Map ingredients to letters
-            name_map = {'tomato': 't', 'lettuce': 'l', 'cucumber': 'c'}
-            char = name_map.get(name, '?')
-            
-            # Uppercase if READY, lowercase if RAW, number if CHOPPING
-            if state == ItemState.READY:
-                return char.upper()
-            elif state == ItemState.RAW:
-                return char.lower()
-            elif state == ItemState.CHOPPING_1:
-                return '1'
-            elif state == ItemState.CHOPPING_2:
-                return '2'
-            elif state == ItemState.CHOPPING_3:
-                return '3'
-            return char
-            
-        elif item_type == ItemType.DISH:
-            ingredients = item_dict.get("ingredients", [])
-            if not ingredients:
-                return 'p'  # empty plate
-            else:
-                # Show first letter of first ingredient
-                return ingredients[0][0].lower()
+        # Remove delivered recipes from pending (respecting count)
+        for recipe_name, count in delivered_count.items():
+            for _ in range(count):
+                if recipe_name in pending_orders:
+                    pending_orders.remove(recipe_name)  # Remove first occurrence
         
-        return '?'
+        return pending_orders
     
     def _print_game_info(self, game_state: Dict, recipe_order: list):
         """Print game state information."""
@@ -379,21 +341,8 @@ class Renderer:
             print(f"\n[DEBUG] Recipe Order (original): {recipe_order}")
             print(f"[DEBUG] Delivered Recipes: {game_state['delivered_recipes']}")
             
-            # Calculate pending orders: original order minus delivered
-            pending_orders = list(recipe_order)
-            delivered_count = {}
-            
-            # Count how many of each recipe was delivered
-            for delivered_recipe in game_state['delivered_recipes']:
-                delivered_count[delivered_recipe] = delivered_count.get(delivered_recipe, 0) + 1
-            
-            print(f"[DEBUG] Delivered Count: {delivered_count}")
-            
-            # Remove delivered recipes from pending (respecting count)
-            for recipe_name, count in delivered_count.items():
-                for _ in range(count):
-                    if recipe_name in pending_orders:
-                        pending_orders.remove(recipe_name)  # Remove first occurrence
+            # Calculate pending orders using utility method
+            pending_orders = self._calculate_pending_orders(recipe_order, game_state['delivered_recipes'])
             
             print(f"[DEBUG] Pending Orders (calculated): {pending_orders}")
             
@@ -458,30 +407,53 @@ class Renderer:
         # Check if within bounds
         if 0 <= front_x < map_size[1] and 0 <= front_y < map_size[0]:
             cell_code = game_state["map_static"][front_y, front_x]
-            # Find character for this cell code
-            char = None
-            for c, code in self.item_manager.CHAR_TO_NUM.items():
-                if code == cell_code:
-                    char = c
-                    break
-            station_name = self.item_manager.get_tile_name(char) if char else "Unknown"
+            # Get character and then tile name
+            char = self.item_manager.get_cell_char(cell_code)
+            station_name = self.item_manager.get_tile_name(char)
             return f"{orientation_name} -> {station_name}"
         else:
             return f"{orientation_name} -> Wall"
     
     def _get_orientation_name(self, direction: Tuple[int, int]) -> str:
         """Converts direction vector to readable name."""
-        direction_map = {
-            (0, -1): "North",
-            (0, 1): "South",
-            (1, 0): "East",
-            (-1, 0): "West"
-        }
-        return direction_map.get(direction, "Unknown")
+        return DIRECTION_NAMES.get(direction, "Unknown")
     
     # ===================================================================
     # Helper Methods - Pygame Rendering
     # ===================================================================
+    
+    def _draw_circle(self, x: int, y: int, radius: int, fill_color: Tuple[int, int, int], border_color: Tuple[int, int, int] = None):
+        """
+        Draw a filled circle with anti-aliased border.
+        
+        Args:
+            x: Center X coordinate
+            y: Center Y coordinate
+            radius: Circle radius
+            fill_color: RGB color for the filled circle
+            border_color: RGB color for the border (defaults to black if not provided)
+        """
+        if border_color is None:
+            border_color = RENDER_CONFIG['text_black']
+        
+        gfxdraw.filled_circle(self.window, x, y, radius, fill_color)
+        gfxdraw.aacircle(self.window, x, y, radius, border_color)
+    
+    def _get_cell_center(self, x: int, y: int, offset_y: int = 0) -> Tuple[int, int]:
+        """
+        Calculate the pixel coordinates of the center of a grid cell.
+        
+        Args:
+            x: Grid X coordinate
+            y: Grid Y coordinate
+            offset_y: Optional Y offset in pixels
+            
+        Returns:
+            Tuple of (center_x, center_y) in pixel coordinates
+        """
+        center_x = self.grid_offset_x + x * self.cell_size + self.cell_size // 2
+        center_y = self.grid_offset_y + y * self.cell_size + self.cell_size // 2 - offset_y
+        return center_x, center_y
     
     def _initialize_pygame(self, map_size: Tuple[int, int]):
         """Initialize Pygame window with space for HUD below the grid."""
@@ -531,41 +503,42 @@ class Renderer:
         # Get cell color based on type
         color = self._get_cell_color(cell_code)
         pygame.draw.rect(self.window, color, rect)
-        pygame.draw.rect(self.window, RENDER_CONFIG['border_color'], rect, 1)  # Border
+        pygame.draw.rect(self.window, RENDER_CONFIG['border_color'], rect, RENDER_CONFIG['grid_border_width'])  # Border
         
         # Draw visual indicators for stations
-        center_x = self.grid_offset_x + x * self.cell_size + self.cell_size // 2
-        center_y = self.grid_offset_y + y * self.cell_size + self.cell_size // 2
+        center_x, center_y = self._get_cell_center(x, y)
         
         # Chopping board - draw knife line
         if cell_code == self.item_manager.get_cell_code('C'):
             knife_padding = RENDER_CONFIG['knife_padding']
+            knife_y = self.grid_offset_y + y * self.cell_size + RENDER_CONFIG['knife_y_position']
             pygame.draw.line(
                 self.window, 
                 RENDER_CONFIG['border_color'], 
-                (self.grid_offset_x + x * self.cell_size + knife_padding, self.grid_offset_y + y * self.cell_size + 30),
-                (self.grid_offset_x + x * self.cell_size + self.cell_size - knife_padding, self.grid_offset_y + y * self.cell_size + 30), 
-                3
+                (self.grid_offset_x + x * self.cell_size + knife_padding, knife_y),
+                (self.grid_offset_x + x * self.cell_size + self.cell_size - knife_padding, knife_y), 
+                RENDER_CONFIG['knife_line_width']
             )
         
         # Trash - draw X
         elif cell_code == self.item_manager.get_cell_code('T'):
             padding = self.cell_size // RENDER_CONFIG['trash_x_padding_ratio']
+            line_width = RENDER_CONFIG['trash_line_width']
             # Diagonal 1
             pygame.draw.line(
                 self.window, 
-                (0, 0, 0),
+                RENDER_CONFIG['text_black'],
                 (self.grid_offset_x + x * self.cell_size + padding, self.grid_offset_y + y * self.cell_size + padding),
                 (self.grid_offset_x + x * self.cell_size + self.cell_size - padding, self.grid_offset_y + y * self.cell_size + self.cell_size - padding), 
-                4
+                line_width
             )
             # Diagonal 2
             pygame.draw.line(
                 self.window, 
-                (0, 0, 0),
+                RENDER_CONFIG['text_black'],
                 (self.grid_offset_x + x * self.cell_size + self.cell_size - padding, self.grid_offset_y + y * self.cell_size + padding),
                 (self.grid_offset_x + x * self.cell_size + padding, self.grid_offset_y + y * self.cell_size + self.cell_size - padding), 
-                4
+                line_width
             )
         
         # Delivery - draw arrow pointing right
@@ -576,30 +549,14 @@ class Renderer:
                 (center_x - arrow_size, center_y + arrow_size),  # Bottom left
                 (center_x + arrow_size, center_y),               # Right tip
             ]
-            pygame.draw.polygon(self.window, (255, 255, 255), arrow_points)
-            pygame.draw.polygon(self.window, RENDER_CONFIG['border_color'], arrow_points, 2)
+            pygame.draw.polygon(self.window, RENDER_CONFIG['text_white'], arrow_points)
+            pygame.draw.polygon(self.window, RENDER_CONFIG['border_color'], arrow_points, RENDER_CONFIG['arrow_border_width'])
         
         # Plate Dispenser - draw empty plate
         elif cell_code == self.item_manager.get_cell_code('P'):
             # Draw plate as circle
             plate_radius = self.cell_size // RENDER_CONFIG['plate_dispenser_ratio']
-            
-            # Draw filled white circle
-            gfxdraw.filled_circle(
-                self.window, 
-                center_x, 
-                center_y, 
-                plate_radius, 
-                RENDER_CONFIG['plate_color']
-            )
-            # Draw border
-            gfxdraw.aacircle(
-                self.window, 
-                center_x, 
-                center_y, 
-                plate_radius, 
-                RENDER_CONFIG['plate_border_color']
-            )
+            self._draw_circle(center_x, center_y, plate_radius, RENDER_CONFIG['plate_color'], RENDER_CONFIG['plate_border_color'])
         
         # Ingredient Dispenser - draw colored circle for the ingredient type
         elif cell_code == self.item_manager.get_cell_code('I'):
@@ -607,13 +564,8 @@ class Renderer:
             if (x, y) in game_state.get("dispensers", {}):
                 dispenser_data = game_state["dispensers"][(x, y)]
                 
-                # Get ingredient name
-                if isinstance(dispenser_data, str):
-                    ingredient_name = dispenser_data
-                else:
-                    # Legacy mapping if needed
-                    ingredient_map = {5: "tomato", 6: "lettuce", 7: "cucumber"}
-                    ingredient_name = ingredient_map.get(dispenser_data, "tomato")
+                # Get ingredient name (should be a string)
+                ingredient_name = dispenser_data if isinstance(dispenser_data, str) else "tomato"
                 
                 # Use centralized color - RAW ingredient color (60% brightness)
                 base_color = INGREDIENTS[ingredient_name]['color']
@@ -622,8 +574,7 @@ class Renderer:
                 indicator_radius = self.cell_size // RENDER_CONFIG['station_indicator_ratio']
                 
                 # Draw colored circle indicating ingredient type
-                gfxdraw.filled_circle(self.window, center_x, center_y, indicator_radius, ingredient_color)
-                gfxdraw.aacircle(self.window, center_x, center_y, indicator_radius, (0, 0, 0))
+                self._draw_circle(center_x, center_y, indicator_radius, ingredient_color)
         
         # Draw items on ground
         ground_instance_id = game_state["ground_instances"].get((x, y), None)
@@ -641,15 +592,13 @@ class Renderer:
             game_state: Current game state
         """
         x, y = pos
-        agent_num = int(agent_id.split('_')[1])
+        agent_num = self._get_agent_number(agent_id)
         
         # Draw agent as circle
-        center_x = self.grid_offset_x + x * self.cell_size + self.cell_size // 2
-        center_y = self.grid_offset_y + y * self.cell_size + self.cell_size // 2
+        center_x, center_y = self._get_cell_center(x, y)
         radius = self.cell_size // RENDER_CONFIG['agent_radius_ratio']
         
-        gfxdraw.filled_circle(self.window, center_x, center_y, radius, RENDER_CONFIG['agent_color'])
-        gfxdraw.aacircle(self.window, center_x, center_y, radius, RENDER_CONFIG['agent_border_color'])
+        self._draw_circle(center_x, center_y, radius, RENDER_CONFIG['agent_color'], RENDER_CONFIG['agent_border_color'])
         
         # Draw orientation indicator (white circle showing direction)
         orientation = game_state["agent_orientation"][agent_id]
@@ -659,7 +608,7 @@ class Renderer:
         indicator_y = center_y + int(dy * radius * orientation_distance)
         
         indicator_radius = radius // RENDER_CONFIG['agent_orientation_ratio']
-        gfxdraw.filled_circle(self.window, indicator_x, indicator_y, indicator_radius, RENDER_CONFIG['orientation_color'])
+        self._draw_circle(indicator_x, indicator_y, indicator_radius, RENDER_CONFIG['orientation_color'])
         
         # Draw agent number in white
         font = pygame.font.SysFont(None, RENDER_CONFIG['font_size_agent'])
@@ -683,11 +632,50 @@ class Renderer:
     
     def _get_cell_color(self, cell_code: int) -> Tuple[int, int, int]:
         """Get RGB color for a cell type using ItemManager's tile colors."""
-        # Reverse lookup: find the char for this cell code
-        for char, code in self.item_manager.CHAR_TO_NUM.items():
-            if code == cell_code:
-                return self.item_manager.get_tile_color(char)
-        return RENDER_CONFIG['background_color']  # Default background color
+        char = self.item_manager.get_cell_char(cell_code)
+        return self.item_manager.get_tile_color(char)
+    
+    def _draw_plate_ingredients(self, center_x: int, center_y: int, plate_radius: int, ingredients: list):
+        """
+        Helper method to draw ingredients on a plate.
+        
+        Args:
+            center_x: Center X coordinate of the plate
+            center_y: Center Y coordinate of the plate
+            plate_radius: Radius of the plate
+            ingredients: List of ingredient names
+        """
+        if len(ingredients) == 0:
+            # Empty plate - just the white circle (already drawn)
+            pass
+        elif len(ingredients) == 1:
+            # Single ingredient - centered on plate
+            ing_color = INGREDIENTS[ingredients[0]]['color']
+            ing_radius = plate_radius // RENDER_CONFIG['plate_ingredient_ratio']
+            self._draw_circle(center_x, center_y, ing_radius, ing_color)
+        elif len(ingredients) == 2:
+            # Two ingredients - side by side
+            ing_radius = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
+            offset_x = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
+            for i, ingredient_name in enumerate(ingredients):
+                ing_color = INGREDIENTS[ingredient_name]['color']
+                ing_x = center_x - offset_x + (i * offset_x * 2)
+                self._draw_circle(ing_x, center_y, ing_radius, ing_color)
+        else:
+            # Three or more ingredients - arranged in triangle
+            ing_radius = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
+            for i, ingredient_name in enumerate(ingredients[:3]):
+                ing_color = INGREDIENTS[ingredient_name]['color']
+                
+                # Position ingredients in a triangle pattern
+                if i == 0:  # Top
+                    ing_x, ing_y = center_x, center_y - plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
+                elif i == 1:  # Bottom left
+                    ing_x, ing_y = center_x - plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio'], center_y + plate_radius // 4
+                else:  # Bottom right
+                    ing_x, ing_y = center_x + plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio'], center_y + plate_radius // 4
+                
+                self._draw_circle(ing_x, ing_y, ing_radius, ing_color)
     
     def _draw_item_at_pixel(self, pixel_x: int, pixel_y: int, item_dict: Optional[Dict]):
         """
@@ -707,54 +695,16 @@ class Renderer:
         if item_type == ItemType.INGREDIENT:
             # Draw as small circle
             radius = self.cell_size // RENDER_CONFIG['item_radius_ratio']
-            gfxdraw.filled_circle(self.window, pixel_x, pixel_y, radius, color)
-            gfxdraw.aacircle(self.window, pixel_x, pixel_y, radius, (0, 0, 0))
+            self._draw_circle(pixel_x, pixel_y, radius, color)
         
         elif item_type == ItemType.DISH:
             # Draw plate as white circle
             plate_radius = self.cell_size // RENDER_CONFIG['plate_radius_ratio']
+            self._draw_circle(pixel_x, pixel_y, plate_radius, RENDER_CONFIG['plate_color'], RENDER_CONFIG['plate_border_color'])
             
-            # Draw filled white circle (plate base)
-            gfxdraw.filled_circle(self.window, pixel_x, pixel_y, plate_radius, RENDER_CONFIG['plate_color'])
-            gfxdraw.aacircle(self.window, pixel_x, pixel_y, plate_radius, RENDER_CONFIG['plate_border_color'])
-            
-            # Draw ingredients on plate as small circles on top
+            # Draw ingredients on plate
             ingredients = item_dict.get("ingredients", [])
-            
-            if len(ingredients) == 0:
-                # Empty plate - just the white circle
-                pass
-            elif len(ingredients) == 1:
-                # Single ingredient - centered on plate
-                ing_color = INGREDIENTS[ingredients[0]]['color']
-                ing_radius = plate_radius // RENDER_CONFIG['plate_ingredient_ratio']
-                gfxdraw.filled_circle(self.window, pixel_x, pixel_y, ing_radius, ing_color)
-                gfxdraw.aacircle(self.window, pixel_x, pixel_y, ing_radius, (0, 0, 0))
-            elif len(ingredients) == 2:
-                # Two ingredients - side by side
-                ing_radius = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                offset_x = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                for i, ingredient_name in enumerate(ingredients):
-                    ing_color = INGREDIENTS[ingredient_name]['color']
-                    ing_x = pixel_x - offset_x + (i * offset_x * 2)
-                    gfxdraw.filled_circle(self.window, ing_x, pixel_y, ing_radius, ing_color)
-                    gfxdraw.aacircle(self.window, ing_x, pixel_y, ing_radius, (0, 0, 0))
-            else:
-                # Three or more ingredients - arranged in triangle
-                ing_radius = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                for i, ingredient_name in enumerate(ingredients[:3]):
-                    ing_color = INGREDIENTS[ingredient_name]['color']
-                    
-                    # Position ingredients in a triangle pattern
-                    if i == 0:  # Top
-                        ing_x, ing_y = pixel_x, pixel_y - plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                    elif i == 1:  # Bottom left
-                        ing_x, ing_y = pixel_x - plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio'], pixel_y + plate_radius // 4
-                    else:  # Bottom right
-                        ing_x, ing_y = pixel_x + plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio'], pixel_y + plate_radius // 4
-                    
-                    gfxdraw.filled_circle(self.window, ing_x, ing_y, ing_radius, ing_color)
-                    gfxdraw.aacircle(self.window, ing_x, ing_y, ing_radius, (0, 0, 0))
+            self._draw_plate_ingredients(pixel_x, pixel_y, plate_radius, ingredients)
     
     def _draw_item(self, x: int, y: int, item_dict: Optional[Dict], offset: int = 0):
         """
@@ -770,63 +720,22 @@ class Renderer:
             return
         
         color = get_item_color(item_dict)
-        
-        center_x = self.grid_offset_x + x * self.cell_size + self.cell_size // 2
-        center_y = self.grid_offset_y + y * self.cell_size + self.cell_size // 2 - offset
-        
+        center_x, center_y = self._get_cell_center(x, y, offset)
         item_type = item_dict.get("type")
         
         if item_type == ItemType.INGREDIENT:
             # Draw as circle
             radius = self.cell_size // RENDER_CONFIG['item_radius_ratio']
-            gfxdraw.filled_circle(self.window, center_x, center_y, radius, color)
-            gfxdraw.aacircle(self.window, center_x, center_y, radius, (0, 0, 0))
+            self._draw_circle(center_x, center_y, radius, color)
         
         elif item_type == ItemType.DISH:
             # Draw plate as white circle
             plate_radius = self.cell_size // RENDER_CONFIG['plate_radius_ratio']
+            self._draw_circle(center_x, center_y, plate_radius, RENDER_CONFIG['plate_color'], RENDER_CONFIG['plate_border_color'])
             
-            # Draw filled white circle (plate base)
-            gfxdraw.filled_circle(self.window, center_x, center_y, plate_radius, RENDER_CONFIG['plate_color'])
-            gfxdraw.aacircle(self.window, center_x, center_y, plate_radius, RENDER_CONFIG['plate_border_color'])
-            
-            # Draw ingredients on plate as small circles on top
+            # Draw ingredients on plate
             ingredients = item_dict.get("ingredients", [])
-            
-            if len(ingredients) == 0:
-                # Empty plate - just the white circle
-                pass
-            elif len(ingredients) == 1:
-                # Single ingredient - centered on plate
-                ing_color = INGREDIENTS[ingredients[0]]['color']
-                ing_radius = plate_radius // RENDER_CONFIG['plate_ingredient_ratio']
-                gfxdraw.filled_circle(self.window, center_x, center_y, ing_radius, ing_color)
-                gfxdraw.aacircle(self.window, center_x, center_y, ing_radius, (0, 0, 0))
-            elif len(ingredients) == 2:
-                # Two ingredients - side by side
-                ing_radius = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                offset_x = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                for i, ingredient_name in enumerate(ingredients):
-                    ing_color = INGREDIENTS[ingredient_name]['color']
-                    ing_x = center_x - offset_x + (i * offset_x * 2)
-                    gfxdraw.filled_circle(self.window, ing_x, center_y, ing_radius, ing_color)
-                    gfxdraw.aacircle(self.window, ing_x, center_y, ing_radius, (0, 0, 0))
-            else:
-                # Three or more ingredients - arranged in triangle
-                ing_radius = plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                for i, ingredient_name in enumerate(ingredients[:3]):
-                    ing_color = INGREDIENTS[ingredient_name]['color']
-                    
-                    # Position ingredients in a triangle pattern
-                    if i == 0:  # Top
-                        ing_x, ing_y = center_x, center_y - plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio']
-                    elif i == 1:  # Bottom left
-                        ing_x, ing_y = center_x - plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio'], center_y + plate_radius // 4
-                    else:  # Bottom right
-                        ing_x, ing_y = center_x + plate_radius // RENDER_CONFIG['plate_multi_ingredient_ratio'], center_y + plate_radius // 4
-                    
-                    gfxdraw.filled_circle(self.window, ing_x, ing_y, ing_radius, ing_color)
-                    gfxdraw.aacircle(self.window, ing_x, ing_y, ing_radius, (0, 0, 0))
+            self._draw_plate_ingredients(center_x, center_y, plate_radius, ingredients)
     
     def __repr__(self) -> str:
         """String representation of Renderer."""

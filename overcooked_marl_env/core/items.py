@@ -2,12 +2,48 @@
 Item system using dictionaries with metadata for flexible recipe management.
 """
 
-# Ingredient definitions: name -> {color, cuts_needed}
+# Ingredient definitions: name -> {color, cuts_needed, char, state_chars}
 INGREDIENTS = {
-    'tomato': {'color': (255, 0, 0), 'cuts_needed': 3},      # Tomato red
-    'lettuce': {'color': (107,142,35), 'cuts_needed': 3},   # Light green
-    'cucumber': {'color': (0,100,0), 'cuts_needed': 3},   # Medium sea green
+    'tomato': {
+        'color': (255, 0, 0), 
+        'cuts_needed': 3, 
+        'char': 't',
+        'state_chars': {
+            'RAW': 't',
+            'CHOPPING_1': '1',
+            'CHOPPING_2': '2',
+            'CHOPPING_3': '3',
+            'READY': 'T'
+        }
+    },
+    'lettuce': {
+        'color': (107,142,35), 
+        'cuts_needed': 3, 
+        'char': 'l',
+        'state_chars': {
+            'RAW': 'l',
+            'CHOPPING_1': '1',
+            'CHOPPING_2': '2',
+            'CHOPPING_3': '3',
+            'READY': 'L'
+        }
+    },
+    'cucumber': {
+        'color': (0,100,0), 
+        'cuts_needed': 3, 
+        'char': 'c',
+        'state_chars': {
+            'RAW': 'c',
+            'CHOPPING_1': '1',
+            'CHOPPING_2': '2',
+            'CHOPPING_3': '3',
+            'READY': 'C'
+        }
+    },
 }
+
+# Dish character representation
+DISH_CHAR = 'p'  # Empty plate character
 
 # Tile definitions: char -> {code, name, color}
 TILES = {
@@ -159,6 +195,41 @@ def is_processing(item):
     return state in [ItemState.CHOPPING_1, ItemState.CHOPPING_2, ItemState.CHOPPING_3]
 
 
+def get_item_char(item_dict):
+    """
+    Get ASCII character representation for an item based on its type and state.
+    
+    Args:
+        item_dict: Item dictionary
+    
+    Returns:
+        Single character representing the item
+    """
+    if not item_dict:
+        return ' '
+    
+    item_type = item_dict.get("type")
+    
+    if item_type == ItemType.INGREDIENT:
+        name = item_dict["name"]
+        state = item_dict.get("state", ItemState.RAW)
+        
+        # Get character from state_chars mapping
+        state_chars = INGREDIENTS[name]['state_chars']
+        return state_chars.get(state, INGREDIENTS[name]['char'])
+        
+    elif item_type == ItemType.DISH:
+        ingredients = item_dict.get("ingredients", [])
+        if not ingredients:
+            return DISH_CHAR  # empty plate
+        else:
+            # Show character of first ingredient
+            first_ingredient = ingredients[0]
+            return INGREDIENTS[first_ingredient]['char']
+    
+    return '?'
+
+
 def can_process(item):
     """
     Checks if item can be processed further.
@@ -279,6 +350,9 @@ class ItemManager:
         # Build CHAR_TO_NUM from TILES
         self.CHAR_TO_NUM = {char: tile['code'] for char, tile in TILES.items()}
         
+        # Build reverse mapping (NUM_TO_CHAR) for ASCII rendering
+        self.NUM_TO_CHAR = {tile['code']: char for char, tile in TILES.items()}
+        
         # Store tiles reference
         self.TILES = TILES
         
@@ -294,6 +368,10 @@ class ItemManager:
     def get_cell_code(self, char: str) -> int:
         """Get numeric code for a map cell character."""
         return self.CHAR_TO_NUM.get(char, 0)
+    
+    def get_cell_char(self, code: int) -> str:
+        """Get character for a numeric cell code."""
+        return self.NUM_TO_CHAR.get(code, '?')
     
     def get_tile_color(self, char: str) -> tuple:
         """Get RGB color for a tile character."""
