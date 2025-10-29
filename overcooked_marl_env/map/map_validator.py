@@ -10,7 +10,12 @@ responsible for validation, not parsing or loading.
 
 import numpy as np
 from typing import Dict, List, Tuple, Set
-from ..core.constants import MIN_MAP_WIDTH, MIN_MAP_HEIGHT, MAX_MAP_WIDTH, MAX_MAP_HEIGHT
+from .map_config import (
+    EMPTY_CELL_CODE, GRID_DIMENSIONS, POSITION_TUPLE_SIZE,
+    REPORT_SEPARATOR_WIDTH, MIN_MAP_WIDTH, MIN_MAP_HEIGHT,
+    MAX_MAP_WIDTH, MAX_MAP_HEIGHT,
+    MSG_PREFIX_WARNING, MSG_PREFIX_ERROR, MSG_STATUS_OK
+)
 from ..core.recipes import get_available_recipes
 
 
@@ -45,6 +50,37 @@ class MapValidator:
         self.strict = strict
         self.validation_errors: List[str] = []
         self.validation_warnings: List[str] = []
+    
+    def _is_valid_position_tuple(self, pos: any) -> bool:
+        """
+        Check if position is a valid (x, y) tuple.
+        
+        Args:
+            pos: Position to check
+            
+        Returns:
+            bool: True if valid tuple of 2 integers
+        """
+        return isinstance(pos, tuple) and len(pos) == POSITION_TUPLE_SIZE
+    
+    def _is_position_in_bounds(self, pos: Tuple[int, int], width: int, height: int) -> bool:
+        """
+        Check if position is within map bounds.
+        
+        Args:
+            pos: (x, y) position
+            width: Map width
+            height: Map height
+            
+        Returns:
+            bool: True if position is within bounds
+        """
+        x, y = pos
+        return 0 <= x < width and 0 <= y < height
+    
+    def _has_errors(self) -> bool:
+        """Check if any validation errors exist."""
+        return bool(self.validation_errors)
     
     def validate_map(self, map_data: Dict) -> bool:
         """
@@ -110,8 +146,8 @@ class MapValidator:
             self._add_error(f"Grid must be numpy array, got {type(grid)}")
             return False
         
-        if grid.ndim != 2:
-            self._add_error(f"Grid must be 2D, got {grid.ndim}D")
+        if grid.ndim != GRID_DIMENSIONS:
+            self._add_error(f"Grid must be {GRID_DIMENSIONS}D, got {grid.ndim}D")
             return False
         
         if grid.size == 0:
@@ -121,7 +157,7 @@ class MapValidator:
         if grid.dtype != np.uint8:
             self._add_warning(f"Grid dtype should be uint8, got {grid.dtype}")
         
-        return len(self.validation_errors) == 0
+        return not self._has_errors()
     
     def validate_size(self, size: Tuple[int, int]) -> bool:
         """
@@ -133,8 +169,8 @@ class MapValidator:
         Returns:
             bool: True if valid
         """
-        if not isinstance(size, tuple) or len(size) != 2:
-            self._add_error(f"Size must be tuple of 2 integers, got {size}")
+        if not isinstance(size, tuple) or len(size) != POSITION_TUPLE_SIZE:
+            self._add_error(f"Size must be tuple of {POSITION_TUPLE_SIZE} integers, got {size}")
             return False
         
         height, width = size
@@ -153,7 +189,7 @@ class MapValidator:
                 f"Maximum: ({MAX_MAP_HEIGHT}, {MAX_MAP_WIDTH})"
             )
         
-        return len(self.validation_errors) == 0
+        return not self._has_errors()
     
     def validate_agent_positions(
         self,
@@ -179,7 +215,7 @@ class MapValidator:
         
         for agent_id, pos in agent_positions.items():
             # Check position format
-            if not isinstance(pos, tuple) or len(pos) != 2:
+            if not self._is_valid_position_tuple(pos):
                 self._add_error(
                     f"Agent {agent_id} position must be (x, y) tuple, got {pos}"
                 )
@@ -188,7 +224,7 @@ class MapValidator:
             x, y = pos
             
             # Check bounds
-            if not (0 <= x < width and 0 <= y < height):
+            if not self._is_position_in_bounds(pos, width, height):
                 self._add_error(
                     f"Agent {agent_id} position {pos} out of bounds. "
                     f"Map size: ({height}, {width})"
@@ -204,16 +240,14 @@ class MapValidator:
                 occupied_positions.add(pos)
             
             # Check if position is walkable (not a wall)
-            # Assuming cell code 0 is empty/walkable
-            # This is a soft check - walls would be handled by game logic
             cell_value = grid[y, x]
-            if cell_value != 0:  # Not empty space
+            if cell_value != EMPTY_CELL_CODE:  # Not empty space
                 self._add_warning(
                     f"Agent {agent_id} starts on non-empty cell at {pos} "
                     f"(cell code: {cell_value})"
                 )
         
-        return len(self.validation_errors) == 0
+        return not self._has_errors()
     
     def validate_dispensers(
         self,
@@ -239,7 +273,7 @@ class MapValidator:
         
         for pos, ingredient in dispensers.items():
             # Check position format
-            if not isinstance(pos, tuple) or len(pos) != 2:
+            if not self._is_valid_position_tuple(pos):
                 self._add_error(
                     f"Dispenser position must be (x, y) tuple, got {pos}"
                 )
@@ -248,7 +282,7 @@ class MapValidator:
             x, y = pos
             
             # Check bounds
-            if not (0 <= x < width and 0 <= y < height):
+            if not self._is_position_in_bounds(pos, width, height):
                 self._add_error(
                     f"Dispenser at {pos} out of bounds. "
                     f"Map size: ({height}, {width})"
@@ -261,7 +295,7 @@ class MapValidator:
                     f"Dispenser at {pos} has invalid ingredient: {ingredient}"
                 )
         
-        return len(self.validation_errors) == 0
+        return not self._has_errors()
     
     def validate_recipes(self, recipes: List[str]) -> bool:
         """
@@ -287,7 +321,7 @@ class MapValidator:
                     f"Available: {', '.join(available_recipes)}"
                 )
         
-        return len(self.validation_errors) == 0
+        return not self._has_errors()
     
     def _add_error(self, message: str) -> None:
         """Add a validation error."""
@@ -309,7 +343,7 @@ class MapValidator:
         """
         # Print warnings
         for warning in self.validation_warnings:
-            print(f"[MAP WARNING] {warning}")
+            print(f"{MSG_PREFIX_WARNING} {warning}")
         
         # Handle errors
         if self.validation_errors:
@@ -323,7 +357,7 @@ class MapValidator:
                     f"{error_message}"
                 )
             else:
-                print(f"[MAP ERROR] Validation failed:\n{error_message}")
+                print(f"{MSG_PREFIX_ERROR} Validation failed:\n{error_message}")
                 return False
         
         return True
@@ -335,22 +369,23 @@ class MapValidator:
         Returns:
             str: Formatted validation report
         """
-        report = ["Map Validation Report", "=" * 50]
+        separator = "=" * REPORT_SEPARATOR_WIDTH
+        report = ["Map Validation Report", separator]
         
         if not self.validation_errors and not self.validation_warnings:
-            report.append("[OK] All validations passed")
+            report.append(f"{MSG_STATUS_OK} All validations passed")
         else:
             if self.validation_errors:
                 report.append(f"\nErrors ({len(self.validation_errors)}):")
                 for error in self.validation_errors:
-                    report.append(f"  [ERROR] {error}")
+                    report.append(f"  {MSG_PREFIX_ERROR} {error}")
             
             if self.validation_warnings:
                 report.append(f"\nWarnings ({len(self.validation_warnings)}):")
                 for warning in self.validation_warnings:
-                    report.append(f"  [WARNING] {warning}")
+                    report.append(f"  {MSG_PREFIX_WARNING} {warning}")
         
-        report.append("=" * 50)
+        report.append(separator)
         return "\n".join(report)
     
     def __repr__(self) -> str:

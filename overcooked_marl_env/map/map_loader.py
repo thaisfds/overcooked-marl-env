@@ -13,6 +13,7 @@ import numpy as np
 from typing import Optional
 from .map_parser import MapParser
 from .map_validator import MapValidator, MapValidationError
+from .map_config import MSG_PREFIX_LOADER, MSG_PREFIX_VALIDATION_ERROR
 from ..environment.game_state import MapData
 
 
@@ -65,29 +66,29 @@ class MapLoader:
         # Determine which map to load
         if map_path is None:
             map_path = self._get_default_map_path()
-            print(f"[MAP LOADER] Loading default map: {map_path}")
+            print(f"{MSG_PREFIX_LOADER} Loading default map: {map_path}")
         else:
-            print(f"[MAP LOADER] Loading map: {map_path}")
+            print(f"{MSG_PREFIX_LOADER} Loading map: {map_path}")
         
         # Try to load the requested map
         try:
             map_data = self._load_and_validate(map_path)
-            print("[MAP LOADER] Map loaded successfully")
+            print(f"{MSG_PREFIX_LOADER} Map loaded successfully")
             return map_data
             
         except (FileNotFoundError, MapValidationError, Exception) as e:
-            print(f"[MAP LOADER] Error loading map: {e}")
+            print(f"{MSG_PREFIX_LOADER} Error loading map: {e}")
             
             # Try default map as fallback
             if use_default_on_error and map_path != self._get_default_map_path():
-                print("[MAP LOADER] Attempting to load default map as fallback...")
+                print(f"{MSG_PREFIX_LOADER} Attempting to load default map as fallback...")
                 try:
                     default_path = self._get_default_map_path()
                     map_data = self._load_and_validate(default_path)
-                    print("[MAP LOADER] Default map loaded successfully")
+                    print(f"{MSG_PREFIX_LOADER} Default map loaded successfully")
                     return map_data
                 except Exception as fallback_error:
-                    print(f"[MAP LOADER] Default map also failed: {fallback_error}")
+                    print(f"{MSG_PREFIX_LOADER} Default map also failed: {fallback_error}")
             
             # No fallback or fallback failed
             raise
@@ -192,7 +193,7 @@ class MapLoader:
             raise FileNotFoundError(f"Map file not found: {abs_path}")
         
         self._default_map_path = abs_path
-        print(f"[MAP LOADER] Default map path set to: {abs_path}")
+        print(f"{MSG_PREFIX_LOADER} Default map path set to: {abs_path}")
     
     def validate_map_file(self, map_path: str, verbose: bool = True) -> bool:
         """
@@ -218,7 +219,7 @@ class MapLoader:
             
         except Exception as e:
             if verbose:
-                print(f"[VALIDATION ERROR] {e}")
+                print(f"{MSG_PREFIX_VALIDATION_ERROR} {e}")
             return False
     
     def get_map_info(self, map_path: str) -> dict:

@@ -27,6 +27,11 @@ import os
 import numpy as np
 from typing import Dict, List, Tuple
 from ..core.items import ItemManager
+from .map_config import (
+    AGENT_ID_PREFIX, DISPENSER_LINE_PARTS,
+    DISPENSER_INGREDIENT_INDEX, DISPENSER_X_INDEX, DISPENSER_Y_INDEX,
+    SECTION_HEADER_GRID, SECTION_HEADER_DISPENSERS, SECTION_HEADER_RECIPES
+)
 
 
 class MapParser:
@@ -116,17 +121,17 @@ class MapParser:
             line = line.rstrip()
             
             # Check for section headers
-            if line.startswith('# Grid'):
+            if line.startswith(SECTION_HEADER_GRID):
                 if current_section and section_lines:
                     sections[current_section] = '\n'.join(section_lines)
                 current_section = 'grid'
                 section_lines = []
-            elif line.startswith('# Dispensers'):
+            elif line.startswith(SECTION_HEADER_DISPENSERS):
                 if current_section and section_lines:
                     sections[current_section] = '\n'.join(section_lines)
                 current_section = 'dispensers'
                 section_lines = []
-            elif line.startswith('# Recipes'):
+            elif line.startswith(SECTION_HEADER_RECIPES):
                 if current_section and section_lines:
                     sections[current_section] = '\n'.join(section_lines)
                 current_section = 'recipes'
@@ -169,13 +174,13 @@ class MapParser:
         
         lines = [line for line in grid_text.split('\n') if line]
         
-        if len(lines) == 0:
+        if not lines:
             raise ValueError("No valid grid lines found")
         
         # Don't skip any lines - include all of them (even border lines)
         grid_lines = lines
         
-        if len(grid_lines) == 0:
+        if not grid_lines:
             raise ValueError("No grid content found")
         
         # Determine grid dimensions
@@ -191,7 +196,7 @@ class MapParser:
             for x, char in enumerate(line):
                 # Check if it's an agent position (digit)
                 if char.isdigit():
-                    agent_id = f"agent_{char}"
+                    agent_id = f"{AGENT_ID_PREFIX}{char}"
                     agent_positions[agent_id] = (x, y)
                     grid[y, x] = self.item_manager.get_cell_code(' ')  # Agent position is walkable
                 # Check if it's a known character
@@ -230,13 +235,13 @@ class MapParser:
                 continue
             
             parts = line.split()
-            if len(parts) != 3:
-                raise ValueError(f"Invalid dispenser format: {line}")
+            if len(parts) != DISPENSER_LINE_PARTS:
+                raise ValueError(f"Invalid dispenser format: {line}. Expected: ingredient x y")
             
-            ingredient_name = parts[0]
+            ingredient_name = parts[DISPENSER_INGREDIENT_INDEX]
             try:
-                x = int(parts[1])
-                y = int(parts[2])
+                x = int(parts[DISPENSER_X_INDEX])
+                y = int(parts[DISPENSER_Y_INDEX])
             except ValueError:
                 raise ValueError(f"Invalid dispenser coordinates: {line}")
             
