@@ -6,7 +6,7 @@ py -3.13 -m venv venv
 
 venv\Scripts\activate
 
-pip install gymnasium numpy pettingzoo # Add 'pettingzoo'
+pip install gymnasium numpy pettingzoo matplotlib numpy torch-directml tqdm
 
 pip install -e .
 

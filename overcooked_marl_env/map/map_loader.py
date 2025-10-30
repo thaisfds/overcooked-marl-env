@@ -66,14 +66,14 @@ class MapLoader:
         # Determine which map to load
         if map_path is None:
             map_path = self._get_default_map_path()
-            print(f"{MSG_PREFIX_LOADER} Loading default map: {map_path}")
+            # print(f"{MSG_PREFIX_LOADER} Loading default map: {map_path}")
         else:
-            print(f"{MSG_PREFIX_LOADER} Loading map: {map_path}")
-        
+            # print(f"{MSG_PREFIX_LOADER} Loading map: {map_path}")
+            pass
         # Try to load the requested map
         try:
             map_data = self._load_and_validate(map_path)
-            print(f"{MSG_PREFIX_LOADER} Map loaded successfully")
+            # print(f"{MSG_PREFIX_LOADER} Map loaded successfully")
             return map_data
             
         except (FileNotFoundError, MapValidationError, Exception) as e:

@@ -16,3 +16,7 @@ test_log.txt
 POC Proposta Inicial/
 docs
 enviroment_tests/logs/
+logs
+models
+results
+ppo_overcooked_tensorboard
