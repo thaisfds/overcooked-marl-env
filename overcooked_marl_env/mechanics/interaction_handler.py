@@ -46,7 +46,7 @@ class InteractionHandler:
     COMBINE_REWARD = 4.0
     DELIVERY_REWARD_BASE = 10.0
     ORDER_BONUS_MULTIPLIER = 0.3
-    INVALID_INTERACTION_PENALTY = 2.0
+    INVALID_INTERACTION_PENALTY = 0.0
     
     def __init__(self, item_manager, recipe_manager):
         """

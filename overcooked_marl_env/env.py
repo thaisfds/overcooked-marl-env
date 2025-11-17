@@ -153,10 +153,6 @@ class OvercookedMARL(ParallelEnv):
         episode_truncated = False
         global_reward = 0.0 # Global reward accumulator
         
-        # Apply base penalty for any action
-        for agent_id in actions.keys():
-            rewards[agent_id] -= 0.5
-        
         # Step 1: Process movement actions and get intended positions
         intended_positions = self.movement_system.process_movement_actions(
             actions,
