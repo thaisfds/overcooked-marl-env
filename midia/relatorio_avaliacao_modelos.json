@@ -1,74 +1,74 @@
 {
-  "timestamp": "2025-11-17 23:13:53",
-  "total_models_found": 27,
+  "timestamp": "2025-11-18 16:58:43",
+  "total_models_found": 161,
   "models_evaluated": 10,
   "best_model": {
-    "path": "models\\config_15_reward_151.89.pth",
-    "eval_reward": 136.2,
-    "eval_std": 80.5006832269143,
+    "path": "models\\config_25_reward_241.09.pth",
+    "eval_reward": 259.8,
+    "eval_std": 164.0827839841828,
     "success_rate": 1.0
   },
-  "overfitting_score": 63.03736842105263,
-  "stability_score": 55.47662778500054,
+  "overfitting_score": 33.164177215189866,
+  "stability_score": 133.6370702809417,
   "evaluation_results": [
     {
-      "model_path": "models\\config_03_reward_159.05.pth",
-      "mean_reward": 8.0,
-      "std_reward": 23.65586608010791,
+      "model_path": "models\\config_147_reward_269.11.pth",
+      "mean_reward": 233.5,
+      "std_reward": 121.93256332907957,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_11_reward_152.95.pth",
-      "mean_reward": 92.6,
-      "std_reward": 105.8056709255227,
+      "model_path": "models\\config_53_reward_261.14.pth",
+      "mean_reward": 235.8,
+      "std_reward": 145.4962542473173,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_15_reward_151.89.pth",
-      "mean_reward": 136.2,
-      "std_reward": 80.5006832269143,
+      "model_path": "models\\config_151_reward_252.51.pth",
+      "mean_reward": 250.9,
+      "std_reward": 177.05758950126935,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_07_reward_132.63.pth",
-      "mean_reward": 86.9,
-      "std_reward": 54.51412660953122,
+      "model_path": "models\\config_25_reward_241.09.pth",
+      "mean_reward": 259.8,
+      "std_reward": 164.0827839841828,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_09_reward_131.47.pth",
-      "mean_reward": 55.7,
-      "std_reward": 109.17192862636438,
+      "model_path": "models\\config_29_reward_224.38.pth",
+      "mean_reward": 127.7,
+      "std_reward": 166.48876838994275,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_19_reward_124.11.pth",
-      "mean_reward": 45.9,
-      "std_reward": 71.80382998141533,
+      "model_path": "models\\config_126_reward_215.92.pth",
+      "mean_reward": 211.4,
+      "std_reward": 132.76309728233971,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_12_reward_119.79.pth",
-      "mean_reward": 116.9,
-      "std_reward": 43.30577328717269,
+      "model_path": "models\\config_26_reward_206.84.pth",
+      "mean_reward": 179.5,
+      "std_reward": 91.45025970438793,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_01_reward_119.40.pth",
-      "mean_reward": 65.4,
-      "std_reward": 24.13379373409825,
+      "model_path": "models\\config_149_reward_200.28.pth",
+      "mean_reward": 37.6,
+      "std_reward": 95.61715327283072,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_18_reward_118.95.pth",
-      "mean_reward": 36.8,
-      "std_reward": 31.473163171184428,
+      "model_path": "models\\config_146_reward_185.59.pth",
+      "mean_reward": 213.6,
+      "std_reward": 132.02817881043427,
       "success_rate": 1.0
     },
     {
-      "model_path": "models\\config_08_reward_118.63.pth",
-      "mean_reward": 54.1,
-      "std_reward": 10.401442207694085,
+      "model_path": "models\\config_127_reward_174.48.pth",
+      "mean_reward": 149.9,
+      "std_reward": 109.45405428763249,
       "success_rate": 1.0
     }
   ]
