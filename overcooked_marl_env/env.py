@@ -60,7 +60,7 @@ class OvercookedMARL(ParallelEnv):
         
         # Movement and Collision Systems (Phase 5)
         self.movement_system = MovementSystem(self._action_to_direction)
-        self.collision_resolver = CollisionResolver(collision_penalty=0.5)
+        self.collision_resolver = CollisionResolver(collision_penalty=0.0)  # SEM PENALIDADE
         
         # Interaction System (Phase 6)
         self.interaction_handler = InteractionHandler(self.item_manager, self.recipe_manager)
@@ -115,6 +115,7 @@ class OvercookedMARL(ParallelEnv):
         self.agents = self.possible_agents[:]
         
         # Reset variables related to recipe order
+        # recipe_order is already set in _initialize_game_state from self.recipe_order
         self.state["expected_recipe_index"] = 0
         self.state["delivered_recipes"] = []
         
@@ -169,10 +170,10 @@ class OvercookedMARL(ParallelEnv):
             verbose=self.verbose
         )
         
-        # Step 3: Apply collision penalties
-        for agent_id, penalty in collision_penalties.items():
-            if penalty > 0:
-                rewards[agent_id] -= penalty
+        # Step 3: Collision penalties REMOVIDAS
+        # for agent_id, penalty in collision_penalties.items():
+        #     if penalty > 0:
+        #         rewards[agent_id] -= penalty
         
         # Step 4: Update agent positions in state
         for agent_id, pos in final_positions.items():
@@ -417,9 +418,10 @@ class OvercookedMARL(ParallelEnv):
             "agent_pos": agent_start_pos,
             "carrying": carrying,
             "items_on_ground": items_on_ground,
-            "dishes_pending": 3,
+            "dishes_pending": 5,  # Aumentado de 3 para 5 para episódios mais longos
             "time_steps": 0,
             "dispensers": dispenser_assignments,
+            "recipe_order": self.recipe_order.copy() if hasattr(self, 'recipe_order') else [],  # List of recipes in order
             "expected_recipe_index": 0,  # Index of the next expected recipe
             "delivered_recipes": [],     # Recipes already delivered
             "item_instances": {},        # Map item_instance_id -> item_dict
@@ -442,7 +444,8 @@ class OvercookedMARL(ParallelEnv):
         return self.observation_builder.build_observations(
             self.state, 
             self.agents, 
-            self.item_manager
+            self.item_manager,
+            self.recipe_manager
         )
 
     def _get_info(self):

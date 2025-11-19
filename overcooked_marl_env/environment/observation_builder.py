@@ -12,7 +12,7 @@ Responsibilities:
 
 import numpy as np
 from typing import Dict, Tuple, Any
-from ..core.items import ItemType, ItemState
+from ..core.items import ItemType, ItemState, INGREDIENTS
 from .env_config import (
     EMPTY_PROCESSING_VECTOR,
     DEFAULT_CUTS_NEEDED,
@@ -21,8 +21,10 @@ from .env_config import (
     CHANNEL_AGENT_SELF,
     CHANNEL_AGENTS_OTHER,
     CHANNEL_DELIVERY_POINTS,
+    CHANNEL_RECIPE_ORDER,
     CHANNEL_PROCESSING_START,
     NUM_BASE_CHANNELS,
+    MAX_RECIPES_IN_ORDER,
 )
 from ..core.constants import MAX_PROCESS_STEPS
 
@@ -43,22 +45,25 @@ class ObservationBuilder:
     delegating state management to GameState and item queries to ItemInstanceManager.
     """
     
-    def __init__(self, max_process_steps: int = MAX_PROCESS_STEPS):
+    def __init__(self, max_process_steps: int = MAX_PROCESS_STEPS, recipe_manager=None):
         """
         Initialize the observation builder.
         
         Args:
             max_process_steps: Maximum number of processing steps (for inventory channels)
+            recipe_manager: RecipeManager instance for encoding recipes (optional, can be passed in build_observations)
         """
         self.max_process_steps = max_process_steps
         self.num_base_channels = NUM_BASE_CHANNELS
         self.total_channels = self.num_base_channels + max_process_steps
+        self.recipe_manager = recipe_manager
     
     def build_observations(
         self,
         game_state: Dict[str, Any],
         agent_ids: list,
-        item_manager
+        item_manager,
+        recipe_manager=None
     ) -> Dict[str, np.ndarray]:
         """
         Build observations for all agents.
@@ -67,15 +72,19 @@ class ObservationBuilder:
             game_state: Complete game state dictionary
             agent_ids: List of active agent IDs
             item_manager: ItemManager instance for cell codes
+            recipe_manager: RecipeManager instance for encoding recipes (optional)
         
         Returns:
             Dictionary mapping agent_id -> observation array
         """
+        # Use provided recipe_manager or fall back to instance variable
+        recipe_mgr = recipe_manager or self.recipe_manager
+        
         map_size = game_state["map_static"].shape
         observations = {}
         
         # Build base observation (shared layers)
-        base_obs = self._build_base_observation(game_state, map_size, item_manager)
+        base_obs = self._build_base_observation(game_state, map_size, item_manager, recipe_mgr)
         
         # Build agent-specific observations
         for agent_id in agent_ids:
@@ -92,7 +101,8 @@ class ObservationBuilder:
         self,
         game_state: Dict[str, Any],
         map_size: Tuple[int, int],
-        item_manager
+        item_manager,
+        recipe_manager=None
     ) -> np.ndarray:
         """
         Build the base observation shared by all agents.
@@ -101,11 +111,13 @@ class ObservationBuilder:
         - Static map layer
         - Items on ground layer
         - Delivery points layer
+        - Recipe order layer
         
         Args:
             game_state: Game state dictionary
             map_size: Tuple of (height, width)
             item_manager: ItemManager for cell codes
+            recipe_manager: RecipeManager instance for encoding recipes
         
         Returns:
             Base observation array (H x W x TOTAL_CHANNELS)
@@ -116,8 +128,10 @@ class ObservationBuilder:
         # Layer 0: Static Map
         base_obs[:, :, CHANNEL_STATIC_MAP] = game_state["map_static"]
         
-        # Layer 1: Items on Ground/Counter
-        base_obs[:, :, CHANNEL_ITEMS_GROUND] = game_state["items_on_ground"]
+        # Layer 1: Items on Ground/Counter (FIXED: uses ground_instances)
+        base_obs[:, :, CHANNEL_ITEMS_GROUND] = self._build_ground_items_channel(
+            game_state, map_size, item_manager
+        )
         
         # Layer 4: Delivery Points (Binary)
         delivery_code = item_manager.get_cell_code('D')
@@ -126,6 +140,12 @@ class ObservationBuilder:
             1,
             0
         )
+        
+        # Layer 5: Recipe Order (NEW)
+        if recipe_manager is not None:
+            base_obs[:, :, CHANNEL_RECIPE_ORDER] = self._build_recipe_order_channel(
+                game_state, map_size, recipe_manager
+            )
         
         return base_obs
     
@@ -255,6 +275,223 @@ class ObservationBuilder:
             Observation shape (height, width, channels)
         """
         return (map_size[0], map_size[1], self.total_channels)
+    
+    def _build_ground_items_channel(
+        self,
+        game_state: Dict[str, Any],
+        map_size: Tuple[int, int],
+        item_manager
+    ) -> np.ndarray:
+        """
+        Build Channel 1 with items on ground using ground_instances.
+        
+        This method correctly populates the channel by iterating over
+        ground_instances and converting item_dicts to codes.
+        
+        Args:
+            game_state: Game state dictionary
+            map_size: Tuple of (height, width)
+            item_manager: ItemManager instance
+        
+        Returns:
+            Array of shape (H, W) with item codes
+        """
+        H, W = map_size
+        channel = np.zeros((H, W), dtype=np.uint8)
+        
+        # Iterate over ground_instances to get items on ground
+        ground_instances = game_state.get("ground_instances", {})
+        item_instances = game_state.get("item_instances", {})
+        
+        for (x, y), instance_id in ground_instances.items():
+            # Check bounds
+            if 0 <= y < H and 0 <= x < W:
+                item_dict = item_instances.get(instance_id)
+                if item_dict:
+                    code = self._item_to_code(item_dict)
+                    channel[y, x] = code
+        
+        return channel
+    
+    def _item_to_code(self, item_dict: Dict[str, Any]) -> int:
+        """
+        Convert item_dict to numeric code for observation channel.
+        
+        Encoding:
+        - Ingredientes: 10 + índice_ingrediente + (estado_offset * 10)
+        - Pratos: 50 + número_ingredientes
+        - Vazio/None: 0
+        
+        Args:
+            item_dict: Item dictionary from item_instances
+        
+        Returns:
+            Numeric code for the item
+        """
+        if not item_dict:
+            return 0
+        
+        item_type = item_dict.get("type")
+        
+        if item_type == ItemType.INGREDIENT:
+            # Get ingredient name
+            ingredient_name = item_dict.get("name", "").lower()
+            
+            # Find index in INGREDIENTS dict
+            ingredient_list = list(INGREDIENTS.keys())
+            if ingredient_name in ingredient_list:
+                ingredient_index = ingredient_list.index(ingredient_name)
+            else:
+                # Unknown ingredient, use 0
+                ingredient_index = 0
+            
+            # Get state offset (0-4)
+            state = item_dict.get("state", ItemState.RAW)
+            state_offsets = {
+                ItemState.RAW: 0,
+                ItemState.CHOPPING_1: 1,
+                ItemState.CHOPPING_2: 2,
+                ItemState.CHOPPING_3: 3,
+                ItemState.READY: 4,
+            }
+            state_offset = state_offsets.get(state, 0)
+            
+            # Code: 10 + índice + (estado_offset * 10)
+            return 10 + ingredient_index + (state_offset * 10)
+        
+        elif item_type == ItemType.DISH:
+            # Get number of ingredients
+            ingredients = item_dict.get("ingredients", [])
+            num_ingredients = len(ingredients)
+            
+            # Code: 50 + número_ingredientes
+            return 50 + num_ingredients
+        
+        # Unknown type or empty
+        return 0
+    
+    def _build_recipe_order_channel(
+        self,
+        game_state: Dict[str, Any],
+        map_size: Tuple[int, int],
+        recipe_manager
+    ) -> np.ndarray:
+        """
+        Build Channel 5 with recipe order information.
+        
+        Uses the first row (y=0) of the grid to represent the list of orders.
+        Each position in the row represents one order in sequence.
+        
+        Args:
+            game_state: Game state dictionary
+            map_size: Tuple of (height, width)
+            recipe_manager: RecipeManager instance
+        
+        Returns:
+            Array of shape (H, W) with recipe codes
+        """
+        H, W = map_size
+        channel = np.zeros((H, W), dtype=np.uint8)
+        
+        # Get recipe order information from game state
+        recipe_order = game_state.get("recipe_order", [])
+        expected_recipe_index = game_state.get("expected_recipe_index", 0)
+        delivered_recipes = game_state.get("delivered_recipes", [])
+        
+        # Fill first row (y=0) with recipe information
+        # Each column (x position) represents one order in sequence
+        for i, recipe_name in enumerate(recipe_order[:MAX_RECIPES_IN_ORDER]):
+            if i < W:  # Make sure we don't exceed grid width
+                # Count how many times this recipe appears up to position i
+                recipes_up_to_i = recipe_order[:i+1]
+                occurrences_in_order = recipes_up_to_i.count(recipe_name)
+                
+                # Count how many times this recipe has been delivered
+                occurrences_delivered = delivered_recipes.count(recipe_name)
+                
+                # Check if this specific position has been delivered
+                # (if delivered count >= occurrences up to this position)
+                is_delivered = occurrences_delivered >= occurrences_in_order
+                
+                # Check if this is the next expected recipe
+                is_next = (i == expected_recipe_index)
+                
+                # Encode recipe slot
+                code = self._encode_recipe_slot(recipe_name, is_delivered, is_next, recipe_manager)
+                channel[0, i] = code
+        
+        # Rest of the grid remains 0 (not used for recipes)
+        return channel
+    
+    def _get_recipe_code(self, recipe_name: str, recipe_manager) -> int:
+        """
+        Get numeric code for a recipe name using RecipeManager.
+        
+        Uses RecipeManager to get the index of the recipe dynamically.
+        Returns index + 1 to avoid 0 (which represents empty slot).
+        
+        Args:
+            recipe_name: Name of the recipe (e.g., "SIMPLE_SALAD")
+            recipe_manager: RecipeManager instance
+        
+        Returns:
+            Numeric code for the recipe (1-based index)
+        """
+        if recipe_manager is None:
+            return 0
+        
+        # Get all recipe names from RecipeManager
+        all_recipe_names = recipe_manager.get_all_recipe_names()
+        
+        # Find index of this recipe
+        recipe_name_upper = recipe_name.upper()
+        if recipe_name_upper in all_recipe_names:
+            recipe_index = all_recipe_names.index(recipe_name_upper)
+            return recipe_index + 1  # 1-based to avoid 0
+        
+        # Recipe not found, return 0
+        return 0
+    
+    def _get_recipe_status_code(self, is_delivered: bool, is_next: bool) -> int:
+        """
+        Get status code for a recipe slot.
+        
+        Args:
+            is_delivered: Whether the recipe has been delivered
+            is_next: Whether this is the next expected recipe
+        
+        Returns:
+            Status code: 0 (not delivered, not next), 100 (not delivered, is next), 200 (delivered)
+        """
+        if is_delivered:
+            return 200
+        elif is_next:
+            return 100
+        else:
+            return 0
+    
+    def _encode_recipe_slot(
+        self,
+        recipe_name: str,
+        is_delivered: bool,
+        is_next: bool,
+        recipe_manager
+    ) -> int:
+        """
+        Encode a recipe slot with recipe code and status.
+        
+        Args:
+            recipe_name: Name of the recipe
+            is_delivered: Whether the recipe has been delivered
+            is_next: Whether this is the next expected recipe
+            recipe_manager: RecipeManager instance
+        
+        Returns:
+            Encoded value: recipe_code + status_code
+        """
+        recipe_code = self._get_recipe_code(recipe_name, recipe_manager)
+        status_code = self._get_recipe_status_code(is_delivered, is_next)
+        return recipe_code + status_code
     
     def __repr__(self) -> str:
         """String representation."""

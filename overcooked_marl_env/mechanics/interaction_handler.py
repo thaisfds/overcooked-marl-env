@@ -30,27 +30,30 @@ class RewardValues:
     """
     Configuração centralizada de valores de recompensa.
     
-    Filosofia: Recompensar progresso real em direção ao objetivo.
-    - Ações básicas (pegar/colocar): recompensa mínima
-    - Ações de transformação (processar/combinar): recompensa média
-    - Ações de entrega (completar receitas): recompensa alta
-    - Penalidades para desencorajar comportamentos improdutivos
+    Filosofia OTIMIZADA: Guiar o agente para comportamentos produtivos.
+    - Ações básicas (pegar/colocar): recompensa positiva moderada
+    - Ações de transformação (processar/combinar): recompensa MUITO ALTA
+    - Ações de entrega (completar receitas): recompensa MÁXIMA
+    - Penalidades estratégicas para comportamentos destrutivos
     """
-    # Ações básicas (sem progresso real em direção ao objetivo)
-    pickup: float = 0.1
-    place: float = 0.1
+    # Ações básicas (progresso inicial)
+    pickup: float = 1.0           # Aumentado de 0.1 → 2.0 (20x)
+    place: float = 1.0            # Aumentado de 0.1 → 2.0 (20x)
+    place_on_chop: float = 20.0    # NOVO: Recompensa especial para colocar na bancada
     
-    # Ações de transformação (progresso real)
-    process: float = 3.0      # Cortar ingredientes
-    combine: float = 5.0      # Combinar ingredientes com prato
+    # Ações de transformação (progresso REAL) - AUMENTADAS
+    process: float = 30.0         # AUMENTADO de 10.0 → 20.0 (cortar é fundamental!)
+    combine: float = 50.0         # Aumentado de 5.0 → 15.0 (3x)
     
     # Recompensas de entrega (objetivo final)
-    delivery_base: float = 20.0
-    order_bonus_mult: float = 0.5
+    delivery_base: float = 200.0   # Aumentado de 20.0 → 50.0 (2.5x)
+    order_bonus_mult: float = 1.0 # Aumentado de 0.5 → 1.0 (bonus de 50)
     
-    # Penalidades
-    invalid: float = 1.0           # Interação inválida
-    useless_cycle: float = 0.5     # Ciclo pegar/colocar repetitivo
+    # Penalidades estratégicas
+    invalid: float = 0.0          # ZERADO - sem punição para exploração
+    useless_cycle: float = 0.0    # ZERADO - sem punição para exploração
+    trash_penalty: float = -20.0  # NOVO - penalidade por jogar item no lixo
+    counter_clutter_penalty: float = -5.0  # NOVO - penalidade por acumular >3 itens em bancadas
 
 
 class InteractionHandler:
@@ -145,13 +148,25 @@ class InteractionHandler:
                 game_state, verbose
             )
         
-        # Ingredient dispenser (from map) - ONLY if not carrying anything
-        # If carrying something, treat as counter to allow placing items
-        elif tile_pos in game_state["dispensers"] and not carrying_item:
-            return self._handle_ingredient_dispenser(
-                agent_id, tile_pos, carrying_item,
-                game_state, verbose
-            )
+        # Ingredient dispenser (from map) - ONLY pickup, NEVER place
+        # Cannot place items on dispensers - only pick up ingredients when empty
+        elif tile_pos in game_state["dispensers"]:
+            if carrying_item:
+                # Tentativa de colocar item no dispenser - bloqueado
+                if verbose:
+                    print(f"  Cannot place items on ingredient dispenser")
+                return 0.0, 0.0
+            elif not ground_item:
+                # Pickup de ingrediente do dispenser
+                return self._handle_ingredient_dispenser(
+                    agent_id, tile_pos, carrying_item,
+                    game_state, verbose
+                )
+            else:
+                # Há item no chão do dispenser (não deveria acontecer)
+                if verbose:
+                    print(f"  Invalid state: item on dispenser ground")
+                return 0.0, 0.0
         
         # Delivery station
         elif station_type == delivery_code:
@@ -168,8 +183,8 @@ class InteractionHandler:
             )
         
         # Counter/table (for placing/picking/combining items)
-        # Includes: '#' (counter), 'I' (ingredient dispenser when carrying items)
-        elif station_type in [counter_code, ingredient_dispenser_code]:
+        # ONLY '#' counters - ingredient dispensers ('I') are handled above
+        elif station_type == counter_code:
             return self._handle_counter(
                 agent_id, tile_pos, carrying_item, carrying_instance_id,
                 ground_item, ground_instance_id, game_state, verbose
@@ -178,7 +193,7 @@ class InteractionHandler:
         # Invalid interaction
         if verbose:
             print(f"  Invalid interaction location")
-        return -self.rewards.invalid, 0.0
+        return 0.0, 0.0  # SEM PENALIDADE
     
     def _handle_chopping_board(
         self,
@@ -200,8 +215,8 @@ class InteractionHandler:
             del game_state["agent_holding_instance"][agent_id]
             
             if verbose:
-                print(f"  Placed {carrying_item['name']} on chopping board")
-            return self.rewards.place, 0.0
+                print(f"  Placed {carrying_item['name']} on chopping board (+{self.rewards.place_on_chop})")
+            return self.rewards.place_on_chop, 0.0
         
         # Scenario 2: Chop ingredient on chopping board
         elif not carrying_item and ground_item and can_process(ground_item):
@@ -230,7 +245,7 @@ class InteractionHandler:
         # Invalid chopping board interaction
         if verbose:
             print(f"  Invalid chopping board interaction")
-        return -self.rewards.invalid, 0.0
+        return 0.0, 0.0  # SEM PENALIDADE
     
     def _handle_plate_dispenser(
         self,
@@ -271,7 +286,7 @@ class InteractionHandler:
         # Invalid plate dispenser interaction
         if verbose:
             print(f"  Cannot get plate: carrying non-ready ingredient")
-        return -self.rewards.invalid, 0.0
+        return 0.0, 0.0  # SEM PENALIDADE
     
     def _handle_ingredient_dispenser(
         self,
@@ -286,7 +301,7 @@ class InteractionHandler:
         if carrying_item:
             if verbose:
                 print(f"  Cannot pick up ingredient: hands full")
-            return -self.rewards.invalid, 0.0
+            return 0.0, 0.0  # SEM PENALIDADE
         
         dispenser_data = game_state["dispensers"][tile_pos]
         
@@ -388,13 +403,24 @@ class InteractionHandler:
             game_state["ground_instances"][(ix, iy)] = carrying_instance_id
             del game_state["agent_holding_instance"][agent_id]
             
+            # Conta quantos itens já estão nas bancadas (Counter = '#' = code 1)
+            counter_code = self.item_manager.get_cell_code('#')
+            total_counter_items = sum(1 for pos, _ in game_state["ground_instances"].items() 
+                                     if game_state["map_static"][pos[1], pos[0]] == counter_code)
+            
             reward = self.rewards.place
-            if is_useless_cycle:
-                reward -= self.rewards.useless_cycle
+            
+            # Aplica penalidade progressiva se houver mais de 3 itens em bancadas
+            if total_counter_items > 3:
+                excess_items = total_counter_items - 3
+                clutter_penalty = self.rewards.counter_clutter_penalty * (excess_items ** 1.5)
+                reward += clutter_penalty
                 if verbose:
-                    print(f"  Placed {get_ingredient_display_name(carrying_item)} on counter (⚠️ useless cycle: -{self.rewards.useless_cycle})")
-            elif verbose:
-                print(f"  Placed {get_ingredient_display_name(carrying_item)} on counter")
+                    print(f"  Placed {get_ingredient_display_name(carrying_item)} on counter")
+                    print(f"  Counter clutter penalty: {clutter_penalty:.2f} ({total_counter_items} items on counters)")
+            else:
+                if verbose:
+                    print(f"  Placed {get_ingredient_display_name(carrying_item)} on counter")
             
             return reward, 0.0
         
@@ -404,11 +430,8 @@ class InteractionHandler:
             del game_state["ground_instances"][(ix, iy)]
             
             reward = self.rewards.pickup
-            if is_useless_cycle:
-                reward -= self.rewards.useless_cycle
-                if verbose:
-                    print(f"  Picked up {get_ingredient_display_name(ground_item)} from counter (⚠️ useless cycle: -{self.rewards.useless_cycle})")
-            elif verbose:
+            # Penalidade de ciclo inútil REMOVIDA
+            if verbose:
                 print(f"  Picked up {get_ingredient_display_name(ground_item)} from counter")
             
             return reward, 0.0
@@ -416,7 +439,7 @@ class InteractionHandler:
         # Invalid counter interaction
         if verbose:
             print(f"  Invalid counter interaction")
-        return -self.rewards.invalid, 0.0
+        return 0.0, 0.0  # SEM PENALIDADE
     
     def _handle_trash(
         self,
@@ -437,8 +460,8 @@ class InteractionHandler:
             del game_state["agent_holding_instance"][agent_id]
             
             if verbose:
-                print(f"  Discarded {get_ingredient_display_name(carrying_item)} in trash")
-            return self.rewards.place, 0.0  # Small reward for cleaning up
+                print(f"  Discarded {get_ingredient_display_name(carrying_item)} in trash (PENALIDADE: {self.rewards.trash_penalty})")
+            return self.rewards.trash_penalty, 0.0  # PENALIDADE por desperdiçar item
         
         if verbose:
             print(f"  Cannot use trash: not carrying anything")
@@ -457,14 +480,14 @@ class InteractionHandler:
         if not carrying_item or carrying_item.get("type") != ItemType.DISH:
             if verbose:
                 print(f"  Cannot deliver: not carrying a plate")
-            return -self.rewards.invalid, 0.0
+            return 0.0, 0.0  # SEM PENALIDADE
         
         # Plate must have ingredients
         ingredients = carrying_item.get("ingredients", [])
         if not ingredients:
             if verbose:
                 print(f"  Cannot deliver: plate is empty")
-            return -self.rewards.invalid, 0.0
+            return 0.0, 0.0  # SEM PENALIDADE
         
         # Validate recipe
         is_valid, recipe_name, recipe_reward = self.recipe_manager.validate_delivery(ingredients)
@@ -473,7 +496,7 @@ class InteractionHandler:
             if verbose:
                 ingredients_str = ", ".join(ingredients)
                 print(f"  Invalid recipe! Ingredients: [{ingredients_str}]")
-            return -self.rewards.invalid, 0.0
+            return 0.0, 0.0  # SEM PENALIDADE
         
         # Check if it's the correct order
         is_correct_order = self._is_correct_order(recipe_name, game_state)
