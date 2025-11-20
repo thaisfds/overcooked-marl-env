@@ -143,11 +143,11 @@ ENVIRONMENT_CONFIG = {
 }
 
 param_grid = {
-    'learning_rate': [1e-3],
+    'learning_rate': [3e-4, 1e-3],
     'num_steps': [512],
     'update_epochs': [4, 8, 16],
     'ent_coef': [0.05, 0.1, 0.15],
-    'clip_coef': [0.1],
+    'clip_coef': [0.1, 0.2],
     'num_minibatches': [4],
     'gamma': [0.995],
     'gae_lambda': [0.95, 0.97],
