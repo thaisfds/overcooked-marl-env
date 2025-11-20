@@ -104,4 +104,4 @@ PENALTY_TIME_STEP = 0.0
 
 # Environment metadata (for PettingZoo)
 ENV_NAME = "overcooked_marl_v0"
-RENDER_MODES = ["human", "rgb_array"]
+RENDER_MODES = ["human", "ascii"]

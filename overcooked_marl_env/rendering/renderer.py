@@ -5,8 +5,8 @@ This module implements the Single Responsibility Principle (SRP) by separating
 rendering logic from the main environment class.
 
 Supports two rendering modes:
-- "human": ASCII text rendering to console
-- "rgb_array": Pygame graphical rendering
+- "human": Pygame graphical rendering (visual for humans)
+- "ascii": ASCII text rendering to console
 """
 
 import pygame
@@ -45,7 +45,7 @@ class Renderer:
         
         Args:
             item_manager: ItemManager instance for cell code lookups
-            render_mode: "human" for ASCII or "rgb_array" for Pygame
+            render_mode: "human" for Pygame or "ascii" for ASCII
         """
         self.item_manager = item_manager
         self.render_mode = render_mode
@@ -73,15 +73,15 @@ class Renderer:
             recipe_order: List of recipe names in order
         
         Returns:
-            None for "human" mode, RGB array for "rgb_array" mode
+            RGB array for "human" mode (Pygame), None for "ascii" mode (ASCII console)
         """
         if self.render_mode is None:
             return None
         
         if self.render_mode == "human":
-            return self.render_text(game_state, map_size, agents, recipe_order)
-        elif self.render_mode == "rgb_array":
             return self.render_rgb_array(game_state, map_size, agents, recipe_order)
+        elif self.render_mode == "ascii":
+            return self.render_text(game_state, map_size, agents, recipe_order)
         
         return None
     
@@ -165,7 +165,7 @@ class Renderer:
         Returns:
             numpy array of shape (H, W, 3) with RGB values
         """
-        if self.window is None:
+        if self.window is None and self.render_mode == "human":
             self._initialize_pygame(map_size)
         
         H, W = map_size
@@ -300,7 +300,7 @@ class Renderer:
     
     def check_events(self) -> bool:
         """Check pygame events and return False if window should close."""
-        if self.render_mode != "rgb_array" or self.window is None:
+        if self.render_mode != "human" or self.window is None:
             return True
         
         for event in pygame.event.get():

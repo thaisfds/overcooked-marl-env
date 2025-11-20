@@ -27,7 +27,7 @@ from .mechanics.interaction_handler import InteractionHandler
 from .rendering import Renderer
 
 class OvercookedMARL(ParallelEnv):
-    metadata = {"render_modes": ["human", "rgb_array"], "name": "overcooked_marl_v0"}
+    metadata = {"render_modes": ["human", "ascii"], "name": "overcooked_marl_v0"}
 
     # =================================================================
     # PETTINGZOO API METHODS (Public Interface)
@@ -241,8 +241,8 @@ class OvercookedMARL(ParallelEnv):
         Renders the current state of the environment.
         
         Returns:
-            None (if render_mode="human"): Prints ASCII to console
-            np.ndarray (if render_mode="rgb_array"): RGB image array
+            np.ndarray (if render_mode="human"): RGB image array (Pygame graphical rendering)
+            None (if render_mode="ascii"): Prints ASCII to console
             None (if render_mode=None): No rendering
         """
         if self.render_mode is None:

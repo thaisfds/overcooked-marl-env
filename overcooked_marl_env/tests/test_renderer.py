@@ -23,16 +23,16 @@ class TestRendererInitialization(unittest.TestCase):
         self.item_manager = ItemManager()
     
     def test_renderer_init_human_mode(self):
-        """Test renderer initialization in human mode."""
+        """Test renderer initialization in human mode (Pygame)."""
         renderer = Renderer(self.item_manager, render_mode="human")
         self.assertEqual(renderer.render_mode, "human")
         self.assertIsNone(renderer.window)
         self.assertEqual(renderer.cell_size, 60)
     
-    def test_renderer_init_rgb_mode(self):
-        """Test renderer initialization in rgb_array mode."""
-        renderer = Renderer(self.item_manager, render_mode="rgb_array")
-        self.assertEqual(renderer.render_mode, "rgb_array")
+    def test_renderer_init_ascii_mode(self):
+        """Test renderer initialization in ascii mode."""
+        renderer = Renderer(self.item_manager, render_mode="ascii")
+        self.assertEqual(renderer.render_mode, "ascii")
         self.assertIsNone(renderer.window)
     
     def test_renderer_init_none_mode(self):
@@ -42,7 +42,7 @@ class TestRendererInitialization(unittest.TestCase):
     
     def test_char_map_initialization(self):
         """Test that character map is properly initialized."""
-        renderer = Renderer(self.item_manager, render_mode="human")
+        renderer = Renderer(self.item_manager, render_mode="ascii")
         self.assertIn(self.item_manager.get_cell_code(' '), renderer.char_map)
         self.assertIn(self.item_manager.get_cell_code('#'), renderer.char_map)
         self.assertIn(self.item_manager.get_cell_code('C'), renderer.char_map)
@@ -53,7 +53,7 @@ class TestRendererColorMethods(unittest.TestCase):
     
     def setUp(self):
         self.item_manager = ItemManager()
-        self.renderer = Renderer(self.item_manager, render_mode="rgb_array")
+        self.renderer = Renderer(self.item_manager, render_mode="human")
     
     def test_get_ingredient_base_color_tomato(self):
         """Test base color for tomato."""
@@ -156,7 +156,7 @@ class TestRendererHelperMethods(unittest.TestCase):
     
     def setUp(self):
         self.item_manager = ItemManager()
-        self.renderer = Renderer(self.item_manager, render_mode="human")
+        self.renderer = Renderer(self.item_manager, render_mode="ascii")
     
     def test_get_orientation_name_north(self):
         """Test orientation name for north."""
@@ -255,7 +255,7 @@ class TestRendererTextMode(unittest.TestCase):
     
     def setUp(self):
         self.item_manager = ItemManager()
-        self.renderer = Renderer(self.item_manager, render_mode="human")
+        self.renderer = Renderer(self.item_manager, render_mode="ascii")
     
     @patch('builtins.print')
     def test_render_text_basic(self, mock_print):
@@ -292,7 +292,7 @@ class TestRendererRGBMode(unittest.TestCase):
     
     def setUp(self):
         self.item_manager = ItemManager()
-        self.renderer = Renderer(self.item_manager, render_mode="rgb_array")
+        self.renderer = Renderer(self.item_manager, render_mode="human")
     
     @patch('pygame.display.init')
     @patch('pygame.init')
@@ -340,7 +340,7 @@ class TestRendererClose(unittest.TestCase):
     @patch('pygame.quit')
     def test_close_with_window(self, mock_pygame_quit, mock_display_quit):
         """Test closing renderer with active window."""
-        renderer = Renderer(self.item_manager, render_mode="rgb_array")
+        renderer = Renderer(self.item_manager, render_mode="human")
         renderer.window = MagicMock()
         
         renderer.close()
@@ -351,7 +351,7 @@ class TestRendererClose(unittest.TestCase):
     
     def test_close_without_window(self):
         """Test closing renderer without window doesn't crash."""
-        renderer = Renderer(self.item_manager, render_mode="rgb_array")
+        renderer = Renderer(self.item_manager, render_mode="human")
         renderer.close()  # Should not raise exception
 
 

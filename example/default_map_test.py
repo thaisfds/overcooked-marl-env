@@ -64,7 +64,7 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
     Test where two agents cooperate with MAXIMUM PARALLELISM.
     
     Args:
-        render_mode: "human" for ASCII console (default) or "rgb_array" for Pygame graphics
+        render_mode: "ascii" for ASCII console (default) or "human" for Pygame graphics
         log_to_file: If True, saves output to logs/test_parallel_TIMESTAMP.txt
     """
     # Setup logging to file if requested
@@ -97,7 +97,7 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
     
     # Render initial state
     env.render()
-    time.sleep(0.5 if render_mode == "rgb_array" else 0.5)
+        time.sleep(0.5 if render_mode == "human" else 0.5)
     
     # Actions: 0=Up, 1=Down, 2=Left, 3=Right, 4=Interact
     # Agent 0 starts at (2,1)
@@ -238,7 +238,7 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
             print(f"\n{'='*70}")
             print(f">>> {desc}")
             print('='*70)
-            time.sleep(0.2 if render_mode == "rgb_array" else 0.3)
+            time.sleep(0.2 if render_mode == "human" else 0.3)
             continue
         
         step_count += 1
@@ -264,7 +264,7 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
             print(f"\n*** RECIPE DELIVERED! Total: {delivered} ***")
         
         # Delay for visualization
-        time.sleep(0.2 if render_mode == "rgb_array" else 0.15)
+        time.sleep(0.2 if render_mode == "human" else 0.15)
         
         # Check if completed
         if delivered > 0:
@@ -307,7 +307,7 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
         print(f"Expected: 1+ recipe | Delivered: {len(info['agent_0']['delivered_recipes'])}")
     
     # Keep window open for rgb_array mode
-    if render_mode == "rgb_array":
+    if render_mode == "human":
         print("\nFinal state rendered. Close the Pygame window to exit.")
         print("(Window will auto-close in 3 seconds)")
         
@@ -337,12 +337,12 @@ if __name__ == "__main__":
     print("  • Parallel assembly workflow")
     print("  • Complete recipe delivery")
     print("\nConfiguration:")
-    print('  - RENDER_MODE: "human" (ASCII) or "rgb_array" (Pygame)')
+    print('  - RENDER_MODE: "ascii" (ASCII) or "human" (Pygame)')
     print('  - SAVE_LOG: True (save to logs/) or False (console only)')
     print("="*70)
     
     # Configuration
-    RENDER_MODE = "rgb_array"  # Change to "rgb_array" for graphical visualization
+    RENDER_MODE = "human"  # Change to "human" for graphical visualization
     SAVE_LOG = True  # Change to False to disable log file
     
     try:

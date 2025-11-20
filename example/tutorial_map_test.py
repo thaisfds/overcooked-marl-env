@@ -73,7 +73,7 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
     Comprehensive test of all game mechanics using tutorial map.
     
     Args:
-        render_mode: "human" for ASCII console (default) or "rgb_array" for Pygame graphics
+        render_mode: "ascii" for ASCII console (default) or "human" for Pygame graphics
         log_to_file: If True, saves output to logs/test_tutorial_TIMESTAMP.txt
     """
     # Setup logging to file if requested
@@ -105,7 +105,7 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
     
     # Render initial state
     env.render()
-    time.sleep(0.5 if render_mode == "rgb_array" else 0.5)
+        time.sleep(0.5 if render_mode == "human" else 0.5)
     
     # Actions: 0=Up, 1=Down, 2=Left, 3=Right, 4=Interact
     # Agent 0 starts at (10, 3)
@@ -591,7 +591,7 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
             print(f"\n{'='*80}")
             print(f">>> {desc}")
             print('='*80)
-            time.sleep(0.2 if render_mode == "rgb_array" else 0.3)
+            time.sleep(0.2 if render_mode == "human" else 0.3)
             continue
         
         step_count += 1
@@ -617,7 +617,7 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
             print(f"\n*** RECIPE DELIVERED! Total: {delivered}/3 ***")
         
         # Delay for visualization
-        time.sleep(0.2 if render_mode == "rgb_array" else 0.15)
+        time.sleep(0.2 if render_mode == "human" else 0.15)
         
         # Check if all recipes completed
         if remaining == 4:  # Started with 7, need to deliver 3
@@ -655,7 +655,7 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
         print(f"Expected: 3 recipes | Delivered: {len(info['agent_0']['delivered_recipes'])}")
     
     # Keep window open for rgb_array mode
-    if render_mode == "rgb_array":
+    if render_mode == "human":
         print("\nFinal state rendered. Close the Pygame window to exit.")
         print("(Window will auto-close in 3 seconds)")
         
@@ -684,12 +684,12 @@ if __name__ == "__main__":
     print("  • Agent cooperation via counters")
     print("  • Complete recipe workflows")
     print("\nConfiguration:")
-    print('  - RENDER_MODE: "human" (ASCII) or "rgb_array" (Pygame)')
+    print('  - RENDER_MODE: "ascii" (ASCII) or "human" (Pygame)')
     print('  - SAVE_LOG: True (save to logs/) or False (console only)')
     print("="*80)
     
     # Configuration
-    RENDER_MODE = "rgb_array"  # Change to "rgb_array" for graphical visualization
+    RENDER_MODE = "human"  # Change to "human" for graphical visualization
     SAVE_LOG = False  # Change to False to disable log file
     
     try:

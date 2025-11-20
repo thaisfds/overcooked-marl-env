@@ -30,7 +30,7 @@ class TestPettingZooAPI(unittest.TestCase):
         """Test that metadata contains render_modes."""
         self.assertIn('render_modes', self.env.metadata)
         self.assertIn('human', self.env.metadata['render_modes'])
-        self.assertIn('rgb_array', self.env.metadata['render_modes'])
+        self.assertIn('ascii', self.env.metadata['render_modes'])
     
     def test_metadata_has_name(self):
         """Test that metadata contains name."""
@@ -212,22 +212,22 @@ class TestPettingZooAPI(unittest.TestCase):
     
     def test_render_modes(self):
         """Test different render modes."""
-        # Test human mode
-        env_human = OvercookedMARL(render_mode="human", verbose=False)
+        # Test human mode (Pygame - returns RGB array)
+        env_human = OvercookedMARL(render_mode="human", verbose=False)  # Pygame mode
         env_human.reset()
         result = env_human.render()
-        # human mode should print and return None
-        self.assertIsNone(result)
-        env_human.close()
-        
-        # Test rgb_array mode
-        env_rgb = OvercookedMARL(render_mode="rgb_array", verbose=False)
-        env_rgb.reset()
-        result = env_rgb.render()
-        # rgb_array mode should return numpy array
+        # human mode should return numpy array (Pygame)
         self.assertIsInstance(result, np.ndarray)
         self.assertEqual(len(result.shape), 3)  # Should be H x W x C
-        env_rgb.close()
+        env_human.close()
+        
+        # Test ascii mode (ASCII console - returns None)
+        env_ascii = OvercookedMARL(render_mode="ascii", verbose=False)  # ASCII mode
+        env_ascii.reset()
+        result = env_ascii.render()
+        # ascii mode should print and return None
+        self.assertIsNone(result)
+        env_ascii.close()
 
 
 class TestPettingZooMethodOrder(unittest.TestCase):

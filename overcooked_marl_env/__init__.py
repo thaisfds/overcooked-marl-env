@@ -46,7 +46,7 @@ except ImportError:
 register(
     id="OvercookedMARL-v0",
     entry_point="overcooked_marl_env.env:OvercookedMARL",
-    max_episode_steps=500,
+    max_episode_steps=1200,  # Aumentado de 500 → 1200 (consistente com MAX_EPISODE_STEPS)
 )
 
 __version__ = "0.1.0"

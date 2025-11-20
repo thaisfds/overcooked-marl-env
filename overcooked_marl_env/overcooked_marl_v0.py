@@ -24,7 +24,7 @@ def env(**kwargs):
     
     Args:
         **kwargs: Keyword arguments to pass to OvercookedMARL constructor.
-            render_mode (str, optional): Rendering mode - "human" or "rgb_array"
+            render_mode (str, optional): Rendering mode - "human" (Pygame) or "ascii" (ASCII console)
             map_path (str, optional): Path to the map file
             num_fixed_agents (int, optional): Number of agents (default: 2)
             verbose (bool, optional): Enable verbose logging (default: False)

@@ -47,15 +47,19 @@ class RewardValues:
     combine: float = 100.0        # AUMENTADO de 75.0 → 100.0 (combinar é MUITO importante!)
     
     # Recompensas de entrega (objetivo final) - BALANCEADAS
-    delivery_base: float = 200.0  # AUMENTADO de 150.0 → 200.0 para tornar objetivo final mais claro
+    delivery_base: float = 250.0  # AJUSTADO de 300.0 → 250.0 (era 200.0 originalmente)
     order_bonus_mult: float = 1.0 # Multiplicador de bônus por ordem correta
     
-    # Recompensas progressivas (reward shaping)
-    progress_pickup_needed: float = 2.0      # Recompensa por pegar ingrediente necessário para receita
-    progress_place_on_chop: float = 3.0      # Recompensa por colocar ingrediente na bancada (próximo passo)
-    progress_pickup_ready: float = 2.5       # Recompensa por pegar ingrediente processado quando precisa
-    progress_combine_ready: float = 10.0     # AUMENTADO de 3.0 → 10.0 (incentivo forte para combinar!)
-    progress_pickup_complete_plate: float = 2.0  # Recompensa por pegar prato completo (pronto para entregar)
+    # Recompensas progressivas (reward shaping) - AJUSTADAS para valores mais conservadores
+    progress_pickup_needed: float = 3.0      # AJUSTADO de 5.0 → 3.0 (era 2.0 originalmente)
+    progress_place_on_chop: float = 4.0      # AJUSTADO de 8.0 → 4.0 (era 3.0 originalmente)
+    progress_pickup_ready: float = 3.5       # AJUSTADO de 6.0 → 3.5 (era 2.5 originalmente)
+    progress_combine_ready: float = 12.0     # AJUSTADO de 25.0 → 12.0 (era 10.0 originalmente)
+    progress_pickup_complete_plate: float = 4.0  # AJUSTADO de 10.0 → 4.0 (era 2.0 originalmente)
+    
+    # Recompensas escalonadas por ingrediente adicionado ao prato da receita correta
+    progress_ingredient_added_base: float = 8.0  # AJUSTADO de 15.0 → 8.0 (base para primeiro ingrediente)
+    progress_ingredient_added_increment: float = 3.0  # AJUSTADO de 5.0 → 3.0 (incremento por ingrediente adicional)
     
     # Recompensas específicas para Problema 3 (agente não coloca no prato)
     progress_pickup_plate_with_ready: float = 5.0  # Recompensa alta por pegar prato quando já tem ingrediente pronto
@@ -73,7 +77,12 @@ class RewardValues:
     accumulation_threshold: int = 3          # Número de ingredientes processados no chão antes de penalizar
     
     # Recompensas de sequência completa
-    sequence_complete_bonus: float = 25.0    # Bônus por completar sequência completa (pegar → picar → prato → entregar)
+    sequence_complete_bonus: float = 30.0    # AJUSTADO de 50.0 → 30.0 (era 25.0 originalmente)
+    
+    # Bônus por múltiplas entregas consecutivas - AJUSTADOS para valores mais conservadores
+    delivery_multiplier_2nd: float = 1.1    # AJUSTADO de 1.2 → 1.1 (multiplicador para segunda entrega)
+    delivery_multiplier_3rd: float = 1.2    # AJUSTADO de 1.5 → 1.2 (multiplicador para terceira entrega)
+    delivery_multiplier_4th_plus: float = 1.3  # AJUSTADO de 2.0 → 1.3 (multiplicador para quarta+ entrega)
     
     # Penalidades estratégicas
     invalid: float = 0.0          # ZERADO - sem punição para exploração
@@ -476,7 +485,7 @@ class InteractionHandler:
             
             # Calculate progress reward for combining
             progress_reward = self._calculate_progress_reward(
-                'combine', carrying_item, None, game_state
+                'combine', carrying_item, plate, game_state
             )
             
             # Recompensa alta por pegar prato quando já tem ingrediente pronto
@@ -776,16 +785,35 @@ class InteractionHandler:
         # Bônus por completar sequência completa (pegar → picar → prato → entregar)
         sequence_bonus = self.rewards.sequence_complete_bonus
         
-        total_reward = base_reward + order_bonus + sequence_bonus
-        global_reward_bonus = recipe_reward + order_bonus
+        # Bônus por múltiplas entregas consecutivas
+        # Contar quantas receitas já foram entregues (incluindo esta)
+        num_deliveries = len(game_state.get("delivered_recipes", []))
+        if num_deliveries == 1:
+            # Primeira entrega: sem multiplicador adicional
+            delivery_multiplier = 1.0
+        elif num_deliveries == 2:
+            # Segunda entrega: multiplicador 1.2
+            delivery_multiplier = self.rewards.delivery_multiplier_2nd
+        elif num_deliveries == 3:
+            # Terceira entrega: multiplicador 1.5
+            delivery_multiplier = self.rewards.delivery_multiplier_3rd
+        else:
+            # Quarta+ entrega: multiplicador 2.0
+            delivery_multiplier = self.rewards.delivery_multiplier_4th_plus
+        
+        # Aplicar multiplicador ao base_reward (não inclui order_bonus e sequence_bonus)
+        delivery_bonus = base_reward * (delivery_multiplier - 1.0)  # Bônus adicional
+        
+        total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus
+        global_reward_bonus = recipe_reward + order_bonus + delivery_bonus
         
         if verbose:
             if is_correct_order:
-                print(f"  Recipe {recipe_name} delivered in correct order!")
-                print(f"  Reward: {base_reward} + Order Bonus: {order_bonus} + Sequence Bonus: {sequence_bonus}")
+                print(f"  Recipe {recipe_name} delivered in correct order! (Delivery #{num_deliveries})")
+                print(f"  Reward: {base_reward} + Order Bonus: {order_bonus} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f})")
             else:
-                print(f"  Recipe {recipe_name} delivered out of order")
-                print(f"  Reward: {base_reward} + Sequence Bonus: {sequence_bonus} (no order bonus)")
+                print(f"  Recipe {recipe_name} delivered out of order (Delivery #{num_deliveries})")
+                print(f"  Reward: {base_reward} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f}) (no order bonus)")
         
         return total_reward, global_reward_bonus
     
@@ -1078,12 +1106,31 @@ class InteractionHandler:
                 ingredient_name = carrying_item.get("name", "").lower()
                 if ingredient_name in [ing.lower() for ing in required_ingredients]:
                     progress_reward += self.rewards.progress_combine_ready
+                    # Recompensa escalonada por ingrediente adicionado ao prato da receita correta
+                    if ground_item and ground_item.get("type") == ItemType.DISH:
+                        plate_ingredients = ground_item.get("ingredients", [])
+                        # Contar quantos ingredientes da receita já estão no prato (antes de adicionar)
+                        matching_count = sum(1 for ing in plate_ingredients 
+                                           if ing.lower() in [r.lower() for r in required_ingredients])
+                        # Recompensa escalonada: primeiro=15.0, segundo=20.0, terceiro=25.0
+                        scaled_reward = (self.rewards.progress_ingredient_added_base + 
+                                       matching_count * self.rewards.progress_ingredient_added_increment)
+                        progress_reward += scaled_reward
             # If carrying plate and combining with ready ingredient
             elif carrying_item.get("type") == ItemType.DISH:
                 if ground_item and is_ready(ground_item):
                     ingredient_name = ground_item.get("name", "").lower()
                     if ingredient_name in [ing.lower() for ing in required_ingredients]:
                         progress_reward += self.rewards.progress_combine_ready
+                        # Recompensa escalonada por ingrediente adicionado ao prato da receita correta
+                        plate_ingredients = carrying_item.get("ingredients", [])
+                        # Contar quantos ingredientes da receita já estão no prato (antes de adicionar)
+                        matching_count = sum(1 for ing in plate_ingredients 
+                                           if ing.lower() in [r.lower() for r in required_ingredients])
+                        # Recompensa escalonada: primeiro=15.0, segundo=20.0, terceiro=25.0
+                        scaled_reward = (self.rewards.progress_ingredient_added_base + 
+                                       matching_count * self.rewards.progress_ingredient_added_increment)
+                        progress_reward += scaled_reward
         
         # Action: Pickup complete plate (ready for delivery)
         elif action_type == 'pickup_plate_complete' and carrying_item:
