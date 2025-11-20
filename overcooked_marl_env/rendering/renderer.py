@@ -54,6 +54,7 @@ class Renderer:
         self.window = None
         self.clock = None
         self.cell_size = RENDER_CONFIG['cell_size']
+        self.should_close = False
     
     def render(
         self,
@@ -295,6 +296,18 @@ class Renderer:
             pygame.quit()
             self.window = None
             self.clock = None
+            self.should_close = False
+    
+    def check_events(self) -> bool:
+        """Check pygame events and return False if window should close."""
+        if self.render_mode != "rgb_array" or self.window is None:
+            return True
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.should_close = True
+                return False
+        return True
     
     # ===================================================================
     # Helper Methods - ASCII Rendering
