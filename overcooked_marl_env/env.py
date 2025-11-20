@@ -328,7 +328,7 @@ class OvercookedMARL(ParallelEnv):
         is_reload = map_path in self._already_loaded_maps
         self._already_loaded_maps.add(map_path)
         
-        if not is_reload or self.verbose:
+        if self.verbose:
             print(f"[ENV] Loading map from: {map_path}")
         
         # Use MapLoader to load and validate the map
@@ -344,7 +344,7 @@ class OvercookedMARL(ParallelEnv):
         # Initialize recipes from map data
         self._initialize_recipes(map_data.recipes)
         
-        if not is_reload or self.verbose:
+        if self.verbose:
             print(f"[ENV] Map loaded successfully:")
             print(f"  - Size: {map_data.size}")
             print(f"  - Agents: {list(map_data.agent_positions.keys())}")
@@ -366,16 +366,16 @@ class OvercookedMARL(ParallelEnv):
             recipe = self.recipe_manager.get_recipe_by_name(name)
             if recipe:
                 self.recipe_order.append(name)
-                if self.map_path not in self._already_loaded_maps or self.verbose:
+                if self.verbose:
                     print(f"Added recipe: {name}")
             else:
-                if self.map_path not in self._already_loaded_maps or self.verbose:
+                if self.verbose:
                     print(f"WARNING: Recipe '{name}' not found in RecipeManager")
         
         # Make sure at least one recipe is defined (in case the map doesn't specify any)
         if len(self.recipe_order) == 0:
             default_recipe = get_default_recipe()
-            if self.map_path not in self._already_loaded_maps or self.verbose:
+            if self.verbose:
                 print(f"WARNING: No recipes were loaded from the map. Adding default {default_recipe} recipe.")
             
             recipe = self.recipe_manager.get_recipe_by_name(default_recipe)
@@ -390,7 +390,7 @@ class OvercookedMARL(ParallelEnv):
             raise ValueError(f"Map file at {self.map_path} resulted in an empty map")
             
         self.map_size = map_static_np.shape
-        if self.map_path not in self._already_loaded_maps or self.verbose:
+        if self.verbose:
             print(f"Map loaded with size: {self.map_size}")
         
         items_on_ground = np.zeros(self.map_size, dtype=np.uint8) 
@@ -398,7 +398,7 @@ class OvercookedMARL(ParallelEnv):
         carrying = {}
         for agent in self.possible_agents:
             if agent not in agent_start_pos:
-                if self.map_path not in self._already_loaded_maps or self.verbose:
+                if self.verbose:
                     print(f"WARNING: Agent {agent} was not assigned a position in the map. Using default position.")
                 # Find an empty space
                 for y in range(self.map_size[0]):
