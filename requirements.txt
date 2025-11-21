@@ -1,0 +1,23 @@
+# Core Environment Dependencies
+gymnasium>=0.29.1
+numpy>=1.24.0
+pettingzoo>=1.24.0
+pygame>=2.5.0
+matplotlib>=3.7.0
+
+# Deep Learning Framework
+torch>=1.13.1
+torchvision>=0.14.0  # Optional but recommended for image processing
+
+# Reinforcement Learning - Ray RLlib
+ray[rllib]>=2.7.0
+pydantic>=1.10.0  # Required by ray.train
+
+# Data Processing and Visualization
+pandas>=1.5.0
+seaborn>=0.12.0
+tqdm>=4.65.0
+
+# Optional: For DirectML support (Windows/AMD GPU) - commented out as per your preference
+# torch-directml>=0.2.0
+
