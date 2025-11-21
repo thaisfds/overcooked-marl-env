@@ -350,14 +350,9 @@ class Renderer:
         
         # Show orders and delivered
         if len(recipe_order) > 0:
-            # Debug: Show original recipe order
-            print(f"\n[DEBUG] Recipe Order (original): {recipe_order}")
-            print(f"[DEBUG] Delivered Recipes: {game_state['delivered_recipes']}")
             
             # Calculate pending orders using utility method
             pending_orders = self._calculate_pending_orders(recipe_order, game_state['delivered_recipes'])
-            
-            print(f"[DEBUG] Pending Orders (calculated): {pending_orders}")
             
             if len(pending_orders) > 0:
                 orders_str = ", ".join(pending_orders)
