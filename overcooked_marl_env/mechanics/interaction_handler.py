@@ -87,7 +87,7 @@ class RewardValues:
     # Penalidades estratégicas
     invalid: float = 0.0          # ZERADO - sem punição para exploração
     useless_cycle: float = 0.0    # ZERADO - sem punição para exploração
-    trash_penalty: float = -20.0   # Penalidade por jogar item no lixo
+    trash_penalty: float = 0.0   # Penalidade por jogar item no lixo
     counter_clutter_penalty: float = -5.0  # Penalidade por acumular >3 itens em bancadas
 
 
