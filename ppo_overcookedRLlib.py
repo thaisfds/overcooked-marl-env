@@ -215,13 +215,13 @@ ENVIRONMENT_CONFIG = {
 }
 
 param_grid = {
-    'learning_rate': [1e-3], 
-    'gamma': [0.995],
+    'learning_rate': [3e-4, 1e-3], 
+    'gamma': [0.90, 0.95, 0.995],
     'train_batch_size': [4000], 
     'sgd_minibatch_size': [128],
-    'update_epochs': [16], 
-    'num_episodes': [50, 100], 
-    'entropy_coeff': [0.20],  # Coeficiente de entropia para exploração (quanto maior, mais exploração)
+    'update_epochs': [4, 8, 16], 
+    'num_episodes': [100, 200, 400], 
+    'entropy_coeff': [0.15, 0.20, 0.25],
     'seed': [42],
 }
 
