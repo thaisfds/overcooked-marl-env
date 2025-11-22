@@ -3,7 +3,7 @@
 import os
 import time
 import json
-import shutil
+from datetime import datetime
 from typing import Dict, Any
 from itertools import product
 from pathlib import Path
@@ -198,6 +198,48 @@ def convert_to_serializable(obj):
     else:
         return str(obj)
 
+def generate_params_string(params: Dict[str, Any]) -> str:
+    """
+    Gera string descritiva dos parâmetros para usar em nomes de diretórios.
+    
+    Args:
+        params: Dicionário com parâmetros de treinamento
+    
+    Returns:
+        String formatada: "lr1e-3_gamma0.90_batch4000_mb128_epochs16_episodes200_entropy0.20_seed42"
+    """
+    def format_value(val):
+        if isinstance(val, (int, float)):
+            if isinstance(val, float) and (val < 0.001 or val >= 1000):
+                return f"{val:.0e}".replace('e-0', 'e-').replace('e+0', 'e+')
+            elif isinstance(val, float):
+                return f"{val:.3f}".rstrip('0').rstrip('.')
+            else:
+                return str(val)
+        return str(val)
+    
+    parts = []
+    if 'learning_rate' in params:
+        parts.append(f"lr{format_value(params['learning_rate'])}")
+    if 'gamma' in params:
+        parts.append(f"gamma{format_value(params['gamma'])}")
+    if 'train_batch_size' in params:
+        parts.append(f"batch{params['train_batch_size']}")
+    if 'sgd_minibatch_size' in params:
+        parts.append(f"mb{params['sgd_minibatch_size']}")
+    if 'update_epochs' in params:
+        parts.append(f"epochs{params['update_epochs']}")
+    elif 'num_epochs' in params:
+        parts.append(f"epochs{params['num_epochs']}")
+    if 'num_episodes' in params:
+        parts.append(f"episodes{params['num_episodes']}")
+    if 'entropy_coeff' in params:
+        parts.append(f"entropy{format_value(params['entropy_coeff'])}")
+    if 'seed' in params:
+        parts.append(f"seed{params['seed']}")
+    
+    return "_".join(parts)
+
 # ----------------------------------------------------------------------
 # CONFIGURAÇÕES DO AMBIENTE E PARÂMETROS
 # ----------------------------------------------------------------------
@@ -215,13 +257,13 @@ ENVIRONMENT_CONFIG = {
 }
 
 param_grid = {
-    'learning_rate': [3e-4, 1e-3], 
-    'gamma': [0.90, 0.95, 0.995],
+    'learning_rate': [1e-3], 
+    'gamma': [0.995],  # Fator de desconto deve estar entre 0 e 1
     'train_batch_size': [4000], 
     'sgd_minibatch_size': [128],
-    'update_epochs': [4, 8, 16], 
-    'num_episodes': [100, 200, 400], 
-    'entropy_coeff': [0.15, 0.20, 0.25],
+    'update_epochs': [16], 
+    'num_episodes': [50], 
+    'entropy_coeff': [0.20, 0.25],
     'seed': [42],
 }
 
@@ -269,13 +311,14 @@ if __name__ == "__main__":
     
     combinations = generate_hyperparameter_combinations(param_grid)
     
-    # Criar pasta para salvar modelos e resultados do Ray
-    MODEL_SAVE_DIR = "models"
-    RAY_RESULTS_DIR = os.path.join(_SCRIPT_DIR, "ray_results")
-    os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
-    os.makedirs(RAY_RESULTS_DIR, exist_ok=True)
-    print(f"Modelos serão salvos em: {MODEL_SAVE_DIR}")
-    print(f"Resultados do Ray serão salvos em: {RAY_RESULTS_DIR}\n")
+    # Criar timestamp único para esta sessão de treinamento
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    TIMESTAMP_DIR = f"PPO_Marl_{timestamp}"
+    
+    # Criar pasta para salvar resultados do Ray
+    RAY_RESULTS_BASE_DIR = os.path.join(_SCRIPT_DIR, "ray_results", TIMESTAMP_DIR)
+    os.makedirs(RAY_RESULTS_BASE_DIR, exist_ok=True)
+    print(f"Resultados do Ray serão salvos em: {RAY_RESULTS_BASE_DIR}\n")
     
     start_time_total = time.time()
 
@@ -346,21 +389,36 @@ if __name__ == "__main__":
 
         # 7. Execução do Treinamento
         try:
+            # Gerar string de parâmetros para o diretório
+            params_for_dir = params_original.copy()
+            params_for_dir['train_batch_size'] = train_batch_size
+            params_for_dir['sgd_minibatch_size'] = sgd_minibatch_size
+            params_for_dir['update_epochs'] = num_epochs
+            params_str = generate_params_string(params_for_dir)
+            
+            # Adicionar prefixo PPO_Marl_ ao nome do diretório
+            params_dir_name = f"PPO_Marl_{params_str}"
+            
             # Usar storage_path ao invés de local_dir (deprecado)
+            # Usar o nome do diretório de parâmetros como name do experimento
+            # Isso faz com que o Ray Tune crie: RAY_RESULTS_BASE_DIR/params_dir_name/PPO_overcooked_marl_parallel_.../
+            # Sem nível intermediário adicional
             analysis = tune.run(
-                "PPO", 
-                name=f"PPO_Marl_Config_{i+1:02d}",
+                "PPO",
+                name=params_dir_name,  # Usar nome do diretório de parâmetros como name do experimento
                 stop={"timesteps_total": timesteps_total},
                 config=config_dict,
                 checkpoint_freq=10,
                 checkpoint_at_end=True,
                 verbose=1,
-                storage_path=RAY_RESULTS_DIR,  # Usar storage_path ao invés de local_dir
+                storage_path=RAY_RESULTS_BASE_DIR,  # Usar diretório base (timestamp)
             )
             
-            trial = analysis.trials[0]
+            # O diretório do experimento será criado pelo Ray em: RAY_RESULTS_BASE_DIR/params_dir_name/
+            params_dir = os.path.join(RAY_RESULTS_BASE_DIR, params_dir_name)
             
             trial = analysis.trials[0]
+            
             # A métrica está em env_runners (dicionário aninhado em trial.last_result)
             avg_reward_last = 0.0
             
@@ -470,62 +528,29 @@ if __name__ == "__main__":
                         except Exception as e:
                             print(f"DEBUG: Erro ao buscar checkpoint no diretório: {e}")
                 
-                # Se ainda não encontrou, buscar na pasta local ray_results
+                # Se ainda não encontrou, buscar na pasta local ray_results com nova estrutura
                 if not checkpoint_path or not os.path.exists(checkpoint_path):
-                    if os.path.exists(RAY_RESULTS_DIR):
-                        # Procurar pelo nome do experiment
-                        exp_name = f"PPO_Marl_Config_{i+1:02d}"
-                        exp_dir = os.path.join(RAY_RESULTS_DIR, exp_name)
-                        if os.path.exists(exp_dir):
-                            # Procurar em todos os subdiretórios
-                            for root, dirs, files in os.walk(exp_dir):
-                                for d in dirs:
-                                    if d.startswith('checkpoint_'):
-                                        potential_path = os.path.join(root, d)
-                                        if os.path.exists(potential_path):
-                                            checkpoint_path = potential_path
-                                            print(f"DEBUG: Checkpoint encontrado em ray_results local: {checkpoint_path}")
-                                            break
-                                if checkpoint_path and os.path.exists(checkpoint_path):
-                                    break
+                    if os.path.exists(params_dir):
+                        # Procurar diretamente no diretório de parâmetros (sem nível intermediário)
+                        for root, dirs, files in os.walk(params_dir):
+                            for d in dirs:
+                                if d.startswith('checkpoint_'):
+                                    potential_path = os.path.join(root, d)
+                                    if os.path.exists(potential_path):
+                                        checkpoint_path = potential_path
+                                        print(f"DEBUG: Checkpoint encontrado em ray_results local: {checkpoint_path}")
+                                        break
+                            if checkpoint_path and os.path.exists(checkpoint_path):
+                                break
             
-            # Copiar checkpoint para pasta models
+            # Salvar informações do modelo em JSON no diretório do experimento
             if checkpoint_path and os.path.exists(checkpoint_path):
-                # Criar nome único para o modelo
                 config_name = f"PPO_Config_{i+1:02d}"
-                params_str = (
-                    f"lr{config['learning_rate']:.0e}_"
-                    f"gamma{config['gamma']}_"
-                    f"batch{train_batch_size}_"
-                    f"mb{sgd_minibatch_size}_"
-                    f"epochs{num_epochs}_"
-                    f"entropy{entropy_coeff:.3f}_"
-                    f"reward{avg_reward_last:.2f}"
-                )
                 
-                # Nome do diretório do modelo
-                model_dir_name = f"{config_name}_{params_str}"
-                model_dir_path = os.path.join(MODEL_SAVE_DIR, model_dir_name)
-                
-                # Copiar checkpoint inteiro para a pasta models
-                if os.path.isdir(checkpoint_path):
-                    # Se checkpoint_path é um diretório, copiar todo o diretório
-                    if os.path.exists(model_dir_path):
-                        shutil.rmtree(model_dir_path)
-                    shutil.copytree(checkpoint_path, model_dir_path)
-                    saved_checkpoint_path = model_dir_path
-                else:
-                    # Se checkpoint_path é um arquivo, copiar para a pasta models
-                    os.makedirs(model_dir_path, exist_ok=True)
-                    checkpoint_file = os.path.join(model_dir_path, "checkpoint")
-                    shutil.copy2(checkpoint_path, checkpoint_file)
-                    saved_checkpoint_path = checkpoint_file
-                
-                # Salvar informações do modelo em JSON
+                # Salvar informações do modelo em JSON no diretório do experimento
                 model_info = {
                     'config_name': config_name,
-                    'checkpoint_path': saved_checkpoint_path,
-                    'original_checkpoint_path': checkpoint_path,
+                    'checkpoint_path': checkpoint_path,
                     'params': convert_to_serializable(params_original.copy()),
                     'avg_reward': float(avg_reward_last),
                     'learning_curves': learning_curves_data,
@@ -541,11 +566,14 @@ if __name__ == "__main__":
                     }
                 }
                 
-                model_info_path = os.path.join(model_dir_path, "model_info.json")
+                # Salvar model_info.json no diretório do experimento (params_dir)
+                # Garantir que o diretório existe (foi criado pelo Ray Tune)
+                os.makedirs(params_dir, exist_ok=True)
+                model_info_path = os.path.join(params_dir, "model_info.json")
                 with open(model_info_path, 'w') as f:
                     json.dump(model_info, f, indent=2)
                 
-                print(f"Config {i+1}/{len(combinations)}: reward={avg_reward_last:.2f} | Modelo salvo em: {model_dir_path}")
+                print(f"Config {i+1}/{len(combinations)}: reward={avg_reward_last:.2f} | Checkpoint em: {checkpoint_path}")
             else:
                 print(f"Config {i+1}/{len(combinations)}: reward={avg_reward_last:.2f} | Checkpoint não encontrado")
 
@@ -559,7 +587,7 @@ if __name__ == "__main__":
     print("\n" + "="*70)
     print("TREINAMENTO CONCLUÍDO (IDPPO com CNN)")
     print(f"Total time: {training_time_total/60:.1f} min")
-    print(f"Modelos salvos em: {MODEL_SAVE_DIR}")
+    print(f"Resultados salvos em: {RAY_RESULTS_BASE_DIR}")
     print("="*70)
     
     # 8. Shutdown Ray
