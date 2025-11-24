@@ -100,12 +100,12 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
     print("  • Multiple recipe completion (3 different salads)")
     print("="*80 + "\n")
     
-    env = OvercookedMARL(render_mode=render_mode, map_path="overcooked_marl_env/map/maps/tutorial.txt", verbose=True)
+    env = OvercookedMARL(render_mode=render_mode, map_path="tutorial.txt", verbose=True)
     obs, info = env.reset()
     
     # Render initial state
     env.render()
-        time.sleep(0.5 if render_mode == "human" else 0.5)
+    time.sleep(0.5 if render_mode == "human" else 0.5)
     
     # Actions: 0=Up, 1=Down, 2=Left, 3=Right, 4=Interact
     # Agent 0 starts at (10, 3)
@@ -527,27 +527,35 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
             "agent_1": 1
         }),
         ("text", {
+			"agent_0": 3,
             "agent_1": 1
         }),
         ("text", {
+			"agent_0": 3,
             "agent_1": 4
         }),
         ("text", {
+			"agent_0": 3,
             "agent_1": 2
         }),
         ("text", {
+			"agent_0": 3,
             "agent_1": 0
         }),
         ("text", {
+			"agent_0": 3,
             "agent_1": 0
         }),
         ("text", {
+			"agent_0": 3,
             "agent_1": 4
         }),
         ("text", {
+			"agent_0": 3,
             "agent_1": 2
         }),
         ("text", {
+			"agent_0": 1,
             "agent_1": 0
         }),
         ("text", {
@@ -574,6 +582,358 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
         ("text", {
             "agent_1": 4
         }),
+		("text", {
+            "agent_1": 3
+        }),
+		("text", {
+            "agent_1": 3
+        }),
+		("text", {
+            "agent_1": 3
+        }),
+		("text", {
+            "agent_1": 3
+        }),
+		("text", {
+            "agent_1": 1
+        }),
+		("text", {
+            "agent_1": 4
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 1,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 1,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 1,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 1,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 1,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 1,
+            "agent_1": 2
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 2,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 3
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 0
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 3,
+            "agent_1": 1
+        }),
+		("text", {
+			"agent_0": 1,
+            "agent_1": 4
+        }),
+		("text", {
+			"agent_0": 4,
+            "agent_1": 2
+        }),
+		("text", {
+            "agent_1": 2
+        }),
+		("text", {
+            "agent_1": 2
+        }),
+		("text", {
+            "agent_1": 1
+        }),
+		("text", {
+            "agent_1": 4
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 4
+        }),
+		("text", {
+            "agent_1": 3
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 4
+        }),
+		("text", {
+            "agent_1": 2
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 4
+        }),
+		("text", {
+            "agent_1": 3
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 4
+        }),
+		("text", {
+            "agent_1": 2
+        }),
+		("text", {
+            "agent_1": 0
+        }),
+		("text", {
+            "agent_1": 4
+        })
 
 
     ]
@@ -620,7 +980,8 @@ def test_tutorial_complete(render_mode="human", log_to_file=True):
         time.sleep(0.2 if render_mode == "human" else 0.15)
         
         # Check if all recipes completed
-        if remaining == 4:  # Started with 7, need to deliver 3
+        # dishes_pending starts at 5, so after delivering 3 recipes it should be 2
+        if delivered >= 3:  # Delivered all 3 required recipes
             print("\n" + "="*80)
             print("*** ALL RECIPES DELIVERED SUCCESSFULLY! ***")
             print("="*80)

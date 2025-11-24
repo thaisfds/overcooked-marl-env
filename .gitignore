@@ -21,4 +21,5 @@ models
 results
 ppo_overcooked_tensorboard
 ray_results
+ray_results.backup
 BackupModels

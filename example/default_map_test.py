@@ -92,13 +92,14 @@ def test_cooperative_salad_parallel(render_mode="human", log_to_file=True):
     print("  • PHASE 4: Final pickup and delivery")
     print("="*70 + "\n")
     
+    # Uses default_map.txt (no map_path specified - env uses default)
     env = OvercookedMARL(render_mode=render_mode, verbose=True)
     obs, info = env.reset()
     
     # Render initial state
     env.render()
-        time.sleep(0.5 if render_mode == "human" else 0.5)
-    
+    time.sleep(0.5 if render_mode == "human" else 0.5)
+
     # Actions: 0=Up, 1=Down, 2=Left, 3=Right, 4=Interact
     # Agent 0 starts at (2,1)
     # Agent 1 starts at (2,3)

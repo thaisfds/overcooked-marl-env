@@ -70,8 +70,8 @@ DIRECTION_NAMES = {
 # Default number of agents
 DEFAULT_NUM_AGENTS = 2
 
-# Maximum episode steps (aumentado para dar mais tempo de aprendizado e completar sequências)
-MAX_EPISODE_STEPS = 1200  # Aumentado de 800 → 1200 para permitir sequências completas
+# Maximum episode steps
+MAX_EPISODE_STEPS = 800
 
 # Default number of dishes to complete
 DEFAULT_DISHES_PENDING = 3

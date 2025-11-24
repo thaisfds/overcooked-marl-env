@@ -244,16 +244,15 @@ def generate_params_string(params: Dict[str, Any]) -> str:
 # CONFIGURAÇÕES DO AMBIENTE E PARÂMETROS
 # ----------------------------------------------------------------------
 
-# Calcular caminho do mapa (simple_map.txt) - funciona tanto quando executado quanto quando importado
+# Calcular diretório do script para salvar resultados do Ray
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_MAP_PATH_ABS = os.path.join(_SCRIPT_DIR, "overcooked_marl_env", "map", "maps", "default_map.txt")
 
 ENVIRONMENT_CONFIG = {
-    'map_path': _MAP_PATH_ABS,  # Usar simple_map.txt por padrão
+    'map_path': 'default_map.txt',  # Nome do mapa - o env resolve o caminho automaticamente
     'num_fixed_agents': 2, 
     'render_mode': None,
     'verbose': False,
-    'max_episode_steps': 1200,
+    'max_episode_steps': 800,
 }
 
 param_grid = {
@@ -263,7 +262,7 @@ param_grid = {
     'sgd_minibatch_size': [128],
     'update_epochs': [8], 
     'num_episodes': [400], 
-    'entropy_coeff': [0.15, 0.20],
+    'entropy_coeff': [0.15],
     'seed': [42],
 }
 
@@ -282,14 +281,8 @@ def env_creator(env_config=None):
 
 if __name__ == "__main__":
     
-    # O caminho do mapa já está configurado em ENVIRONMENT_CONFIG acima
-    # Verificar se o arquivo existe
-    if not os.path.exists(ENVIRONMENT_CONFIG['map_path']):
-        print(f"AVISO: Mapa não encontrado em {ENVIRONMENT_CONFIG['map_path']}")
-        print(f"Tentando usar caminho relativo...")
-        # Fallback para caminho relativo
-        ENVIRONMENT_CONFIG['map_path'] = os.path.join("overcooked_marl_env", "map", "maps", "simple_map.txt")
-    
+    # O nome do mapa está configurado em ENVIRONMENT_CONFIG acima
+    # O env resolve o caminho automaticamente para overcooked_marl_env/map/maps/
     print(f"Mapa configurado: {ENVIRONMENT_CONFIG['map_path']}")
     
     ray.init(ignore_reinit_error=True)

@@ -34,10 +34,11 @@ class OvercookedMARL(ParallelEnv):
     # Following PettingZoo conventions: https://pettingzoo.farama.org/
     # =================================================================
 
-    def __init__(self, render_mode=None, map_path="maps/default_map.txt", num_fixed_agents=2, verbose=False):
+    def __init__(self, render_mode=None, map_path=None, num_fixed_agents=2, verbose=False):
         super().__init__()
         
-        self.map_path = map_path 
+        # Resolve map path: if None or just filename, construct full path
+        self.map_path = self._resolve_map_path(map_path)
         self.num_fixed_agents = num_fixed_agents
         self.verbose = verbose
         
@@ -319,6 +320,58 @@ class OvercookedMARL(ParallelEnv):
     # =================================================================
     # PRIVATE HELPER METHODS
     # =================================================================
+
+    def _resolve_map_path(self, map_path):
+        """
+        Resolve map path from map name or full path.
+        
+        Args:
+            map_path: Can be:
+                - None or empty: uses default_map.txt
+                - Just filename (e.g., "tutorial.txt"): constructs path to overcooked_marl_env/map/maps/
+                - Full path (absolute or relative): uses as-is for backward compatibility
+        
+        Returns:
+            str: Absolute path to map file
+        """
+        # If None or empty, use default map
+        if not map_path or map_path.strip() == "":
+            map_path = "default_map.txt"
+        
+        # If already an absolute path, use as-is
+        if os.path.isabs(map_path):
+            return map_path
+        
+        # If contains path separators (relative path), try to use as-is first
+        # Otherwise assume it's just a filename
+        if os.sep in map_path or '/' in map_path or '\\' in map_path:
+            # It's a relative path, try to resolve it
+            abs_path = os.path.abspath(map_path)
+            if os.path.exists(abs_path):
+                return abs_path
+            # If doesn't exist, fall through to construct from maps/ directory
+        
+        # Assume it's just a filename, construct path to maps/ directory
+        # Try multiple possible locations (same logic as MapLoader)
+        possible_base_paths = [
+            # Relative to this file (overcooked_marl_env/env.py)
+            os.path.join(os.path.dirname(__file__), 'map', 'maps'),
+            # Relative to package root
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), 'map', 'maps'),
+            # From workspace root
+            os.path.join('overcooked_marl_env', 'map', 'maps'),
+        ]
+        
+        for base_path in possible_base_paths:
+            full_path = os.path.join(base_path, map_path)
+            abs_path = os.path.abspath(full_path)
+            if os.path.exists(abs_path):
+                return abs_path
+        
+        # If not found, return the constructed path anyway (will raise error later)
+        # Use the first possible path as default
+        default_path = os.path.join(possible_base_paths[0], map_path)
+        return os.path.abspath(default_path)
 
     def _load_map_from_file(self, map_path):
         """
