@@ -92,88 +92,6 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
 
 
 # ----------------------------------------------------------------------
-# MODELO CNN CUSTOMIZADO PARA PPO (Opção 2 - Fallback)
-# ----------------------------------------------------------------------
-
-class CNNPPOModel(TorchModelV2, nn.Module):
-    """Custom CNN model for PPO to process spatial observations (Legacy API)."""
-    
-    def __init__(
-        self,
-        obs_space: gym.spaces.Box,
-        action_space: gym.spaces.Discrete,
-        num_outputs: int,
-        model_config: Dict,
-        name: str,
-        **kw
-    ):
-        nn.Module.__init__(self)
-        TorchModelV2.__init__(
-            self, obs_space, action_space, num_outputs, model_config, name, **kw
-        )
-        
-        # Extract observation shape (H, W, C)
-        h, w, c = obs_space.shape
-        
-        # CNN layers similar to ActorCritic in ppo_overcooked.py
-        self.cnn = nn.Sequential(
-            nn.Conv2d(c, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
-            nn.ReLU(),
-            nn.Flatten(),
-        )
-        
-        # Calculate flattened size
-        with torch.no_grad():
-            sample = torch.zeros(1, c, h, w)
-            n_flatten = self.cnn(sample).shape[1]
-        
-        # Fully connected layers
-        self.shared = nn.Sequential(
-            nn.Linear(n_flatten, 128),
-            nn.ReLU(),
-        )
-        
-        # Output layer for action logits
-        self.action_head = nn.Linear(128, num_outputs)
-        
-        # Value function head
-        self.value_head = nn.Linear(128, 1)
-    
-    def forward(self, input_dict, state, seq_lens):
-        """Forward pass through the network."""
-        obs = input_dict["obs"]
-        
-        # Convert from (batch, H, W, C) to (batch, C, H, W)
-        if len(obs.shape) == 4:
-            obs = obs.permute(0, 3, 1, 2)
-        elif len(obs.shape) == 3:
-            obs = obs.permute(2, 0, 1).unsqueeze(0)
-        
-        # Normalize to [0, 1]
-        obs = obs.float() / 255.0
-        
-        # Forward through CNN
-        features = self.cnn(obs)
-        features = self.shared(features)
-        
-        # Store features for value function
-        self._features = features
-        
-        # Action logits
-        logits = self.action_head(features)
-        
-        return logits, state
-    
-    def value_function(self):
-        """Return the value function output."""
-        return self.value_head(self._features).squeeze(1)
-
-
-# ----------------------------------------------------------------------
 # FUNÇÕES UTILITÁRIAS
 # ----------------------------------------------------------------------
 
@@ -256,13 +174,13 @@ ENVIRONMENT_CONFIG = {
 }
 
 param_grid = {
-    'learning_rate': [3e-4], 
-    'gamma': [0.90],
+    'learning_rate': [3e-4, 1e-3], 
+    'gamma': [0.90, 0.95],
     'train_batch_size': [4000], 
     'sgd_minibatch_size': [128],
-    'update_epochs': [8], 
-    'num_episodes': [400], 
-    'entropy_coeff': [0.15],
+    'update_epochs': [8, 16], 
+    'num_episodes': [300, 400], 
+    'entropy_coeff': [0.01, 0.15, 0.20],
     'seed': [42],
 }
 
@@ -286,9 +204,6 @@ if __name__ == "__main__":
     print(f"Mapa configurado: {ENVIRONMENT_CONFIG['map_path']}")
     
     ray.init(ignore_reinit_error=True)
-    
-    # Registrar modelo customizado (Opção 2 - Fallback)
-    ModelCatalog.register_custom_model("cnn_ppo_model", CNNPPOModel)
     
     env_name = "overcooked_marl_parallel"
     # Usar wrapper para converter ParallelEnv em MultiAgentEnv do RLLib
@@ -351,9 +266,6 @@ if __name__ == "__main__":
                     ],
                     # Adicionamos camadas densas para garantir a passagem correta
                     "fcnet_hiddens": [128, 128]
-                    
-                    # OPÇÃO 2: Se Opção 1 não funcionar, descomente abaixo e comente acima
-                    # "custom_model": "cnn_ppo_model",
                 }
             )
             .env_runners( 
