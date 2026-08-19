@@ -11,7 +11,7 @@ RENDER_CONFIG = {
     'cell_size': 60,              # Size of each grid cell in pixels
     
     # HUD (Heads-Up Display) layout
-    'hud_height': 150,            # Height reserved for HUD below grid
+    'hud_height': 190,            # Height reserved for HUD below grid
     'hud_padding': 20,            # Padding around HUD and grid
     'hud_line_height': 25,        # Height of each line in HUD
     'hud_min_width': 800,         # Minimum window width for HUD text
@@ -57,15 +57,15 @@ RENDER_CONFIG = {
     'grid_border_width': 1,       # Width of cell borders
     'ascii_grid_padding': 2,      # Padding around ASCII grid (characters)
     
-    # Colors
-    'background_color': (200, 200, 200),    # Light gray background
-    'border_color': (100, 100, 100),        # Grid cell borders
+    # Colors (Cappuccino Palette)
+    'background_color': (224, 211, 196),    # Warm cappuccino foam beige
+    'border_color': (180, 162, 145),        # Crema outline brown
     'agent_color': (0, 0, 0),               # Black agents
     'agent_border_color': (50, 50, 50),     # Agent border
     'agent_number_color': (255, 255, 255),  # White agent numbers
     'orientation_color': (255, 255, 255),   # White orientation indicator
-    'plate_color': (250, 250, 250),         # White plate
-    'plate_border_color': (100, 100, 100),  # Gray plate border
+    'plate_color': (255, 253, 250),         # Milk white plate
+    'plate_border_color': (200, 180, 160),  # Soft cream plate border
     
     # Text colors
     'text_black': (0, 0, 0),                # Black text

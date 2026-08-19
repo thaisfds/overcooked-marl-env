@@ -70,8 +70,11 @@ DIRECTION_NAMES = {
 # Default number of agents
 DEFAULT_NUM_AGENTS = 2
 
-# Maximum episode steps
-MAX_EPISODE_STEPS = 800
+# Number of steps per second in real-time execution / play
+STEPS_PER_SECOND = 8
+
+# Maximum episode steps (1440 steps = 180 seconds = 3 minutes at 8s/step)
+MAX_EPISODE_STEPS = 1440
 
 # Default number of dishes to complete
 DEFAULT_DISHES_PENDING = 3

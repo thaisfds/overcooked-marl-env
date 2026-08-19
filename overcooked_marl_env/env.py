@@ -188,8 +188,8 @@ class OvercookedMARL(ParallelEnv):
         for agent_id, pos in final_positions.items():
             self.state["agent_pos"][agent_id] = pos
         
-        # Movement debugging (when verbose=True)
-        if self.verbose:
+        # Movement debugging (when verbose=True and actions taken)
+        if self.verbose and actions:
             print("\n--- Movement Information ---")
             for agent_id, action in actions.items():
                 if action < 4:  # Movement action

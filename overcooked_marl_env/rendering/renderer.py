@@ -21,7 +21,7 @@ from ..core.items import (
     get_item_char,
     INGREDIENTS
 )
-from ..core.constants import DIRECTION_NAMES
+from ..core.constants import DIRECTION_NAMES, MAX_EPISODE_STEPS, STEPS_PER_SECOND
 from .render_config import RENDER_CONFIG
 
 
@@ -185,10 +185,32 @@ class Renderer:
         # Draw HUD (Heads-Up Display) with game information
         self._draw_hud(game_state, agents, recipe_order)
         
-        # Update display
-        pygame.event.pump()
-        pygame.display.flip()
-        self.clock.tick(RENDER_CONFIG['fps'])
+        # Scale and blit virtual_screen (self.window) to actual display window (self.display_window)
+        if self.render_mode == "human" and hasattr(self, 'display_window') and self.display_window is not None:
+            # Fill the display background with dark coffee color
+            self.display_window.fill((75, 54, 42))
+            
+            # Calculate aspect ratio scaling
+            ratio_w = self.window_width / self.virtual_width
+            ratio_h = self.window_height / self.virtual_height
+            scale = min(ratio_w, ratio_h)
+            
+            new_width = int(self.virtual_width * scale)
+            new_height = int(self.virtual_height * scale)
+            
+            # Scale the virtual screen surface
+            scaled_surf = pygame.transform.smoothscale(self.window, (new_width, new_height))
+            
+            # Center the scaled surface in the actual display window
+            offset_x = (self.window_width - new_width) // 2
+            offset_y = (self.window_height - new_height) // 2
+            
+            self.display_window.blit(scaled_surf, (offset_x, offset_y))
+            
+            # Update display
+            pygame.event.pump()
+            pygame.display.flip()
+            self.clock.tick(RENDER_CONFIG['fps'])
         
         # Return RGB array
         return np.transpose(
@@ -197,106 +219,202 @@ class Renderer:
     
     def _draw_hud(self, game_state: Dict, agents: list, recipe_order: list):
         """
-        Draw Heads-Up Display with game information below the grid.
-        
-        Args:
-            game_state: Current game state dictionary
-            agents: List of agent IDs
-            recipe_order: List of recipe names in order
+        Draw Heads-Up Display with game information.
+        - Pending orders at the top as cards with ingredient requirements.
+        - Team Score at the top right.
+        - Timer and Delivered recipes in the bottom left.
+        - Chef details in the bottom right side-by-side.
         """
-        # Initialize font if not already done
+        # Initialize fonts if not already done
         if not hasattr(self, 'font'):
             pygame.font.init()
             self.font = pygame.font.Font(None, RENDER_CONFIG['font_size'])
             self.font_small = pygame.font.Font(None, RENDER_CONFIG['font_size_small'])
+            self.font_large = pygame.font.Font(None, 36)
+            self.font_small_bold = pygame.font.Font(None, 18)
         
-        # HUD position - below the game grid
-        map_height = (game_state["map_static"].shape[0] * self.cell_size)
-        hud_y_start = self.grid_offset_y + map_height + self.hud_padding
-        hud_x = self.hud_padding
-        hud_y = hud_y_start
-        line_height = RENDER_CONFIG['hud_line_height']
+        # Recipes mapping to their respective ingredients
+        RECIPE_INGREDIENTS = {
+            "SIMPLE_SALAD": ["tomato", "lettuce"],
+            "GARDEN_SALAD": ["tomato", "lettuce", "onion"],
+            "FRESH_SALAD": ["tomato", "lettuce", "cucumber"],
+            "ONION_SOUP": ["onion", "onion", "onion"],
+            "ONION_SALAD": ["onion", "lettuce"]
+        }
         
-        # Current step
-        current_step = game_state.get("time_steps", 0)
-        step_text = self.font.render(f"Step: {current_step}", True, RENDER_CONFIG['text_black'])
-        self.window.blit(step_text, (hud_x, hud_y))
-        hud_y += line_height + RENDER_CONFIG['hud_extra_spacing']
+        # Colors for the ingredient visual badges
+        ING_COLORS = {
+            "tomato": ((220, 70, 60), "T"),
+            "lettuce": ((90, 180, 90), "L"),
+            "cucumber": ((40, 120, 80), "C"),
+            "onion": ((190, 150, 100), "O")
+        }
         
-        # Agent information - one line per agent with well-separated fields
-        for agent_id in sorted(agents):
-            # Get agent data
-            carrying_instance_id = game_state.get("agent_holding_instance", {}).get(agent_id, None)
-            
-            # Get item display
-            if carrying_instance_id is not None and carrying_instance_id in game_state.get("item_instances", {}):
-                carrying_item = game_state["item_instances"][carrying_instance_id]
-                inventory = get_ingredient_display_name(carrying_item)
-            else:
-                inventory = "Empty"
-            
-            # Get rewards
-            step_reward = game_state.get("last_step_rewards", {}).get(agent_id, 0.0)
-            total_reward = game_state.get("accumulated_rewards", {}).get(agent_id, 0.0)
-            
-            # Format with well-defined spacing for each field
-            agent_num = self._get_agent_number(agent_id)
-            
-            # Agent label
-            agent_label = f"Agent {agent_num}:"
-            label_surface = self.font_small.render(agent_label, True, RENDER_CONFIG['text_black'])
-            self.window.blit(label_surface, (hud_x, hud_y))
-            
-            # Step reward field
-            step_text = f"Step: {step_reward:+6.2f}"
-            step_surface = self.font_small.render(step_text, True, RENDER_CONFIG['text_step_reward'])
-            self.window.blit(step_surface, (hud_x + RENDER_CONFIG['hud_step_reward_x'], hud_y))
-            
-            # Total reward field
-            total_text = f"Total: {total_reward:+7.2f}"
-            total_surface = self.font_small.render(total_text, True, RENDER_CONFIG['text_total_reward'])
-            self.window.blit(total_surface, (hud_x + RENDER_CONFIG['hud_total_reward_x'], hud_y))
-            
-            # Inventory field
-            inv_text = f"Inv: {inventory}"
-            inv_surface = self.font_small.render(inv_text, True, RENDER_CONFIG['text_inventory'])
-            self.window.blit(inv_surface, (hud_x + RENDER_CONFIG['hud_inventory_x'], hud_y))
-            
-            hud_y += line_height
-        
-        hud_y += RENDER_CONFIG['hud_extra_spacing']
-        
-        # Orders - show only pending orders (not yet delivered)
+        # Get pending orders from game state
         delivered = game_state.get("delivered_recipes", [])
         pending_orders = self._calculate_pending_orders(recipe_order, delivered)
         
-        # Display pending orders
-        if pending_orders:
-            orders_str = ", ".join(pending_orders)
-            orders_text = self.font_small.render(f"Pending Orders: {orders_str}", True, RENDER_CONFIG['text_black'])
-        else:
-            orders_text = self.font_small.render("Pending Orders: All completed!", True, RENDER_CONFIG['text_success'])
+        # ===================================================================
+        # 1. TOP HUD - Active Recipes and Team Score
+        # ===================================================================
         
-        self.window.blit(orders_text, (hud_x, hud_y))
-        hud_y += line_height
+        # 1.1 Draw Recipe Cards on the left
+        card_x_start = self.hud_padding
+        card_y = 12
+        card_width = 110
+        card_height = 50
+        card_spacing = 8
         
-        # Delivered - single line
-        delivered = game_state.get("delivered_recipes", [])
+        for idx, recipe in enumerate(pending_orders[:5]):
+            card_x = card_x_start + idx * (card_width + card_spacing)
+            
+            # Card background (Warm espresso card)
+            pygame.draw.rect(self.window, (95, 72, 58), (card_x, card_y, card_width, card_height), border_radius=6)
+            pygame.draw.rect(self.window, (186, 158, 138), (card_x, card_y, card_width, card_height), width=1, border_radius=6)
+            
+            # Recipe Display Name
+            display_name = recipe.replace("_", " ").title()
+            if len(display_name) > 13:
+                display_name = display_name[:11] + ".."
+            name_surf = self.font_small_bold.render(display_name, True, (255, 250, 240))
+            self.window.blit(name_surf, (card_x + 6, card_y + 4))
+            
+            # Recipe Ingredients (small circular badges)
+            ingredients = RECIPE_INGREDIENTS.get(recipe, [])
+            for ing_idx, ing in enumerate(ingredients):
+                color, char = ING_COLORS.get(ing, ((150, 150, 150), "?"))
+                badge_x = card_x + 8 + ing_idx * 22
+                badge_y = card_y + 24
+                pygame.draw.circle(self.window, color, (badge_x + 7, badge_y + 8), 8)
+                char_surf = self.font_small_bold.render(char, True, (255, 255, 255))
+                self.window.blit(char_surf, (badge_x + 4, badge_y + 2))
+                
+        # 1.2 Draw Team Score on the right
+        score_card_width = 110
+        score_card_height = 50
+        score_card_x = self.virtual_width - self.hud_padding - score_card_width
+        
+        # Draw Score Card background (Warm Caramel)
+        pygame.draw.rect(self.window, (115, 86, 68), (score_card_x, card_y, score_card_width, score_card_height), border_radius=6)
+        pygame.draw.rect(self.window, (186, 158, 138), (score_card_x, card_y, score_card_width, score_card_height), width=1, border_radius=6)
+        
+        total_score = sum(game_state.get("accumulated_rewards", {}).values())
+        score_val_surf = self.font_large.render(f"{total_score:g}", True, (255, 215, 0)) # Shiny Gold
+        score_lbl_surf = self.font_small_bold.render("SCORE", True, (240, 220, 205)) # Creamy
+        
+        # Center text horizontally inside the card
+        lbl_x = score_card_x + (score_card_width - score_lbl_surf.get_width()) // 2
+        val_x = score_card_x + (score_card_width - score_val_surf.get_width()) // 2
+        
+        self.window.blit(score_lbl_surf, (lbl_x, card_y + 4))
+        self.window.blit(score_val_surf, (val_x, card_y + 20))
+        
+        # ===================================================================
+        # 2. BOTTOM HUD - Timer, Delivered, and Chef details
+        # ===================================================================
+        
+        map_height = (game_state["map_static"].shape[0] * self.cell_size)
+        hud_y_start = self.grid_offset_y + map_height + self.hud_padding
+        hud_x = self.hud_padding
+        hud_width = self.virtual_width - 2 * self.hud_padding
+        hud_height = self.bottom_hud_height
+        
+        # Draw Background Panel (Sleek Cappuccino Theme Card)
+        pygame.draw.rect(self.window, (75, 54, 42), (hud_x, hud_y_start, hud_width, hud_height), border_radius=12)
+        pygame.draw.rect(self.window, (139, 115, 98), (hud_x, hud_y_start, hud_width, hud_height), width=2, border_radius=12)
+        
+        # 2.1 Timer and Delivered recipes (Bottom Left)
+        left_column_x = hud_x + 20
+        
+        # Time remaining calculation
+        current_step = game_state.get("time_steps", 0)
+        remaining_seconds = max(0, int((MAX_EPISODE_STEPS - current_step) / STEPS_PER_SECOND))
+        minutes = remaining_seconds // 60
+        seconds = remaining_seconds % 60
+        time_str = f"{minutes:02d}:{seconds:02d}"
+        
+        # Timer Display
+        clock_color = (255, 100, 100) if remaining_seconds <= 30 else (255, 245, 230)
+        timer_lbl_surf = self.font_small.render("TIMER", True, (220, 200, 185))
+        timer_surf = self.font_large.render(time_str, True, clock_color)
+        self.window.blit(timer_lbl_surf, (left_column_x, hud_y_start + 12))
+        self.window.blit(timer_surf, (left_column_x, hud_y_start + 28))
+        
+        # Delivered line (continuous line below the timer)
+        delivered_lbl_surf = self.font_small.render("DELIVERED:", True, (220, 200, 185))
+        self.window.blit(delivered_lbl_surf, (left_column_x, hud_y_start + 70))
+        
+        delivered_badges_y = hud_y_start + 68
         if delivered:
-            delivered_str = ", ".join(delivered)
-            delivered_text = self.font_small.render(f"Delivered: {delivered_str}", True, RENDER_CONFIG['text_success'])
+            badge_x = left_column_x + 95
+            for recipe in delivered[-5:]:  # Limit to last 5 to fit layout width
+                recipe_display = recipe.replace("_", " ").title()
+                recipe_txt = self.font_small_bold.render(recipe_display, True, (215, 245, 220))
+                recipe_width = recipe_txt.get_width() + 14
+                pygame.draw.rect(self.window, (86, 125, 100), (badge_x, delivered_badges_y, recipe_width, 18), border_radius=4)
+                self.window.blit(recipe_txt, (badge_x + 7, delivered_badges_y + 1))
+                badge_x += recipe_width + 8
         else:
-            delivered_text = self.font_small.render("Delivered: None", True, RENDER_CONFIG['text_disabled'])
-        self.window.blit(delivered_text, (hud_x, hud_y))
+            none_txt = self.font_small.render("None", True, (160, 140, 130))
+            self.window.blit(none_txt, (left_column_x + 95, delivered_badges_y + 2))
+            
+        # 2.2 Chef Status Cards (Bottom Right - side-by-side)
+        chef_card_width = 175
+        chef_card_height = 85
+        chef_card_spacing = 15
+        
+        right_column_start = self.virtual_width - self.hud_padding - (chef_card_width * 2 + chef_card_spacing)
+        
+        for idx, agent_id in enumerate(sorted(agents)):
+            card_x = right_column_start + idx * (chef_card_width + chef_card_spacing)
+            card_y = hud_y_start + 12
+            
+            # Card background panel (Warm light brown)
+            pygame.draw.rect(self.window, (95, 72, 58), (card_x, card_y, chef_card_width, chef_card_height), border_radius=8)
+            pygame.draw.rect(self.window, (166, 138, 118), (card_x, card_y, chef_card_width, chef_card_height), width=1, border_radius=8)
+            
+            # Agent identity badge (colored circle)
+            agent_num = self._get_agent_number(agent_id)
+            badge_color = (100, 175, 185) if agent_num == 0 else (210, 130, 80) # Cozy Teal or Caramel
+            pygame.draw.circle(self.window, badge_color, (card_x + 15, card_y + 15), 6)
+            
+            # Title
+            title_txt = self.font.render(f"Chef {agent_num}", True, (255, 250, 240))
+            self.window.blit(title_txt, (card_x + 28, card_y + 6))
+            
+            # Rewards
+            step_reward = game_state.get("last_step_rewards", {}).get(agent_id, 0.0)
+            total_reward = game_state.get("accumulated_rewards", {}).get(agent_id, 0.0)
+            
+            # Inventory item name
+            carrying_instance_id = game_state.get("agent_holding_instance", {}).get(agent_id, None)
+            if carrying_instance_id is not None and carrying_instance_id in game_state.get("item_instances", {}):
+                carrying_item = game_state["item_instances"][carrying_instance_id]
+                inventory = get_ingredient_display_name(carrying_item)
+                if len(inventory) > 15:
+                    inventory = inventory[:13] + ".."
+            else:
+                inventory = "Empty"
+                
+            score_txt = self.font_small_bold.render(f"Score: {total_reward:+.1f}", True, (255, 235, 200) if total_reward >= 0 else (255, 150, 150))
+            step_txt = self.font_small_bold.render(f"Step: {step_reward:+.1f}", True, (255, 245, 230))
+            inv_color = (200, 235, 190) if inventory != "Empty" else (220, 200, 185)
+            inv_txt = self.font_small_bold.render(f"Holding: {inventory}", True, inv_color)
+            
+            self.window.blit(score_txt, (card_x + 12, card_y + 30))
+            self.window.blit(step_txt, (card_x + 100, card_y + 30))
+            self.window.blit(inv_txt, (card_x + 12, card_y + 55))
     
     def close(self):
         """Clean up Pygame resources."""
-        if self.window is not None:
+        if (hasattr(self, 'display_window') and self.display_window is not None) or (self.window is not None):
             pygame.display.quit()
             pygame.quit()
-            self.window = None
-            self.clock = None
-            self.should_close = False
+            if hasattr(self, 'display_window'):
+                self.display_window = None
+        self.window = None
+        self.clock = None
+        self.should_close = False
     
     def check_events(self) -> bool:
         """Check pygame events and return False if window should close."""
@@ -345,7 +463,13 @@ class Renderer:
     
     def _print_game_info(self, game_state: Dict, recipe_order: list):
         """Print game state information."""
-        print(f"Step: {game_state['time_steps']}")
+        # Show remaining time formatted as MM:SS based on STEPS_PER_SECOND
+        current_step = game_state.get("time_steps", 0)
+        remaining_seconds = max(0, int((MAX_EPISODE_STEPS - current_step) / STEPS_PER_SECOND))
+        minutes = remaining_seconds // 60
+        seconds = remaining_seconds % 60
+        time_str = f"{minutes:02d}:{seconds:02d}"
+        print(f"Time Remaining: {time_str} (Step: {current_step}/{MAX_EPISODE_STEPS})")
         print(f"Remaining Dishes: {game_state['dishes_pending']}")
         
         # Show orders and delivered
@@ -469,11 +593,15 @@ class Renderer:
         pygame.display.init()
         
         H, W = map_size
-        # Add space for HUD below the grid and padding
-        self.hud_height = RENDER_CONFIG['hud_height']
         self.hud_padding = RENDER_CONFIG['hud_padding']
+        self.top_hud_height = 70
+        self.bottom_hud_height = 110
+        self.hud_height = self.bottom_hud_height
+        
+        # Fixed cell size for the internal virtual surface
+        self.cell_size = 60
         self.grid_offset_x = self.hud_padding
-        self.grid_offset_y = self.hud_padding
+        self.grid_offset_y = self.hud_padding + self.top_hud_height
         
         # Calculate window dimensions - ensure minimum width for HUD text
         grid_width = W * self.cell_size
@@ -481,15 +609,30 @@ class Renderer:
         
         min_width = RENDER_CONFIG['hud_min_width']
         window_width = max(grid_width + 2 * self.hud_padding, min_width)
-        window_height = self.grid_offset_y + grid_height + self.hud_padding + self.hud_height
+        window_height = self.grid_offset_y + grid_height + self.hud_padding + self.bottom_hud_height
         
         # Center the grid horizontally if window is wider than grid
         if window_width > grid_width + 2 * self.hud_padding:
             self.grid_offset_x = (window_width - grid_width) // 2
+            
+        self.virtual_width = window_width
+        self.virtual_height = window_height
         
-        self.window = pygame.display.set_mode((window_width, window_height))
+        # Virtual screen surface where all rendering takes place at fixed 60px cell size
+        self.window = pygame.Surface((self.virtual_width, self.virtual_height))
+        
+        # Actual display window that will be shown to the user and can be resized
+        self.window_width = window_width
+        self.window_height = window_height
+        self.display_window = pygame.display.set_mode((window_width, window_height), pygame.RESIZABLE)
         pygame.display.set_caption("Overcooked MARL")
         self.clock = pygame.time.Clock()
+        
+    def handle_resize(self, width: int, height: int, map_size: Tuple[int, int]):
+        """Handle window resize event by updating the actual display window size."""
+        self.window_width = width
+        self.window_height = height
+        self.display_window = pygame.display.set_mode((width, height), pygame.RESIZABLE)
     
     def _draw_cell(self, x: int, y: int, game_state: Dict):
         """

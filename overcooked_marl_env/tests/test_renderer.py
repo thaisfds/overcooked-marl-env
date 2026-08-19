@@ -93,9 +93,11 @@ class TestRendererRGBMode(unittest.TestCase):
     @patch('pygame.time.Clock')
     @patch('pygame.surfarray.pixels3d')
     @patch('pygame.draw.rect')
+    @patch('pygame.draw.line')
+    @patch('pygame.draw.circle')
     @patch('pygame.event.pump')
     @patch('pygame.display.flip')
-    def test_render_rgb_array_initialization(self, mock_flip, mock_pump, mock_rect,
+    def test_render_rgb_array_initialization(self, mock_flip, mock_pump, mock_circle, mock_line, mock_rect,
                                             mock_pixels, mock_clock, 
                                             mock_set_mode, mock_init, mock_display_init):
         """Test RGB array rendering initializes pygame."""

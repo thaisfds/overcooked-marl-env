@@ -106,16 +106,16 @@ DISH_CHAR = 'p'  # Empty plate character
 
 # Tile definitions: char -> {code, name, color}
 TILES = {
-    ' ': {'code': 0, 'name': "Empty", 'color': (255, 255, 255)},
-    '#': {'code': 1, 'name': "Counter", 'color': (148, 110, 74)},
-    'I': {'code': 2, 'name': "Ingredient Dispenser", 'color': (193, 154, 107)},
-    'C': {'code': 3, 'name': "Chopping Board", 'color': (193, 154, 107)},
-    'F': {'code': 4, 'name': "Fryer", 'color': (200, 200, 200)},  # Not used yet
-    'P': {'code': 5, 'name': "Plate Dispenser", 'color': (100, 149, 237)},
-    'D': {'code': 6, 'name': "Delivery", 'color': (50, 205, 50)},
-    'T': {'code': 7, 'name': "Trash", 'color': (105, 105, 105)},
-    '|': {'code': 8, 'name': "Wall", 'color': (70, 70, 70)},
-    '_': {'code': 9, 'name': "Wall", 'color': (70, 70, 70)},
+    ' ': {'code': 0, 'name': "Empty", 'color': (245, 235, 224)},
+    '#': {'code': 1, 'name': "Counter", 'color': (115, 87, 72)},
+    'I': {'code': 2, 'name': "Ingredient Dispenser", 'color': (143, 111, 95)},
+    'C': {'code': 3, 'name': "Chopping Board", 'color': (196, 160, 137)},
+    'F': {'code': 4, 'name': "Fryer", 'color': (130, 110, 95)},  # Not used yet
+    'P': {'code': 5, 'name': "Plate Dispenser", 'color': (166, 133, 114)},
+    'D': {'code': 6, 'name': "Delivery", 'color': (140, 165, 140)},
+    'T': {'code': 7, 'name': "Trash", 'color': (69, 53, 44)},
+    '|': {'code': 8, 'name': "Wall", 'color': (69, 53, 44)},
+    '_': {'code': 9, 'name': "Wall", 'color': (69, 53, 44)},
 }
 
 class ItemState:

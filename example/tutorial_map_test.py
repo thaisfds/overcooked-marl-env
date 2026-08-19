@@ -11,7 +11,7 @@ MAP STRUCTURE (tutorial.txt): 15x10 grid with borders
   y2:   |  C                    C  |
   y3:   |  #              0     #  |
   y4:   |  C                    C  |
-  y5:   |  #  T  #  #  #  #  #  #  #  #  #  #  |
+  y5:   |  #  T  #  #  #  #     #  #  #  #  #  |
   y6:   |                          |
   y7:   |           1              |
   y8:   |  #  I  I  #  P  #  D  D  #  #  I  #  #  |
