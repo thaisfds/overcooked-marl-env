@@ -62,15 +62,16 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
     
     def step(self, action_dict):
         obs, rewards, terminations, truncations, infos = self.env.step(action_dict)
-        # RLLib requer chave '__all__' nos dicionários de terminations e truncations
-        # '__all__' indica se todos os agentes terminaram
+        # Scale rewards to prevent gradient explosion (NaN/Inf)
+        scaled_rewards = {agent: r * 0.01 for agent, r in rewards.items()}
+        
         all_terminated = all(terminations.get(agent, False) for agent in self.agents)
         all_truncated = all(truncations.get(agent, False) for agent in self.agents)
         
         terminations['__all__'] = all_terminated
         truncations['__all__'] = all_truncated
         
-        return obs, rewards, terminations, truncations, infos
+        return obs, scaled_rewards, terminations, truncations, infos
     
     def render(self):
         return self.env.render()
@@ -348,6 +349,7 @@ if __name__ == "__main__":
                 gamma=config['gamma'],
                 num_epochs=num_epochs,
                 entropy_coeff=entropy_coeff,  # Coeficiente de entropia para aumentar exploração 
+                grad_clip=1.0,  # Clip gradients to prevent explosion (NaN/Inf)
                 model={
                     # OPÇÃO 1: Usar conv_filters corrigido (tentativa inicial)
                     # CORREÇÃO DA CNN: Ajuste para reduzir 7x7 para 1x1 usando stride=2.
