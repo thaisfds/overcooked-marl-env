@@ -4,7 +4,6 @@ Core module for Overcooked MARL.
 This module contains core game logic including:
 - Item management (items.py)
 - Recipe management (recipes.py)
-- Item instance management (item_instance_manager.py)
 - Game constants (constants.py)
 
 Public API Usage:
@@ -45,8 +44,6 @@ from .recipes import (
     get_default_recipe,
 )
 
-# Item instance management exports
-from .item_instance_manager import ItemInstanceManager
 
 # Constants exports (most commonly used)
 from .constants import (
@@ -99,8 +96,6 @@ __all__ = [
     'get_available_recipes',
     'get_default_recipe',
     
-    # Item instance management
-    'ItemInstanceManager',
     
     # Observation constants
     'MAX_PROCESS_STEPS',

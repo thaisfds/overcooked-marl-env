@@ -15,7 +15,6 @@ Responsibilities:
 """
 
 from typing import Dict, Tuple, Optional, Any
-from dataclasses import dataclass
 from ..core.items import (
     ItemType, ItemState,
     can_process, is_ready, advance_processing,
@@ -23,72 +22,7 @@ from ..core.items import (
     get_ingredient_display_name
 )
 from ..core.constants import DEFAULT_CUTS_NEEDED
-
-
-@dataclass
-class RewardValues:
-    """
-    Configuração centralizada de valores de recompensa.
-    
-    Filosofia OTIMIZADA: Guiar o agente para comportamentos produtivos.
-    - Ações básicas (pegar/colocar): recompensa positiva moderada
-    - Ações de transformação (processar/combinar): recompensa MUITO ALTA
-    - Ações de entrega (completar receitas): recompensa MÁXIMA
-    - Recompensas progressivas: guiar sequência correta (pegar → picar → prato → entregar)
-    - Penalidades estratégicas para comportamentos destrutivos
-    """
-    # Ações básicas (progresso inicial)
-    pickup: float = 1.0           # Recompensa básica por pegar item
-    place: float = 1.0            # Recompensa básica por colocar item
-    place_on_chop: float = 20.0   # Recompensa especial para colocar na bancada
-    
-    # Ações de transformação (progresso REAL) - BALANCEADAS
-    process: float = 50.0         # AUMENTADO de 30.0 → 50.0 (cortar é fundamental!)
-    combine: float = 100.0        # AUMENTADO de 75.0 → 100.0 (combinar é MUITO importante!)
-    
-    # Recompensas de entrega (objetivo final) - BALANCEADAS
-    delivery_base: float = 250.0  # AJUSTADO de 300.0 → 250.0 (era 200.0 originalmente)
-    order_bonus_mult: float = 1.0 # Multiplicador de bônus por ordem correta
-    
-    # Recompensas progressivas (reward shaping) - AJUSTADAS para valores mais conservadores
-    progress_pickup_needed: float = 3.0      # AJUSTADO de 5.0 → 3.0 (era 2.0 originalmente)
-    progress_place_on_chop: float = 4.0      # AJUSTADO de 8.0 → 4.0 (era 3.0 originalmente)
-    progress_pickup_ready: float = 3.5       # AJUSTADO de 6.0 → 3.5 (era 2.5 originalmente)
-    progress_combine_ready: float = 12.0     # AJUSTADO de 25.0 → 12.0 (era 10.0 originalmente)
-    progress_pickup_complete_plate: float = 4.0  # AJUSTADO de 10.0 → 4.0 (era 2.0 originalmente)
-    
-    # Recompensas escalonadas por ingrediente adicionado ao prato da receita correta
-    progress_ingredient_added_base: float = 8.0  # AJUSTADO de 15.0 → 8.0 (base para primeiro ingrediente)
-    progress_ingredient_added_increment: float = 3.0  # AJUSTADO de 5.0 → 3.0 (incremento por ingrediente adicional)
-    
-    # Recompensas específicas para Problema 3 (agente não coloca no prato)
-    progress_pickup_plate_with_ready: float = 5.0  # Recompensa alta por pegar prato quando já tem ingrediente pronto
-    progress_ready_to_combine: float = 3.0        # Recompensa quando está pronto para combinar (ingrediente pronto + próximo de prato)
-    progress_partial_plate: float = 2.0            # Recompensa progressiva por prato parcialmente completo
-    
-    # Recompensas de entrega (Problema 1: agente não sabe entregar)
-    delivery_proximity_reward: float = 1.0   # Recompensa por estar próximo da estação de entrega com prato completo
-    delivery_attempt_reward: float = 0.5     # Recompensa por tentar entregar (mesmo que falhe)
-    delivery_distance_max: int = 5           # Distância máxima para recompensa de proximidade
-    
-    # Penalidades por loops (Problema 2: agente fica preso em pegar/picar)
-    repetition_penalty: float = -5.0         # Penalidade por repetir mesma ação muitas vezes
-    accumulation_penalty: float = -3.0        # Penalidade por acumular muitos ingredientes processados sem usar
-    accumulation_threshold: int = 3          # Número de ingredientes processados no chão antes de penalizar
-    
-    # Recompensas de sequência completa
-    sequence_complete_bonus: float = 30.0    # AJUSTADO de 50.0 → 30.0 (era 25.0 originalmente)
-    
-    # Bônus por múltiplas entregas consecutivas - AJUSTADOS para valores mais conservadores
-    delivery_multiplier_2nd: float = 1.1    # AJUSTADO de 1.2 → 1.1 (multiplicador para segunda entrega)
-    delivery_multiplier_3rd: float = 1.2    # AJUSTADO de 1.5 → 1.2 (multiplicador para terceira entrega)
-    delivery_multiplier_4th_plus: float = 1.3  # AJUSTADO de 2.0 → 1.3 (multiplicador para quarta+ entrega)
-    
-    # Penalidades estratégicas
-    invalid: float = 0.0          # ZERADO - sem punição para exploração
-    useless_cycle: float = 0.0    # ZERADO - sem punição para exploração
-    trash_penalty: float = 0.0   # Penalidade por jogar item no lixo
-    counter_clutter_penalty: float = -5.0  # Penalidade por acumular >3 itens em bancadas
+from .reward_shaper import RewardValues, RewardShaper
 
 
 class InteractionHandler:
@@ -117,110 +51,12 @@ class InteractionHandler:
         """
         self.item_manager = item_manager
         self.recipe_manager = recipe_manager
-        self.rewards = rewards or RewardValues()
-    
-    def _calculate_ready_to_combine_reward(
-        self,
-        agent_id: str,
-        carrying_item: Optional[Dict],
-        ground_item: Optional[Dict],
-        game_state: Dict
-    ) -> float:
-        """
-        Calculate reward when agent is ready to combine (has ready ingredient and is near plate, or vice versa).
+        self.reward_shaper = RewardShaper(item_manager, recipe_manager, rewards)
         
-        Args:
-            agent_id: ID of the agent
-            carrying_item: Item the agent is carrying
-            ground_item: Item on the ground
-            game_state: Current game state dictionary
-            
-        Returns:
-            Reward for being ready to combine (0.0 if conditions not met)
-        """
-        # Case 1: Carrying ready ingredient, ground has plate
-        if carrying_item and is_ready(carrying_item) and ground_item:
-            if ground_item.get("type") == ItemType.DISH:
-                return self.rewards.progress_ready_to_combine
-        
-        # Case 2: Carrying plate, ground has ready ingredient
-        if carrying_item and carrying_item.get("type") == ItemType.DISH and ground_item:
-            if is_ready(ground_item):
-                return self.rewards.progress_ready_to_combine
-        
-        # Case 3: Carrying ready ingredient, check if there's a plate nearby (within 2 tiles)
-        if carrying_item and is_ready(carrying_item):
-            agent_pos = game_state["agent_pos"][agent_id]
-            ax, ay = agent_pos
-            
-            ground_instances = game_state.get("ground_instances", {})
-            item_instances = game_state.get("item_instances", {})
-            
-            for (x, y), instance_id in ground_instances.items():
-                distance = abs(ax - x) + abs(ay - y)
-                if distance <= 2:  # Within 2 tiles
-                    item = item_instances.get(instance_id)
-                    if item and item.get("type") == ItemType.DISH:
-                        return self.rewards.progress_ready_to_combine
-        
-        # Case 4: Carrying plate, check if there's a ready ingredient nearby
-        if carrying_item and carrying_item.get("type") == ItemType.DISH:
-            agent_pos = game_state["agent_pos"][agent_id]
-            ax, ay = agent_pos
-            
-            ground_instances = game_state.get("ground_instances", {})
-            item_instances = game_state.get("item_instances", {})
-            
-            for (x, y), instance_id in ground_instances.items():
-                distance = abs(ax - x) + abs(ay - y)
-                if distance <= 2:  # Within 2 tiles
-                    item = item_instances.get(instance_id)
-                    if item and item.get("type") == ItemType.INGREDIENT and is_ready(item):
-                        return self.rewards.progress_ready_to_combine
-        
-        return 0.0
-    
-    def _calculate_delivery_proximity_reward(
-        self,
-        agent_id: str,
-        carrying_item: Optional[Dict],
-        game_state: Dict
-    ) -> float:
-        """
-        Calculate proximity reward if agent is near delivery station with complete plate.
-        
-        Args:
-            agent_id: ID of the agent
-            carrying_item: Item the agent is carrying
-            game_state: Current game state dictionary
-            
-        Returns:
-            Proximity reward (0.0 if conditions not met)
-        """
-        # Must be carrying a plate with ingredients
-        if not carrying_item or carrying_item.get("type") != ItemType.DISH:
-            return 0.0
-        
-        ingredients = carrying_item.get("ingredients", [])
-        if not ingredients:
-            return 0.0
-        
-        # Check if plate has valid recipe (complete plate)
-        is_valid, _, _ = self.recipe_manager.validate_delivery(ingredients)
-        if not is_valid:
-            return 0.0
-        
-        # Calculate distance to delivery station
-        agent_pos = game_state["agent_pos"][agent_id]
-        distance = self._calculate_distance_to_delivery(agent_pos, game_state)
-        
-        # Give reward if within threshold distance
-        if distance <= self.rewards.delivery_distance_max:
-            # Reward decreases with distance
-            proximity_factor = 1.0 - (distance / self.rewards.delivery_distance_max)
-            return self.rewards.delivery_proximity_reward * proximity_factor
-        
-        return 0.0
+    @property
+    def rewards(self) -> RewardValues:
+        """Centralized rewards properties for backward compatibility."""
+        return self.reward_shaper.rewards
     
     def handle_interaction(
         self,
@@ -257,10 +93,10 @@ class InteractionHandler:
         station_type = game_state["map_static"][iy, ix]
         
         # Calculate proximity reward if agent is near delivery with complete plate
-        proximity_reward = self._calculate_delivery_proximity_reward(agent_id, carrying_item, game_state)
+        proximity_reward = self.reward_shaper._calculate_delivery_proximity_reward(agent_id, carrying_item, game_state)
         
         # Calculate "ready to combine" reward if agent has ready ingredient and is near plate (or vice versa)
-        ready_to_combine_reward = self._calculate_ready_to_combine_reward(
+        ready_to_combine_reward = self.reward_shaper._calculate_ready_to_combine_reward(
             agent_id, carrying_item, ground_item, game_state
         )
         
@@ -367,7 +203,7 @@ class InteractionHandler:
             del game_state["agent_holding_instance"][agent_id]
             
             # Calculate progress reward
-            progress_reward = self._calculate_progress_reward(
+            progress_reward = self.reward_shaper._calculate_progress_reward(
                 'place_on_chop', carrying_item, None, game_state
             )
             total_reward = self.rewards.place_on_chop + progress_reward
@@ -392,14 +228,14 @@ class InteractionHandler:
             
             # Check for repetition penalty
             repetition_penalty = 0.0
-            if self._check_action_repetition(agent_id, 'process', game_state):
+            if self.reward_shaper._check_action_repetition(agent_id, 'process', game_state):
                 repetition_penalty = self.rewards.repetition_penalty
                 if verbose:
                     print(f"  WARNING: Repetitive processing detected! Penalty: {repetition_penalty}")
             
             # Check for accumulation penalty (many processed ingredients on ground)
             accumulation_penalty = 0.0
-            processed_count = self._count_processed_ingredients_on_ground(game_state)
+            processed_count = self.reward_shaper._count_processed_ingredients_on_ground(game_state)
             if processed_count >= self.rewards.accumulation_threshold:
                 excess = processed_count - self.rewards.accumulation_threshold + 1
                 accumulation_penalty = self.rewards.accumulation_penalty * excess
@@ -421,7 +257,7 @@ class InteractionHandler:
         # Scenario 3: Pick up processed ingredient from chopping board
         elif not carrying_item and ground_item and is_ready(ground_item):
             # Calculate progress reward BEFORE moving item (use ground_item)
-            progress_reward = self._calculate_progress_reward(
+            progress_reward = self.reward_shaper._calculate_progress_reward(
                 'pickup_ready', ground_item, None, game_state
             )
             
@@ -438,7 +274,7 @@ class InteractionHandler:
         # Invalid chopping board interaction
         if verbose:
             print(f"  Invalid chopping board interaction")
-        return 0.0, 0.0  # SEM PENALIDADE
+        return self.rewards.invalid, 0.0
     
     def _handle_plate_dispenser(
         self,
@@ -456,7 +292,7 @@ class InteractionHandler:
             game_state["agent_holding_instance"][agent_id] = plate_instance
             
             # Check if there are ready ingredients on ground nearby (ready to combine)
-            ready_ingredient_nearby = self._check_ready_ingredient_nearby(agent_id, game_state)
+            ready_ingredient_nearby = self.reward_shaper._check_ready_ingredient_nearby(agent_id, game_state)
             progress_reward = 0.0
             if ready_ingredient_nearby:
                 progress_reward = self.rewards.progress_ready_to_combine
@@ -484,7 +320,7 @@ class InteractionHandler:
             game_state["agent_holding_instance"][agent_id] = plate_instance
             
             # Calculate progress reward for combining
-            progress_reward = self._calculate_progress_reward(
+            progress_reward = self.reward_shaper._calculate_progress_reward(
                 'combine', carrying_item, plate, game_state
             )
             
@@ -492,7 +328,7 @@ class InteractionHandler:
             pickup_plate_with_ready_reward = self.rewards.progress_pickup_plate_with_ready
             
             # Recompensa progressiva por prato parcialmente completo
-            partial_plate_reward = self._calculate_partial_plate_reward(plate, game_state)
+            partial_plate_reward = self.reward_shaper._calculate_partial_plate_reward(plate, game_state)
             
             total_reward = (self.rewards.pickup + self.rewards.combine + 
                           progress_reward + pickup_plate_with_ready_reward + 
@@ -508,7 +344,7 @@ class InteractionHandler:
         # Invalid plate dispenser interaction
         if verbose:
             print(f"  Cannot get plate: carrying non-ready ingredient")
-        return 0.0, 0.0  # SEM PENALIDADE
+        return self.rewards.invalid, 0.0
     
     def _handle_ingredient_dispenser(
         self,
@@ -544,7 +380,7 @@ class InteractionHandler:
         game_state["agent_holding_instance"][agent_id] = item_instance
         
         # Calculate progress reward
-        progress_reward = self._calculate_progress_reward(
+        progress_reward = self.reward_shaper._calculate_progress_reward(
             'pickup_ingredient', ingredient, None, game_state
         )
         total_reward = self.rewards.pickup + progress_reward
@@ -611,12 +447,12 @@ class InteractionHandler:
             self._update_item(ground_instance_id, updated_plate, game_state)
             
             # Calculate progress reward
-            progress_reward = self._calculate_progress_reward(
+            progress_reward = self.reward_shaper._calculate_progress_reward(
                 'combine', carrying_item, ground_item, game_state
             )
             
             # Recompensa progressiva por prato parcialmente completo
-            partial_plate_reward = self._calculate_partial_plate_reward(updated_plate, game_state)
+            partial_plate_reward = self.reward_shaper._calculate_partial_plate_reward(updated_plate, game_state)
             
             total_reward = self.rewards.combine + progress_reward + partial_plate_reward
             
@@ -636,12 +472,12 @@ class InteractionHandler:
             del game_state["ground_instances"][(ix, iy)]
             
             # Calculate progress reward
-            progress_reward = self._calculate_progress_reward(
+            progress_reward = self.reward_shaper._calculate_progress_reward(
                 'combine', carrying_item, ground_item, game_state
             )
             
             # Recompensa progressiva por prato parcialmente completo
-            partial_plate_reward = self._calculate_partial_plate_reward(updated_plate, game_state)
+            partial_plate_reward = self.reward_shaper._calculate_partial_plate_reward(updated_plate, game_state)
             
             total_reward = self.rewards.combine + progress_reward + partial_plate_reward
             
@@ -686,12 +522,12 @@ class InteractionHandler:
             progress_reward = 0.0
             if is_ready(ground_item):
                 # Picking up ready ingredient
-                progress_reward = self._calculate_progress_reward(
+                progress_reward = self.reward_shaper._calculate_progress_reward(
                     'pickup_ready', ground_item, None, game_state
                 )
             elif ground_item.get("type") == ItemType.DISH:
                 # Picking up plate - check if it's complete
-                progress_reward = self._calculate_progress_reward(
+                progress_reward = self.reward_shaper._calculate_progress_reward(
                     'pickup_plate_complete', ground_item, None, game_state
                 )
             
@@ -747,14 +583,14 @@ class InteractionHandler:
         if not carrying_item or carrying_item.get("type") != ItemType.DISH:
             if verbose:
                 print(f"  Cannot deliver: not carrying a plate")
-            return 0.0, 0.0  # SEM PENALIDADE
+            return self.rewards.invalid, 0.0
         
         # Plate must have ingredients
         ingredients = carrying_item.get("ingredients", [])
         if not ingredients:
             if verbose:
                 print(f"  Cannot deliver: plate is empty")
-            return 0.0, 0.0  # SEM PENALIDADE
+            return self.rewards.invalid, 0.0
         
         # Validate recipe
         is_valid, recipe_name, recipe_reward = self.recipe_manager.validate_delivery(ingredients)
@@ -832,315 +668,7 @@ class InteractionHandler:
         # Check if it's the first pending recipe
         return len(pending_orders) > 0 and recipe_name == pending_orders[0]
     
-    def _get_next_pending_recipe(self, game_state: Dict):
-        """
-        Get the next pending recipe and its required ingredients.
-        
-        Args:
-            game_state: Current game state dictionary
-            
-        Returns:
-            Tuple of (recipe_name, recipe_object, required_ingredients) or (None, None, [])
-        """
-        recipe_order = game_state.get("recipe_order", [])
-        if not recipe_order:
-            return None, None, []
-        
-        # Calculate pending orders
-        pending_orders = list(recipe_order)
-        for delivered_recipe in game_state.get("delivered_recipes", []):
-            if delivered_recipe in pending_orders:
-                pending_orders.remove(delivered_recipe)
-        
-        if not pending_orders:
-            return None, None, []
-        
-        # Get first pending recipe
-        next_recipe_name = pending_orders[0]
-        recipe = self.recipe_manager.get_recipe_by_name(next_recipe_name)
-        
-        if recipe:
-            return next_recipe_name, recipe, recipe.ingredients.copy()
-        
-        return None, None, []
-    
-    def _get_delivery_stations(self, game_state: Dict) -> list:
-        """
-        Get all delivery station positions.
-        
-        Args:
-            game_state: Current game state dictionary
-            
-        Returns:
-            List of (x, y) tuples for delivery stations
-        """
-        delivery_code = self.item_manager.get_cell_code('D')
-        delivery_stations = []
-        
-        map_static = game_state["map_static"]
-        H, W = map_static.shape
-        
-        for y in range(H):
-            for x in range(W):
-                if map_static[y, x] == delivery_code:
-                    delivery_stations.append((x, y))
-        
-        return delivery_stations
-    
-    def _calculate_distance_to_delivery(self, agent_pos: Tuple[int, int], game_state: Dict) -> float:
-        """
-        Calculate minimum distance from agent to any delivery station.
-        
-        Args:
-            agent_pos: Agent position (x, y)
-            game_state: Current game state dictionary
-            
-        Returns:
-            Minimum Manhattan distance to nearest delivery station, or float('inf') if none found
-        """
-        delivery_stations = self._get_delivery_stations(game_state)
-        if not delivery_stations:
-            return float('inf')
-        
-        ax, ay = agent_pos
-        min_distance = float('inf')
-        
-        for dx, dy in delivery_stations:
-            distance = abs(ax - dx) + abs(ay - dy)  # Manhattan distance
-            min_distance = min(min_distance, distance)
-        
-        return min_distance
-    
-    def _count_processed_ingredients_on_ground(self, game_state: Dict) -> int:
-        """
-        Count how many processed (ready) ingredients are on the ground.
-        
-        Args:
-            game_state: Current game state dictionary
-            
-        Returns:
-            Number of ready ingredients on ground
-        """
-        count = 0
-        ground_instances = game_state.get("ground_instances", {})
-        item_instances = game_state.get("item_instances", {})
-        
-        for instance_id in ground_instances.values():
-            item = item_instances.get(instance_id)
-            if item and item.get("type") == ItemType.INGREDIENT and is_ready(item):
-                count += 1
-        
-        return count
-    
-    def _check_action_repetition(self, agent_id: str, action_type: str, game_state: Dict) -> bool:
-        """
-        Check if agent is repeating the same action type many times.
-        
-        Args:
-            agent_id: ID of the agent
-            action_type: Type of action ('pickup', 'place', 'process', etc.)
-            game_state: Current game state dictionary
-            
-        Returns:
-            True if action is being repeated too many times
-        """
-        history = game_state.get("action_history", {}).get(agent_id, [])
-        if len(history) < 5:
-            return False
-        
-        # Check last 5 actions
-        recent_actions = [a[0] for a in history[-5:]]
-        # Count how many times the same action appears
-        same_action_count = sum(1 for a in recent_actions if a == action_type)
-        
-        # If same action appears 4+ times in last 5, it's repetitive
-        return same_action_count >= 4
-    
-    def _check_ready_ingredient_nearby(self, agent_id: str, game_state: Dict) -> bool:
-        """
-        Check if there are ready ingredients on ground near the agent.
-        
-        Args:
-            agent_id: ID of the agent
-            game_state: Current game state dictionary
-            
-        Returns:
-            True if there's a ready ingredient nearby (within 2 tiles)
-        """
-        agent_pos = game_state["agent_pos"][agent_id]
-        ax, ay = agent_pos
-        
-        ground_instances = game_state.get("ground_instances", {})
-        item_instances = game_state.get("item_instances", {})
-        
-        # Check tiles within 2 Manhattan distance
-        for (x, y), instance_id in ground_instances.items():
-            distance = abs(ax - x) + abs(ay - y)
-            if distance <= 2:  # Within 2 tiles
-                item = item_instances.get(instance_id)
-                if item and item.get("type") == ItemType.INGREDIENT and is_ready(item):
-                    return True
-        
-        return False
-    
-    def _calculate_partial_plate_reward(self, plate: Dict, game_state: Dict) -> float:
-        """
-        Calculate reward for partially complete plate.
-        
-        Args:
-            plate: Plate dictionary
-            game_state: Current game state dictionary
-            
-        Returns:
-            Reward for partial plate completion
-        """
-        if not plate or plate.get("type") != ItemType.DISH:
-            return 0.0
-        
-        plate_ingredients = plate.get("ingredients", [])
-        if not plate_ingredients:
-            return 0.0
-        
-        # Get next pending recipe
-        recipe_name, recipe, required_ingredients = self._get_next_pending_recipe(game_state)
-        if not recipe or not required_ingredients:
-            return 0.0
-        
-        # Check how many required ingredients are in the plate
-        required_set = set(ing.lower() for ing in required_ingredients)
-        plate_set = set(ing.lower() for ing in plate_ingredients)
-        
-        # Count matching ingredients
-        matching_count = len(required_set.intersection(plate_set))
-        total_required = len(required_ingredients)
-        
-        # If plate has some but not all ingredients, give partial reward
-        if 0 < matching_count < total_required:
-            # Reward proportional to completion
-            completion_ratio = matching_count / total_required
-            return self.rewards.progress_partial_plate * completion_ratio
-        
-        return 0.0
-    
-    def _check_ingredient_already_processed(self, ingredient_name: str, game_state: Dict) -> bool:
-        """
-        Check if this ingredient has already been processed and is ready somewhere.
-        
-        Args:
-            ingredient_name: Name of the ingredient
-            game_state: Current game state dictionary
-            
-        Returns:
-            True if there's already a ready version of this ingredient
-        """
-        ingredient_name_lower = ingredient_name.lower()
-        ground_instances = game_state.get("ground_instances", {})
-        item_instances = game_state.get("item_instances", {})
-        
-        for instance_id in ground_instances.values():
-            item = item_instances.get(instance_id)
-            if item and item.get("type") == ItemType.INGREDIENT:
-                if item.get("name", "").lower() == ingredient_name_lower and is_ready(item):
-                    return True
-        
-        return False
-    
-    def _calculate_progress_reward(
-        self,
-        action_type: str,
-        carrying_item: Optional[Dict],
-        ground_item: Optional[Dict],
-        game_state: Dict
-    ) -> float:
-        """
-        Calculate progress reward based on whether the action aligns with the recipe goal.
-        
-        Args:
-            action_type: Type of action ('pickup', 'place', 'process', 'combine')
-            carrying_item: Item the agent is carrying (if any)
-            ground_item: Item on the ground (if any)
-            game_state: Current game state dictionary
-            
-        Returns:
-            Additional progress reward (0.0 if no progress alignment)
-        """
-        # Get next pending recipe
-        recipe_name, recipe, required_ingredients = self._get_next_pending_recipe(game_state)
-        
-        if not recipe or not required_ingredients:
-            return 0.0
-        
-        progress_reward = 0.0
-        
-        # Action: Pickup ingredient from dispenser
-        if action_type == 'pickup_ingredient' and carrying_item:
-            ingredient_name = carrying_item.get("name", "").lower()
-            # Check if this ingredient is needed for the recipe
-            if ingredient_name in [ing.lower() for ing in required_ingredients]:
-                progress_reward += self.rewards.progress_pickup_needed
-        
-        # Action: Place ingredient on chopping board
-        elif action_type == 'place_on_chop' and carrying_item:
-            ingredient_name = carrying_item.get("name", "").lower()
-            # Check if this ingredient is needed and can be processed
-            if ingredient_name in [ing.lower() for ing in required_ingredients]:
-                if can_process(carrying_item):
-                    # Só dar recompensa progressiva se o ingrediente ainda não foi processado antes
-                    if not self._check_ingredient_already_processed(ingredient_name, game_state):
-                        progress_reward += self.rewards.progress_place_on_chop
-        
-        # Action: Pickup processed ingredient from chopping board
-        elif action_type == 'pickup_ready' and carrying_item:
-            if is_ready(carrying_item):
-                ingredient_name = carrying_item.get("name", "").lower()
-                # Check if this processed ingredient is needed
-                if ingredient_name in [ing.lower() for ing in required_ingredients]:
-                    # Verificar se o ingrediente já está no prato (se sim, não precisa pegar de novo)
-                    # Por enquanto, sempre dar recompensa se é necessário
-                    progress_reward += self.rewards.progress_pickup_ready
-        
-        # Action: Combine ingredient with plate
-        elif action_type == 'combine' and carrying_item:
-            # If carrying ready ingredient and combining with plate
-            if is_ready(carrying_item):
-                ingredient_name = carrying_item.get("name", "").lower()
-                if ingredient_name in [ing.lower() for ing in required_ingredients]:
-                    progress_reward += self.rewards.progress_combine_ready
-                    # Recompensa escalonada por ingrediente adicionado ao prato da receita correta
-                    if ground_item and ground_item.get("type") == ItemType.DISH:
-                        plate_ingredients = ground_item.get("ingredients", [])
-                        # Contar quantos ingredientes da receita já estão no prato (antes de adicionar)
-                        matching_count = sum(1 for ing in plate_ingredients 
-                                           if ing.lower() in [r.lower() for r in required_ingredients])
-                        # Recompensa escalonada: primeiro=15.0, segundo=20.0, terceiro=25.0
-                        scaled_reward = (self.rewards.progress_ingredient_added_base + 
-                                       matching_count * self.rewards.progress_ingredient_added_increment)
-                        progress_reward += scaled_reward
-            # If carrying plate and combining with ready ingredient
-            elif carrying_item.get("type") == ItemType.DISH:
-                if ground_item and is_ready(ground_item):
-                    ingredient_name = ground_item.get("name", "").lower()
-                    if ingredient_name in [ing.lower() for ing in required_ingredients]:
-                        progress_reward += self.rewards.progress_combine_ready
-                        # Recompensa escalonada por ingrediente adicionado ao prato da receita correta
-                        plate_ingredients = carrying_item.get("ingredients", [])
-                        # Contar quantos ingredientes da receita já estão no prato (antes de adicionar)
-                        matching_count = sum(1 for ing in plate_ingredients 
-                                           if ing.lower() in [r.lower() for r in required_ingredients])
-                        # Recompensa escalonada: primeiro=15.0, segundo=20.0, terceiro=25.0
-                        scaled_reward = (self.rewards.progress_ingredient_added_base + 
-                                       matching_count * self.rewards.progress_ingredient_added_increment)
-                        progress_reward += scaled_reward
-        
-        # Action: Pickup complete plate (ready for delivery)
-        elif action_type == 'pickup_plate_complete' and carrying_item:
-            if carrying_item.get("type") == ItemType.DISH:
-                plate_ingredients = carrying_item.get("ingredients", [])
-                # Check if plate has all required ingredients for the recipe
-                if sorted([ing.lower() for ing in plate_ingredients]) == sorted([ing.lower() for ing in required_ingredients]):
-                    progress_reward += self.rewards.progress_pickup_complete_plate
-        
-        return progress_reward
+
     
     # Helper methods for item management
     
@@ -1213,4 +741,4 @@ class InteractionHandler:
     
     def __repr__(self) -> str:
         """String representation of InteractionHandler."""
-        return f"InteractionHandler(rewards: pickup={self.PICKUP_REWARD}, combine={self.COMBINE_REWARD})"
+        return f"InteractionHandler(rewards: pickup={self.rewards.pickup}, combine={self.rewards.combine})"

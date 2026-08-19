@@ -34,15 +34,16 @@ class ObservationBuilder:
     Builds observations for agents in the Overcooked environment.
     
     The observation is a multi-channel tensor (H x W x C) where:
-    - Channel 0: Static map (walls, stations)
+    - Channel 0: Static map (walls, counters, stations)
     - Channel 1: Items on ground/counters
     - Channel 2: Position of the observing agent
     - Channel 3: Positions of other agents
     - Channel 4: Delivery points (binary)
-    - Channels 5-7: Processing vector (inventory state)
+    - Channel 5: Active Recipe Orders queue
+    - Channels 6-8: Processing vector (inventory state)
     
     This class follows SRP by focusing only on observation construction,
-    delegating state management to GameState and item queries to ItemInstanceManager.
+    delegating state queries to the environment state dictionary and ItemManager.
     """
     
     def __init__(self, max_process_steps: int = MAX_PROCESS_STEPS, recipe_manager=None):

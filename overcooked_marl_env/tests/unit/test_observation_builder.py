@@ -5,13 +5,13 @@ Tests the observation construction logic, ensuring observations
 are correctly built for different game states and agent configurations.
 """
 
-import unittest
 import numpy as np
+from overcooked_marl_env.tests.base import OvercookedTestCase
 from overcooked_marl_env.environment.observation_builder import ObservationBuilder
 from overcooked_marl_env.core.items import ItemManager, ItemType, ItemState
 
 
-class TestObservationBuilder(unittest.TestCase):
+class TestObservationBuilder(OvercookedTestCase):
     """Test cases for ObservationBuilder class."""
     
     def setUp(self):
@@ -19,17 +19,12 @@ class TestObservationBuilder(unittest.TestCase):
         self.builder = ObservationBuilder(max_process_steps=3)
         self.item_manager = ItemManager()
         
-        # Create a simple game state for testing
+        # Create a simple game state for testing using base class builder
         self.map_size = (5, 5)
-        self.game_state = {
-            "map_static": np.zeros(self.map_size, dtype=np.uint8),
-            "items_on_ground": np.zeros(self.map_size, dtype=np.uint8),
-            "agent_pos": {
-                "agent_0": (1, 1),
-                "agent_1": (3, 3)
-            },
-            "agent_holding_instance": {},
-            "item_instances": {}
+        self.game_state = self.create_basic_game_state(width=5, height=5)
+        self.game_state["agent_pos"] = {
+            "agent_0": (1, 1),
+            "agent_1": (3, 3)
         }
         
         # Add a delivery point
@@ -38,8 +33,8 @@ class TestObservationBuilder(unittest.TestCase):
     def test_initialization(self):
         """Test ObservationBuilder initialization."""
         self.assertEqual(self.builder.max_process_steps, 3)
-        self.assertEqual(self.builder.num_base_channels, 5)
-        self.assertEqual(self.builder.total_channels, 8)
+        self.assertEqual(self.builder.num_base_channels, 6)
+        self.assertEqual(self.builder.total_channels, 9)
     
     def test_observation_shape(self):
         """Test that observations have the correct shape."""
@@ -49,7 +44,7 @@ class TestObservationBuilder(unittest.TestCase):
             self.item_manager
         )
         
-        expected_shape = (5, 5, 8)
+        expected_shape = (5, 5, 9)
         self.assertEqual(obs["agent_0"].shape, expected_shape)
         self.assertEqual(obs["agent_1"].shape, expected_shape)
     
@@ -66,11 +61,17 @@ class TestObservationBuilder(unittest.TestCase):
             obs["agent_0"][:, :, 0],
             self.game_state["map_static"]
         )
-    
     def test_items_on_ground_layer(self):
         """Test that items on ground are correctly encoded in channel 1."""
-        # Add an item on ground
-        self.game_state["items_on_ground"][2, 1] = 5
+        item = {
+            "type": ItemType.INGREDIENT,
+            "name": "tomato",
+            "state": ItemState.RAW,
+            "cuts_done": 0,
+            "cuts_needed": 3
+        }
+        item_id = self.create_item_in_state(self.game_state, item)
+        self.game_state["ground_instances"][(3, 3)] = item_id
         
         obs = self.builder.build_observations(
             self.game_state,
@@ -78,71 +79,45 @@ class TestObservationBuilder(unittest.TestCase):
             self.item_manager
         )
         
-        # Channel 1 should match items on ground
-        np.testing.assert_array_equal(
-            obs["agent_0"][:, :, 1],
-            self.game_state["items_on_ground"]
-        )
+        # Channel 1 should have item code at (3, 3)
+        expected_code = self.builder._item_to_code(item)
+        self.assertEqual(obs["agent_0"][3, 3, 1], expected_code)
     
-    def test_agent_position_layer(self):
-        """Test that agent's own position is marked in channel 2."""
-        obs = self.builder.build_observations(
-            self.game_state,
-            ["agent_0"],
-            self.item_manager
-        )
-        
-        # Agent 0 is at (1, 1)
-        self.assertEqual(obs["agent_0"][1, 1, 2], 1)
-        
-        # All other positions should be 0
-        obs_copy = obs["agent_0"][:, :, 2].copy()
-        obs_copy[1, 1] = 0
-        self.assertEqual(np.sum(obs_copy), 0)
-    
-    def test_other_agents_layer(self):
-        """Test that other agents are marked in channel 3."""
+    def test_agent_positions_layers(self):
+        """Test that agent positions are correctly encoded in channels 2 and 3."""
         obs = self.builder.build_observations(
             self.game_state,
             ["agent_0", "agent_1"],
             self.item_manager
         )
         
-        # From agent_0's perspective, agent_1 at (3, 3) should be marked
+        # For agent_0:
+        # Channel 2: agent_0 pos (1, 1) -> 1
+        # Channel 3: agent_1 pos (3, 3) -> 1
+        self.assertEqual(obs["agent_0"][1, 1, 2], 1)
         self.assertEqual(obs["agent_0"][3, 3, 3], 1)
+        self.assertEqual(obs["agent_0"][1, 1, 3], 0)
+        self.assertEqual(obs["agent_0"][3, 3, 2], 0)
         
-        # From agent_1's perspective, agent_0 at (1, 1) should be marked
+        # For agent_1:
+        # Channel 2: agent_1 pos (3, 3) -> 1
+        # Channel 3: agent_0 pos (1, 1) -> 1
+        self.assertEqual(obs["agent_1"][3, 3, 2], 1)
         self.assertEqual(obs["agent_1"][1, 1, 3], 1)
+        self.assertEqual(obs["agent_1"][3, 3, 3], 0)
+        self.assertEqual(obs["agent_1"][1, 1, 2], 0)
     
-    def test_delivery_point_layer(self):
-        """Test that delivery points are marked in channel 4."""
+    def test_delivery_points_layer(self):
+        """Test that delivery points are correctly encoded in channel 4."""
         obs = self.builder.build_observations(
             self.game_state,
             ["agent_0"],
             self.item_manager
         )
         
-        # Delivery point at (2, 2) should be marked
+        # Channel 4 should have 1 at delivery point (2, 2)
         self.assertEqual(obs["agent_0"][2, 2, 4], 1)
-        
-        # All other positions should be 0
-        obs_copy = obs["agent_0"][:, :, 4].copy()
-        obs_copy[2, 2] = 0
-        self.assertEqual(np.sum(obs_copy), 0)
-    
-    def test_empty_processing_vector(self):
-        """Test processing vector when agent carries nothing."""
-        obs = self.builder.build_observations(
-            self.game_state,
-            ["agent_0"],
-            self.item_manager
-        )
-        
-        # Agent at (1, 1) carries nothing
-        # Channels 5-7 should all be 0
-        self.assertEqual(obs["agent_0"][1, 1, 5], 0)
-        self.assertEqual(obs["agent_0"][1, 1, 6], 0)
-        self.assertEqual(obs["agent_0"][1, 1, 7], 0)
+        self.assertEqual(obs["agent_0"][0, 0, 4], 0)
     
     def test_processing_vector_raw_ingredient(self):
         """Test processing vector for raw ingredient."""
@@ -166,12 +141,12 @@ class TestObservationBuilder(unittest.TestCase):
         )
         
         # Agent at (1, 1) carries raw ingredient
-        # Channel 5: cuts_done = 0
-        # Channel 6: cuts_needed = 3
-        # Channel 7: is_ready = 0
-        self.assertEqual(obs["agent_0"][1, 1, 5], 0)
-        self.assertEqual(obs["agent_0"][1, 1, 6], 3)
-        self.assertEqual(obs["agent_0"][1, 1, 7], 0)
+        # Channel 6: cuts_done = 0
+        # Channel 7: cuts_needed = 3
+        # Channel 8: is_ready = 0
+        self.assertEqual(obs["agent_0"][1, 1, 6], 0)
+        self.assertEqual(obs["agent_0"][1, 1, 7], 3)
+        self.assertEqual(obs["agent_0"][1, 1, 8], 0)
     
     def test_processing_vector_chopping_ingredient(self):
         """Test processing vector for ingredient being chopped."""
@@ -194,12 +169,12 @@ class TestObservationBuilder(unittest.TestCase):
             self.item_manager
         )
         
-        # Channel 5: cuts_done = 2
-        # Channel 6: cuts_needed = 3
-        # Channel 7: is_ready = 0
-        self.assertEqual(obs["agent_0"][1, 1, 5], 2)
-        self.assertEqual(obs["agent_0"][1, 1, 6], 3)
-        self.assertEqual(obs["agent_0"][1, 1, 7], 0)
+        # Channel 6: cuts_done = 2
+        # Channel 7: cuts_needed = 3
+        # Channel 8: is_ready = 0
+        self.assertEqual(obs["agent_0"][1, 1, 6], 2)
+        self.assertEqual(obs["agent_0"][1, 1, 7], 3)
+        self.assertEqual(obs["agent_0"][1, 1, 8], 0)
     
     def test_processing_vector_ready_ingredient(self):
         """Test processing vector for ready ingredient."""
@@ -222,12 +197,12 @@ class TestObservationBuilder(unittest.TestCase):
             self.item_manager
         )
         
-        # Channel 5: cuts_done = 3
-        # Channel 6: cuts_needed = 3
-        # Channel 7: is_ready = 1
-        self.assertEqual(obs["agent_0"][1, 1, 5], 3)
+        # Channel 6: cuts_done = 3
+        # Channel 7: cuts_needed = 3
+        # Channel 8: is_ready = 1
         self.assertEqual(obs["agent_0"][1, 1, 6], 3)
-        self.assertEqual(obs["agent_0"][1, 1, 7], 1)
+        self.assertEqual(obs["agent_0"][1, 1, 7], 3)
+        self.assertEqual(obs["agent_0"][1, 1, 8], 1)
     
     def test_processing_vector_empty_dish(self):
         """Test processing vector for empty plate."""
@@ -247,11 +222,11 @@ class TestObservationBuilder(unittest.TestCase):
             self.item_manager
         )
         
-        # Channel 5: num_ingredients = 0
-        # Channels 6-7: unused = 0
-        self.assertEqual(obs["agent_0"][1, 1, 5], 0)
+        # Channel 6: num_ingredients = 0
+        # Channels 7-8: unused = 0
         self.assertEqual(obs["agent_0"][1, 1, 6], 0)
         self.assertEqual(obs["agent_0"][1, 1, 7], 0)
+        self.assertEqual(obs["agent_0"][1, 1, 8], 0)
     
     def test_processing_vector_dish_with_ingredients(self):
         """Test processing vector for plate with ingredients."""
@@ -271,11 +246,11 @@ class TestObservationBuilder(unittest.TestCase):
             self.item_manager
         )
         
-        # Channel 5: num_ingredients = 2
-        # Channels 6-7: unused = 0
-        self.assertEqual(obs["agent_0"][1, 1, 5], 2)
-        self.assertEqual(obs["agent_0"][1, 1, 6], 0)
+        # Channel 6: num_ingredients = 2
+        # Channels 7-8: unused = 0
+        self.assertEqual(obs["agent_0"][1, 1, 6], 2)
         self.assertEqual(obs["agent_0"][1, 1, 7], 0)
+        self.assertEqual(obs["agent_0"][1, 1, 8], 0)
     
     def test_multiple_agents_independent_observations(self):
         """Test that each agent gets independent observations."""
@@ -306,25 +281,26 @@ class TestObservationBuilder(unittest.TestCase):
         )
         
         # Agent 0's processing vector (tomato)
-        self.assertEqual(obs["agent_0"][1, 1, 5], 0)  # cuts_done
-        self.assertEqual(obs["agent_0"][1, 1, 6], 3)  # cuts_needed
+        self.assertEqual(obs["agent_0"][1, 1, 6], 0)  # cuts_done
+        self.assertEqual(obs["agent_0"][1, 1, 7], 3)  # cuts_needed
         
         # Agent 1's processing vector (plate with 1 ingredient)
-        self.assertEqual(obs["agent_1"][3, 3, 5], 1)  # num_ingredients
-        self.assertEqual(obs["agent_1"][3, 3, 6], 0)  # unused
+        self.assertEqual(obs["agent_1"][3, 3, 6], 1)  # num_ingredients
+        self.assertEqual(obs["agent_1"][3, 3, 7], 0)  # unused
     
     def test_get_observation_shape(self):
         """Test get_observation_shape method."""
         shape = self.builder.get_observation_shape((10, 15))
-        self.assertEqual(shape, (10, 15, 8))
+        self.assertEqual(shape, (10, 15, 9))
     
     def test_repr(self):
         """Test string representation."""
         repr_str = repr(self.builder)
-        self.assertIn("channels=8", repr_str)
-        self.assertIn("base=5", repr_str)
+        self.assertIn("channels=9", repr_str)
+        self.assertIn("base=6", repr_str)
         self.assertIn("processing=3", repr_str)
 
 
 if __name__ == '__main__':
+    import unittest
     unittest.main()

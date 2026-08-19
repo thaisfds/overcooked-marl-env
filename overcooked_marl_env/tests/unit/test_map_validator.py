@@ -8,7 +8,7 @@ requirements before being used in the game.
 import unittest
 import numpy as np
 from overcooked_marl_env.map.map_validator import MapValidator, MapValidationError
-from overcooked_marl_env.core.constants import (
+from overcooked_marl_env.map.map_config import (
     MIN_MAP_WIDTH, MIN_MAP_HEIGHT,
     MAX_MAP_WIDTH, MAX_MAP_HEIGHT
 )
@@ -213,7 +213,7 @@ class TestMapValidator(unittest.TestCase):
         report = self.validator_strict.get_validation_report()
         
         self.assertIn('Error', report)
-        self.assertIn('[ERROR]', report)
+        self.assertIn('[MAP ERROR]', report)
     
     def test_validation_report_with_warnings(self):
         """Test validation report shows warnings."""
@@ -224,7 +224,7 @@ class TestMapValidator(unittest.TestCase):
         report = self.validator_strict.get_validation_report()
         
         self.assertIn('Warning', report)
-        self.assertIn('[WARNING]', report)
+        self.assertIn('[MAP WARNING]', report)
     
     def test_multiple_validation_runs(self):
         """Test that validator can be reused for multiple maps."""
