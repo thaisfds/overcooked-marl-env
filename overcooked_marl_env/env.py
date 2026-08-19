@@ -34,12 +34,11 @@ class OvercookedMARL(ParallelEnv):
     # Following PettingZoo conventions: https://pettingzoo.farama.org/
     # =================================================================
 
-    def __init__(self, render_mode=None, map_path=None, num_fixed_agents=2, verbose=False, custom_recipes_path=None):
+    def __init__(self, render_mode=None, map_path=None, num_fixed_agents=None, verbose=False, custom_recipes_path=None):
         super().__init__()
         
         # Resolve map path: if None or just filename, construct full path
         self.map_path = self._resolve_map_path(map_path)
-        self.num_fixed_agents = num_fixed_agents
         self.verbose = verbose
         
         self.item_manager = ItemManager()
@@ -53,6 +52,18 @@ class OvercookedMARL(ParallelEnv):
             self.item_manager.rebuild_ingredient_creators()
             
         self.map_loader = MapLoader()
+        
+        # Determine number of agents from map if not specified
+        if num_fixed_agents is None:
+            try:
+                map_data = self.map_loader.load_map(self.map_path, use_default_on_error=False)
+                num_fixed_agents = len(map_data.agent_positions)
+                if num_fixed_agents == 0:
+                    num_fixed_agents = 2
+            except Exception:
+                num_fixed_agents = 2
+                
+        self.num_fixed_agents = num_fixed_agents
         self.observation_builder = ObservationBuilder(max_process_steps=MAX_PROCESS_STEPS)
         
         self.possible_agents = [f"agent_{i}" for i in range(num_fixed_agents)]

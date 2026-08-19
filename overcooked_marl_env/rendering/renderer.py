@@ -55,6 +55,7 @@ class Renderer:
         self.clock = None
         self.cell_size = RENDER_CONFIG['cell_size']
         self.should_close = False
+        self.handle_window_events = True
     
     def render(
         self,
@@ -208,7 +209,22 @@ class Renderer:
             self.display_window.blit(scaled_surf, (offset_x, offset_y))
             
             # Update display
-            pygame.event.pump()
+            if getattr(self, 'handle_window_events', True) and pygame.display.get_init():
+                for event in pygame.event.get():
+                    if event.type == pygame.VIDEORESIZE:
+                        self.handle_resize(event.w, event.h, map_size)
+                    elif event.type == pygame.QUIT:
+                        self.should_close = True
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_F11:
+                            pygame.display.toggle_fullscreen()
+                            infoObject = pygame.display.Info()
+                            self.handle_resize(infoObject.current_w, infoObject.current_h, map_size)
+                        elif event.key == pygame.K_ESCAPE:
+                            self.should_close = True
+            else:
+                pygame.event.pump()
+                
             pygame.display.flip()
             self.clock.tick(RENDER_CONFIG['fps'])
         

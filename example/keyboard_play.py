@@ -88,22 +88,6 @@ def play(map_path=None, custom_recipes=None):
     # Initialize Pygame display and sound modules
     pygame.init()
     
-    # Print instruction manual to console
-    print("\n" + "="*60)
-    print("      OVERCOOKED MARL KEYBOARD PLAYTEST RUNNER")
-    print("="*60)
-    print("Controls:")
-    print("  • Agent 0 (Blue Agent):")
-    print("    - Move: W (Up), A (Left), S (Down), D (Right)")
-    print("    - Interact: Spacebar")
-    print("  • Agent 1 (Orange Agent):")
-    print("    - Move: Up, Down, Left, Right Arrow keys")
-    print("    - Interact: Enter / Return key")
-    print("  • General:")
-    print("    - Reset Environment: R")
-    print("    - Exit: Escape key or close window")
-    print("="*60)
-    
     # Instantiate the environment in human mode (Pygame)
     env = OvercookedMARL(
         render_mode="human",
@@ -111,6 +95,25 @@ def play(map_path=None, custom_recipes=None):
         verbose=True,
         custom_recipes_path=custom_recipes
     )
+    env.renderer.handle_window_events = False
+    
+    # Print instruction manual to console based on active agents
+    print("\n" + "="*60)
+    print("      OVERCOOKED MARL KEYBOARD PLAYTEST RUNNER")
+    print("="*60)
+    print("Controls:")
+    if "agent_0" in env.agents:
+        print("  • Agent 0 (Blue Agent):")
+        print("    - Move: W (Up), A (Left), S (Down), D (Right)")
+        print("    - Interact: Spacebar")
+    if "agent_1" in env.agents:
+        print("  • Agent 1 (Orange Agent):")
+        print("    - Move: Up, Down, Left, Right Arrow keys")
+        print("    - Interact: Enter / Return key")
+    print("  • General:")
+    print("    - Reset Environment: R")
+    print("    - Exit: Escape key or close window")
+    print("="*60)
     
     obs, info = env.reset()
     env.render()
@@ -123,10 +126,7 @@ def play(map_path=None, custom_recipes=None):
     interact_0 = False
     interact_1 = False
     
-    # Track debounced resizing variables
-    resize_pending = False
-    target_w, target_h = None, None
-    last_resize_time = 0
+
     
     while running:
         current_time = pygame.time.get_ticks()
@@ -136,10 +136,8 @@ def play(map_path=None, custom_recipes=None):
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.VIDEORESIZE:
-                target_w = event.w
-                target_h = event.h
-                resize_pending = True
-                last_resize_time = current_time
+                env.renderer.handle_resize(event.w, event.h, env.map_size)
+                env.render()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
@@ -164,40 +162,38 @@ def play(map_path=None, custom_recipes=None):
         actions = {}
         
         # Agent 0 movement/interaction decision
-        if keys[pygame.K_w]:
-            actions["agent_0"] = 0  # UP
-        elif keys[pygame.K_s]:
-            actions["agent_0"] = 1  # DOWN
-        elif keys[pygame.K_a]:
-            actions["agent_0"] = 2  # LEFT
-        elif keys[pygame.K_d]:
-            actions["agent_0"] = 3  # RIGHT
-        elif interact_0:
-            actions["agent_0"] = 4  # INTERACT
-            interact_0 = False
+        if "agent_0" in env.agents:
+            if keys[pygame.K_w]:
+                actions["agent_0"] = 0  # UP
+            elif keys[pygame.K_s]:
+                actions["agent_0"] = 1  # DOWN
+            elif keys[pygame.K_a]:
+                actions["agent_0"] = 2  # LEFT
+            elif keys[pygame.K_d]:
+                actions["agent_0"] = 3  # RIGHT
+            elif interact_0:
+                actions["agent_0"] = 4  # INTERACT
+                interact_0 = False
             
         # Agent 1 movement/interaction decision
-        if keys[pygame.K_UP]:
-            actions["agent_1"] = 0  # UP
-        elif keys[pygame.K_DOWN]:
-            actions["agent_1"] = 1  # DOWN
-        elif keys[pygame.K_LEFT]:
-            actions["agent_1"] = 2  # LEFT
-        elif keys[pygame.K_RIGHT]:
-            actions["agent_1"] = 3  # RIGHT
-        elif interact_1:
-            actions["agent_1"] = 4  # INTERACT
-            interact_1 = False
+        if "agent_1" in env.agents:
+            if keys[pygame.K_UP]:
+                actions["agent_1"] = 0  # UP
+            elif keys[pygame.K_DOWN]:
+                actions["agent_1"] = 1  # DOWN
+            elif keys[pygame.K_LEFT]:
+                actions["agent_1"] = 2  # LEFT
+            elif keys[pygame.K_RIGHT]:
+                actions["agent_1"] = 3  # RIGHT
+            elif interact_1:
+                actions["agent_1"] = 4  # INTERACT
+                interact_1 = False
             
         # Consume any unhandled interaction triggers
         interact_0 = False
         interact_1 = False
         
-        # Apply pending resize if debounced (no events for 150ms)
-        if resize_pending and current_time - last_resize_time > 150:
-            env.renderer.handle_resize(target_w, target_h, env.map_size)
-            resize_pending = False
-            env.render()
+
             
         # Step the environment unconditionally so time passes even when idle
         obs, rewards, terminations, truncations, infos = env.step(actions)
@@ -234,9 +230,9 @@ if __name__ == "__main__":
     # Try using custom map template by default if it exists
     map_file = args.map
     if map_file is None:
-        template_map = "overcooked_marl_env/map/maps/tutorial.txt"
+        template_map = "overcooked_marl_env/map/maps/simple_map.txt"
         if os.path.exists(template_map):
             map_file = template_map
-            print(f"Auto-selected tutorial map: {template_map}")
+            print(f"Auto-selected simple map: {template_map}")
             
     play(map_file, args.recipes)
