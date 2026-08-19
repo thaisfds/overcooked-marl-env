@@ -63,7 +63,7 @@ Manages game state and generates observations.
 **Responsibilities**:
 - Maintain agent positions and inventory
 - Track items on map and their states
-- Generate multi-channel observations (8 channels)
+- Generate multi-channel observations (9 channels)
 - Manage pending orders and score
 
 ### 3. Map System (`map/`)
@@ -184,21 +184,22 @@ python -m pytest overcooked_marl_env/tests/integration/
 ```python
 Box(
     low=0, 
-    high=max(TILE_TYPES), 
-    shape=(height, width, 8),
+    high=255, 
+    shape=(height, width, 9),
     dtype=np.uint8
 )
 ```
 
-**8 Channels**:
-0. Static map (walls, stations)
-1. Floor items
-2. Current agent position
-3. Other agents
+**9 Channels**:
+0. Static map (walls, counters, stations)
+1. Floor items (coded numeric representation)
+2. Current agent position (binary mask)
+3. Other agents (binary mask)
 4. Delivery stations
-5. Items with 1/3 cuts
-6. Items with 2/3 cuts
-7. Items with 3/3 cuts (ready)
+5. Active Recipe Orders queue (recipe order channel)
+6. Items with 1/3 cuts
+7. Items with 2/3 cuts
+8. Items with 3/3 cuts (ready)
 
 ### Action Space
 ```python
@@ -271,7 +272,8 @@ ITEM_INFO = {
 
 1. Create `.txt` file in `map/maps/`
 2. Use valid symbols: `_|-#CIPD012`
-3. Load: `env = OvercookedMARL(map_path="...")`
+3. Optionally add an adjacent `recipes.json` to configure new ingredients and custom recipes.
+4. Load: `env = OvercookedMARL(map_path="...")`
 
 ## Performance
 

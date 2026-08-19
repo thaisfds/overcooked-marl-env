@@ -1,0 +1,15 @@
+# Grid Map
+_________
+|#C#P#D#|
+|# 0   #|
+|#   1 #|
+|#I#I#I#|
+_________
+
+# Dispensers (name x y)
+tomato 1 4
+lettuce 3 4
+onion 5 4
+
+# Recipes
+SIMPLE_SALAD, ONION_SOUP, ONION_SALAD

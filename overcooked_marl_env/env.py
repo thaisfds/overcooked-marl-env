@@ -34,7 +34,7 @@ class OvercookedMARL(ParallelEnv):
     # Following PettingZoo conventions: https://pettingzoo.farama.org/
     # =================================================================
 
-    def __init__(self, render_mode=None, map_path=None, num_fixed_agents=2, verbose=False):
+    def __init__(self, render_mode=None, map_path=None, num_fixed_agents=2, verbose=False, custom_recipes_path=None):
         super().__init__()
         
         # Resolve map path: if None or just filename, construct full path
@@ -44,6 +44,14 @@ class OvercookedMARL(ParallelEnv):
         
         self.item_manager = ItemManager()
         self.recipe_manager = RecipeManager()
+        
+        # Load custom recipes if provided before initializing other systems
+        if custom_recipes_path:
+            if verbose:
+                print(f"[ENV] Loading custom recipes from: {custom_recipes_path}")
+            self.recipe_manager.load_recipes_from_json(custom_recipes_path)
+            self.item_manager.rebuild_ingredient_creators()
+            
         self.map_loader = MapLoader()
         self.observation_builder = ObservationBuilder(max_process_steps=MAX_PROCESS_STEPS)
         
@@ -380,6 +388,15 @@ class OvercookedMARL(ParallelEnv):
         """
         is_reload = map_path in self._already_loaded_maps
         self._already_loaded_maps.add(map_path)
+        
+        # Auto-load recipes.json in the same directory as the map if it exists
+        if map_path:
+            recipes_json_path = os.path.join(os.path.dirname(map_path), "recipes.json")
+            if os.path.exists(recipes_json_path):
+                if self.verbose:
+                    print(f"[ENV] Auto-loading adjacent recipes from: {recipes_json_path}")
+                self.recipe_manager.load_recipes_from_json(recipes_json_path)
+                self.item_manager.rebuild_ingredient_creators()
         
         if self.verbose:
             print(f"[ENV] Loading map from: {map_path}")

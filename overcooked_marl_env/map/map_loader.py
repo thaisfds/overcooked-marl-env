@@ -262,3 +262,45 @@ class MapLoader:
 
 
 __all__ = ['MapLoader']
+
+
+if __name__ == "__main__":
+    import sys
+    import argparse
+    from overcooked_marl_env.core.recipes import RecipeManager
+    
+    parser = argparse.ArgumentParser(description="Validate an Overcooked MARL environment map file.")
+    parser.add_argument("map_file", help="Path to the map text file to validate")
+    parser.add_argument("--recipes", help="Optional path to a custom recipes.json config file to load before validation")
+    
+    args = parser.parse_args()
+    
+    loader = MapLoader(strict_validation=False)
+    
+    # Resolve and load custom recipes if provided or if adjacent to the map file
+    recipes_path = args.recipes
+    if not recipes_path:
+        # Check adjacent directory for recipes.json
+        adjacent_path = os.path.join(os.path.dirname(os.path.abspath(args.map_file)), "recipes.json")
+        if os.path.exists(adjacent_path):
+            recipes_path = adjacent_path
+            print(f"[MAP VALIDATOR CLI] Found adjacent recipes file at: {recipes_path}")
+            
+    if recipes_path:
+        if os.path.exists(recipes_path):
+            manager = RecipeManager()
+            manager.load_recipes_from_json(recipes_path)
+            print(f"[MAP VALIDATOR CLI] Loaded custom recipes/ingredients from: {recipes_path}")
+        else:
+            print(f"[MAP VALIDATOR CLI] Error: Custom recipes file not found: {recipes_path}")
+            sys.exit(1)
+            
+    print(f"[MAP VALIDATOR CLI] Validating map file: {args.map_file}...")
+    valid = loader.validate_map_file(args.map_file, verbose=True)
+    
+    if valid:
+        print("[MAP VALIDATOR CLI] Map validation PASSED! The map is ready to use.")
+        sys.exit(0)
+    else:
+        print("[MAP VALIDATOR CLI] Map validation FAILED! Please fix the errors reported above.")
+        sys.exit(1)

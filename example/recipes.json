@@ -1,0 +1,22 @@
+{
+  "ingredients": [
+    {
+      "name": "onion",
+      "color": [235, 150, 235],
+      "cuts_needed": 3,
+      "char": "o"
+    }
+  ],
+  "recipes": [
+    {
+      "name": "ONION_SOUP",
+      "ingredients": ["onion", "onion", "onion"],
+      "reward": 180.0
+    },
+    {
+      "name": "ONION_SALAD",
+      "ingredients": ["lettuce", "onion"],
+      "reward": 130.0
+    }
+  ]
+}

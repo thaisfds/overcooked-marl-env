@@ -70,10 +70,16 @@ class FreshSaladRecipe(Recipe):
 class RecipeManager:
     """Manages all available recipes and validates combinations."""
     
+    # Class-level list of custom recipes to share across all instances
+    _custom_recipes = []
+    
     def __init__(self):
         """Initialize recipe manager with available recipes."""
         self.recipes = []
         self._register_default_recipes()
+        # Add globally registered custom recipes
+        for recipe in RecipeManager._custom_recipes:
+            self.register_recipe(recipe)
     
     def _register_default_recipes(self):
         """Register all default recipes."""
@@ -83,6 +89,12 @@ class RecipeManager:
             FreshSaladRecipe(),
         ]
     
+    @classmethod
+    def register_custom_recipe_globally(cls, recipe):
+        """Register a custom recipe globally so all new instances will include it."""
+        cls._custom_recipes = [r for r in cls._custom_recipes if r.name != recipe.name]
+        cls._custom_recipes.append(recipe)
+        
     def register_recipe(self, recipe):
         """
         Register a new recipe.
@@ -90,7 +102,72 @@ class RecipeManager:
         Args:
             recipe: Recipe instance to register
         """
+        self.recipes = [r for r in self.recipes if r.name != recipe.name]
         self.recipes.append(recipe)
+        
+    def load_recipes_from_dict(self, recipes_list: list):
+        """
+        Load recipes from a list of dictionaries.
+        
+        Args:
+            recipes_list: List of dicts, e.g., [{"name": "SOUP", "ingredients": ["tomato"], "reward": 100}]
+        """
+        for item in recipes_list:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            ingredients = item.get("ingredients")
+            reward = item.get("reward", 100.0)
+            
+            if name and ingredients:
+                name_upper = name.strip().upper()
+                recipe_instance = Recipe(name=name_upper, ingredients=ingredients, reward=float(reward))
+                
+                # Register locally
+                self.register_recipe(recipe_instance)
+                
+                # Register globally so validators see it
+                RecipeManager.register_custom_recipe_globally(recipe_instance)
+
+    def load_recipes_from_json(self, file_path: str):
+        """
+        Load custom recipes and ingredients from a JSON file.
+        
+        Args:
+            file_path: Path to the JSON file
+        """
+        import json
+        from .items import register_custom_ingredient
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            if isinstance(data, dict):
+                # 1. Parse and register custom ingredients first
+                if "ingredients" in data and isinstance(data["ingredients"], list):
+                    for ing in data["ingredients"]:
+                        if isinstance(ing, dict) and "name" in ing and "color" in ing:
+                            register_custom_ingredient(
+                                name=ing["name"],
+                                color=ing["color"],
+                                cuts_needed=ing.get("cuts_needed", 3),
+                                char=ing.get("char", None),
+                                state_chars=ing.get("state_chars", None)
+                            )
+                
+                # 2. Parse and register recipes
+                if "recipes" in data and isinstance(data["recipes"], list):
+                    self.load_recipes_from_dict(data["recipes"])
+                elif "name" in data and "ingredients" in data:
+                    self.load_recipes_from_dict([data])
+                    
+            elif isinstance(data, list):
+                # Simple format: list of recipes
+                self.load_recipes_from_dict(data)
+                
+        except Exception as e:
+            print(f"Error loading custom recipes from {file_path}: {e}")
     
     def find_matching_recipe(self, ingredient_list):
         """

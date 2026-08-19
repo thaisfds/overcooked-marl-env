@@ -1,373 +1,90 @@
-# Core System - Items and Recipes
+# Core System - Items, Recipes, and Constants
 
-The `core` module is the foundation of the game system, defining all items, recipes, constants, and item instance lifecycle management.
+The `core` module forms the domain model of the Overcooked MARL environment, defining item states, item types, recipe matches, game constants, and the lifecycle of cooking assets.
 
-## Files
+## Sub-package Contents
 
 ```
 core/
 ├── __init__.py                 # Module exports
-├── constants.py                # Game constants
-├── items.py                    # Item types and utilities
-├── recipes.py                  # Available recipes
-└── item_instance_manager.py    # Item instance management
+├── constants.py                # Action, observation, and reward constants
+├── items.py                    # Item creation, registration, and properties
+├── recipes.py                  # Recipes verification and config loaders
+└── item_instance_manager.py    # Item unique ID tracking and instance operations
 ```
 
-## Responsibilities
+---
 
-- Define all item types (ingredients, plate, processed items)
-- Manage item states (RAW, CHOPPED_1, CHOPPED_2, CHOPPED_3)
-- Define available recipes and their requirements
-- Create, track, and destroy item instances
-- Validate recipe completion
+## Detailed Components
 
-## Detailed Files
+### 1. Constants (`constants.py`)
+Centralizes key environment parameters:
+* **Observation Channels:** Defines `TOTAL_CHANNELS = 9` (6 base channels + 3 processing state channels).
+* **Actions Mapping:** Defines action directions (`0: Up`, `1: Down`, `2: Left`, `3: Right`, `4: Interact`).
+* **Game Parameters:** Defines episode limits (`MAX_EPISODE_STEPS = 800`) and cuts required (`DEFAULT_CUTS_NEEDED = 3`).
+* **Rewards:** Delivery rewards (`+20.0`), sequential delivery multiplier (`1.5x`), and invalid interaction penalty (`-2.0`).
 
-### `constants.py`
+### 2. Items & Ingredients (`items.py`)
+Rather than rigid subclassing, items are represented by dynamic metadata dictionaries containing properties like type, state, and list of contents.
 
-Defines all game constants.
+#### Item Types and States
+* **ItemType:** `ItemType.INGREDIENT` ("ingredient"), `ItemType.DISH` ("dish"), and `ItemType.RECIPE` ("recipe").
+* **ItemState:** `RAW`, `CHOPPING_1`, `CHOPPING_2`, `CHOPPING_3`, `READY`, `EMPTY`, `BUILDING`, `COMPLETE`.
 
-#### ItemType (Enum)
-
+#### Centralized Ingredient Registry (`INGREDIENTS`)
+The global registry tracks ingredient visualization (colors, characters) and processing:
 ```python
-class ItemType(IntEnum):
-    EMPTY = 0
-    LETTUCE = 1
-    TOMATO = 2
-    CUCUMBER = 3
-    PLATE = 4
-    CHOPPED_LETTUCE = 5
-    CHOPPED_TOMATO = 6
-    CHOPPED_CUCUMBER = 7
-    SIMPLE_SALAD = 8
-    GARDEN_SALAD = 9
-    FRESH_SALAD = 10
-```
-
-**Usage**: Identify each type of item in the game.
-
-#### ItemState (Enum)
-
-```python
-class ItemState(IntEnum):
-    RAW = 0          # Not processed
-    CHOPPED_1 = 1    # 1 cut
-    CHOPPED_2 = 2    # 2 cuts
-    CHOPPED_3 = 3    # 3 cuts (fully processed)
-```
-
-**Usage**: Track item processing progress.
-
-#### TileType (Enum)
-
-```python
-class TileType(IntEnum):
-    EMPTY = 0
-    WALL = 1
-    COUNTER = 2
-    CUTTING_BOARD = 3
-    INGREDIENT_DISPENSER = 4
-    PLATE_DISPENSER = 5
-    DELIVERY_STATION = 6
-```
-
-**Usage**: Identify map tiles.
-
-### `items.py`
-
-Manages item information and utilities.
-
-#### ItemInfo (NamedTuple)
-
-```python
-@dataclass
-class ItemInfo:
-    name: str          # Display name
-    symbol: str        # ASCII symbol
-    color: Tuple[int, int, int]  # RGB color
-```
-
-**Usage**: Store visual and display information for each item type.
-
-#### ITEM_INFO Dictionary
-
-Maps each `ItemType` to its `ItemInfo`:
-
-```python
-ITEM_INFO = {
-    ItemType.LETTUCE: ItemInfo("Lettuce", "L", (0, 255, 0)),
-    ItemType.TOMATO: ItemInfo("Tomato", "T", (255, 0, 0)),
-    ItemType.CUCUMBER: ItemInfo("Cucumber", "C", (0, 128, 0)),
-    ItemType.PLATE: ItemInfo("Plate", "P", (200, 200, 200)),
-    # ...
+INGREDIENTS = {
+    'tomato': {'color': (255, 0, 0), 'cuts_needed': 3, 'char': 't', 'state_chars': {...}},
+    'lettuce': {'color': (107, 142, 35), 'cuts_needed': 3, 'char': 'l', 'state_chars': {...}},
+    'cucumber': {'color': (0, 100, 0), 'cuts_needed': 3, 'char': 'c', 'state_chars': {...}}
 }
 ```
 
-**Access**:
+#### Dynamic Extensions
+Register new ingredients programmatically:
 ```python
-info = ITEM_INFO[ItemType.LETTUCE]
-print(info.name)  # "Lettuce"
-print(info.symbol)  # "L"
-```
+from overcooked_marl_env.core.items import register_custom_ingredient
 
-#### Utility Functions
-
-**`get_item_name(item_type: ItemType) -> str`**
-```python
-name = get_item_name(ItemType.LETTUCE)  # "Lettuce"
-```
-
-**`get_item_symbol(item_type: ItemType) -> str`**
-```python
-symbol = get_item_symbol(ItemType.TOMATO)  # "T"
-```
-
-**`get_item_color(item_type: ItemType) -> Tuple[int, int, int]`**
-```python
-color = get_item_color(ItemType.CUCUMBER)  # (0, 128, 0)
-```
-
-**`get_chopped_version(item_type: ItemType) -> ItemType`**
-```python
-chopped = get_chopped_version(ItemType.LETTUCE)  # ItemType.CHOPPED_LETTUCE
-```
-
-**`is_ingredient(item_type: ItemType) -> bool`**
-```python
-is_ingredient(ItemType.LETTUCE)  # True
-is_ingredient(ItemType.PLATE)    # False
-```
-
-**`is_chopped(item_type: ItemType) -> bool`**
-```python
-is_chopped(ItemType.CHOPPED_LETTUCE)  # True
-is_chopped(ItemType.LETTUCE)          # False
-```
-
-### `recipes.py`
-
-Defines all available recipes.
-
-#### Recipe Class
-
-```python
-@dataclass
-class Recipe:
-    name: str
-    ingredients: Set[ItemType]
-    reward: float
-```
-
-**Attributes**:
-- `name`: Recipe identifier
-- `ingredients`: Set of required ItemTypes
-- `reward`: Points awarded on delivery
-
-#### Available Recipes
-
-```python
-SIMPLE_SALAD = Recipe(
-    name="SIMPLE_SALAD",
-    ingredients={ItemType.CHOPPED_LETTUCE},
-    reward=10.0
-)
-
-GARDEN_SALAD = Recipe(
-    name="GARDEN_SALAD",
-    ingredients={ItemType.CHOPPED_LETTUCE, ItemType.CHOPPED_TOMATO},
-    reward=15.0
-)
-
-FRESH_SALAD = Recipe(
-    name="FRESH_SALAD",
-    ingredients={
-        ItemType.CHOPPED_LETTUCE,
-        ItemType.CHOPPED_TOMATO,
-        ItemType.CHOPPED_CUCUMBER
-    },
-    reward=20.0
+register_custom_ingredient(
+    name="onion",
+    color=(235, 150, 235),
+    cuts_needed=3,
+    char="o"
 )
 ```
 
-#### Utility Functions
+#### ItemManager
+Mapeia caracteres do grid do mapa para códigos numéricos:
+* ` ` (Empty Floor) → Code `0`
+* `#` (Counter) → Code `1`
+* `I` (Ingredient Dispenser) → Code `2`
+* `C` (Chopping Board) → Code `3`
+* `P` (Plate Dispenser) → Code `5`
+* `D` (Delivery Station) → Code `6`
+* `T` (Trash) → Code `7`
+* `|` / `_` (Walls) → Codes `8` / `9`
 
-**`get_recipe_for_ingredients(ingredients: Set[ItemType]) -> Optional[Recipe]`**
+### 3. Recipes & Dynamic Loading (`recipes.py`)
+Determines if combinations of processed ingredients on a plate form a valid dish order.
 
-Checks if ingredients match a recipe:
+#### Recipe Dataclass
+* `name`: Recipe name (e.g. `"GARDEN_SALAD"`).
+* `ingredients`: List of required items (e.g. `["lettuce", "tomato"]`).
+* `reward`: Delivery reward score.
 
+#### Loading Custom Recipes & Ingredients from JSON
+Load a complete JSON configuration of recipes and ingredients dynamically:
 ```python
-ingredients = {ItemType.CHOPPED_LETTUCE, ItemType.CHOPPED_TOMATO}
-recipe = get_recipe_for_ingredients(ingredients)
-# Returns GARDEN_SALAD (15.0 reward)
-
-invalid_ingredients = {ItemType.CHOPPED_LETTUCE, ItemType.CUCUMBER}
-recipe = get_recipe_for_ingredients(invalid_ingredients)
-# Returns None (no matching recipe)
+recipe_manager = RecipeManager()
+recipe_manager.load_recipes_from_json("example/recipes.json")
 ```
 
-**`is_valid_recipe(ingredients: Set[ItemType]) -> bool`**
+---
 
-Validates if ingredients form a valid recipe:
+## Verification & Testing
 
-```python
-is_valid_recipe({ItemType.CHOPPED_LETTUCE})  # True (SIMPLE_SALAD)
-is_valid_recipe({ItemType.LETTUCE})           # False (not chopped)
-```
-
-### `item_instance_manager.py`
-
-Manages item instance lifecycle.
-
-#### ItemInstanceManager Class
-
-```python
-class ItemInstanceManager:
-    def __init__(self):
-        self.items: Dict[int, ItemInstance] = {}
-        self.next_id: int = 1
-```
-
-**Responsibilities**:
-- Assign unique IDs to items
-- Track all active items
-- Store item properties (type, state, contents)
-- Clean up destroyed items
-
-#### ItemInstance
-
-```python
-@dataclass
-class ItemInstance:
-    id: int
-    item_type: ItemType
-    state: ItemState = ItemState.RAW
-    contents: List[ItemType] = field(default_factory=list)
-```
-
-**Attributes**:
-- `id`: Unique identifier
-- `item_type`: What the item is
-- `state`: Processing progress
-- `contents`: Items inside (for plates)
-
-#### Methods
-
-**`create_item(item_type: ItemType) -> int`**
-
-Creates new item and returns its ID:
-
-```python
-manager = ItemInstanceManager()
-item_id = manager.create_item(ItemType.LETTUCE)
-# Returns 1 (first item)
-```
-
-**`get_item(item_id: int) -> Optional[ItemInstance]`**
-
-Retrieves item by ID:
-
-```python
-item = manager.get_item(item_id)
-print(item.item_type)  # ItemType.LETTUCE
-print(item.state)      # ItemState.RAW
-```
-
-**`update_item_state(item_id: int, new_state: ItemState)`**
-
-Updates item processing state:
-
-```python
-manager.update_item_state(item_id, ItemState.CHOPPED_1)
-# Item now has 1 cut
-```
-
-**`add_to_plate(plate_id: int, ingredient_type: ItemType)`**
-
-Adds ingredient to plate:
-
-```python
-plate_id = manager.create_item(ItemType.PLATE)
-manager.add_to_plate(plate_id, ItemType.CHOPPED_LETTUCE)
-manager.add_to_plate(plate_id, ItemType.CHOPPED_TOMATO)
-
-plate = manager.get_item(plate_id)
-print(plate.contents)  
-# [ItemType.CHOPPED_LETTUCE, ItemType.CHOPPED_TOMATO]
-```
-
-**`get_plate_contents(plate_id: int) -> List[ItemType]`**
-
-Gets plate contents:
-
-```python
-contents = manager.get_plate_contents(plate_id)
-# [ItemType.CHOPPED_LETTUCE, ItemType.CHOPPED_TOMATO]
-```
-
-**`destroy_item(item_id: int)`**
-
-Removes item from tracking:
-
-```python
-manager.destroy_item(item_id)
-# Item no longer exists
-```
-
-## Complete Workflow
-
-### Process Ingredient
-
-```python
-# 1. Create raw lettuce
-item_id = manager.create_item(ItemType.LETTUCE)
-
-# 2. Place on cutting board (position-based in GameState)
-
-# 3. Cut 3 times
-manager.update_item_state(item_id, ItemState.CHOPPED_1)  # 1st cut
-manager.update_item_state(item_id, ItemState.CHOPPED_2)  # 2nd cut
-manager.update_item_state(item_id, ItemState.CHOPPED_3)  # 3rd cut - done
-
-# 4. Transform to chopped version
-chopped_type = get_chopped_version(ItemType.LETTUCE)
-# Returns ItemType.CHOPPED_LETTUCE
-```
-
-### Prepare Recipe
-
-```python
-# 1. Create plate
-plate_id = manager.create_item(ItemType.PLATE)
-
-# 2. Add processed ingredients
-manager.add_to_plate(plate_id, ItemType.CHOPPED_LETTUCE)
-manager.add_to_plate(plate_id, ItemType.CHOPPED_TOMATO)
-
-# 3. Validate recipe
-contents = manager.get_plate_contents(plate_id)
-ingredients_set = set(contents)
-
-recipe = get_recipe_for_ingredients(ingredients_set)
-if recipe:
-    print(f"Recipe complete: {recipe.name}")
-    print(f"Reward: {recipe.reward}")
-    # GARDEN_SALAD, reward 15.0
-
-# 4. Deliver at delivery station (handled by InteractionHandler)
-```
-
-## Tests
-
+Verify items and recipes logic:
 ```bash
-# Test item system
-python -m pytest overcooked_marl_env/tests/unit/test_item_instance_manager.py
-
-# Check all core utilities
-python -m pytest overcooked_marl_env/tests/unit/ -k "item or recipe"
+python -m unittest overcooked_marl_env/tests/unit/test_item_instance_manager.py
 ```
-
-## See Also
-
-- [Environment Documentation](../environment/README.md) - How items are used in game state
-- [Mechanics Documentation](../mechanics/README.md) - How items are manipulated
-- [Main Package Documentation](../README.md) - Complete architecture

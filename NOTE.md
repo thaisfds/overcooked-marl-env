@@ -1,16 +1,24 @@
 # Notes
 
-python.exe -m pip install --upgrade pip
+sudo apt update
+sudo apt upgrade -y
 
-py -3.13 -m venv venv
+sudo apt install python3 python3-pip python3-venv python3-full -y
 
-venv\Scripts\activate
+python3 --version
+pip3 --version
+
+python3 -m venv venv
+
+source venv/bin/activate
+
+python -m pip install --upgrade pip
 
 pip install gymnasium numpy pettingzoo matplotlib numpy torch-directml tqdm
 
 pip install -e .
 
-python enviroment_tests/salad_lettuce.py > test_log.txt
+python example/tutorial_map_test.py  > test_log.txt
 
 deactivate
 

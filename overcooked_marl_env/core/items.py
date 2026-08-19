@@ -70,6 +70,37 @@ INGREDIENTS = {
     },
 }
 
+def register_custom_ingredient(name, color, cuts_needed=3, char=None, state_chars=None):
+    """
+    Register a custom ingredient dynamically.
+    
+    Args:
+        name: Name of the ingredient
+        color: RGB tuple (e.g., (255, 0, 0))
+        cuts_needed: Number of cuts required (default: 3)
+        char: Default character representing the ingredient (default: first letter of name)
+        state_chars: Dictionary mapping ItemState to character representation
+    """
+    name_lower = name.lower()
+    if char is None:
+        char = name_lower[0] if name_lower else 'x'
+    
+    if state_chars is None:
+        state_chars = {
+            'RAW': char,
+            'CHOPPING_1': '1',
+            'CHOPPING_2': '2',
+            'CHOPPING_3': '3',
+            'READY': char.upper()
+        }
+    
+    INGREDIENTS[name_lower] = {
+        'color': tuple(color),
+        'cuts_needed': int(cuts_needed),
+        'char': char,
+        'state_chars': state_chars
+    }
+
 # Dish character representation
 DISH_CHAR = 'p'  # Empty plate character
 
@@ -239,12 +270,15 @@ def get_item_char(item_dict):
     item_type = item_dict.get("type")
     
     if item_type == ItemType.INGREDIENT:
-        name = item_dict["name"]
+        name = item_dict["name"].lower()
         state = item_dict.get("state", ItemState.RAW)
         
-        # Get character from state_chars mapping
-        state_chars = INGREDIENTS[name]['state_chars']
-        return state_chars.get(state, INGREDIENTS[name]['char'])
+        # Get character from state_chars mapping with safe fallback
+        if name in INGREDIENTS:
+            state_chars = INGREDIENTS[name]['state_chars']
+            return state_chars.get(state, INGREDIENTS[name]['char'])
+        else:
+            return name[0] if name else 'x'
         
     elif item_type == ItemType.DISH:
         ingredients = item_dict.get("ingredients", [])
@@ -252,8 +286,11 @@ def get_item_char(item_dict):
             return DISH_CHAR  # empty plate
         else:
             # Show character of first ingredient
-            first_ingredient = ingredients[FIRST_INGREDIENT_INDEX]
-            return INGREDIENTS[first_ingredient]['char']
+            first_ingredient = ingredients[FIRST_INGREDIENT_INDEX].lower()
+            if first_ingredient in INGREDIENTS:
+                return INGREDIENTS[first_ingredient]['char']
+            else:
+                return first_ingredient[0] if first_ingredient else 'x'
     
     return '?'
 
@@ -392,6 +429,13 @@ class ItemManager:
         
         # Store ingredients reference
         self.INGREDIENTS = INGREDIENTS
+        
+    def rebuild_ingredient_creators(self):
+        """Rebuild the ingredient creators dictionary from global INGREDIENTS."""
+        self.INGREDIENT_CREATORS = {
+            name: lambda n=name: create_ingredient(n)
+            for name in INGREDIENTS.keys()
+        }
     
     def get_cell_code(self, char: str) -> int:
         """Get numeric code for a map cell character."""
