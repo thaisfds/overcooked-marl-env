@@ -22,6 +22,7 @@ from .core.constants import (
 from .map.map_loader import MapLoader
 from .environment.game_state import MapData
 from .environment.observation_builder import ObservationBuilder
+from .environment.featurized_observation_builder import FeaturizedObservationBuilder
 from .mechanics import MovementSystem, CollisionResolver
 from .mechanics.interaction_handler import InteractionHandler
 from .rendering import Renderer
@@ -34,12 +35,13 @@ class OvercookedMARL(ParallelEnv):
     # Following PettingZoo conventions: https://pettingzoo.farama.org/
     # =================================================================
 
-    def __init__(self, render_mode=None, map_path=None, num_fixed_agents=None, verbose=False, custom_recipes_path=None):
+    def __init__(self, render_mode=None, map_path=None, num_fixed_agents=None, verbose=False, custom_recipes_path=None, featurized_obs=False):
         super().__init__()
         
         # Resolve map path: if None or just filename, construct full path
         self.map_path = self._resolve_map_path(map_path)
         self.verbose = verbose
+        self.featurized_obs = featurized_obs
         
         self.item_manager = ItemManager()
         self.recipe_manager = RecipeManager()
@@ -65,6 +67,7 @@ class OvercookedMARL(ParallelEnv):
                 
         self.num_fixed_agents = num_fixed_agents
         self.observation_builder = ObservationBuilder(max_process_steps=MAX_PROCESS_STEPS)
+        self.featurized_observation_builder = FeaturizedObservationBuilder(self.recipe_manager)
         
         self.possible_agents = [f"agent_{i}" for i in range(num_fixed_agents)]
         self.agents = self.possible_agents[:]
@@ -91,12 +94,20 @@ class OvercookedMARL(ParallelEnv):
         action_space_single = spaces.Discrete(5) 
         
         # Observation Space
-        observation_space_single = spaces.Box(
-            low=0, 
-            high=255, 
-            shape=(self.map_size[0], self.map_size[1], TOTAL_CHANNELS), 
-            dtype=np.uint8 
-        )
+        if self.featurized_obs:
+            observation_space_single = spaces.Box(
+                low=-np.inf,
+                high=np.inf,
+                shape=(96,),
+                dtype=np.float32
+            )
+        else:
+            observation_space_single = spaces.Box(
+                low=0, 
+                high=255, 
+                shape=(self.map_size[0], self.map_size[1], TOTAL_CHANNELS), 
+                dtype=np.uint8 
+            )
         
         # Dictionary mapping each agent to the action space
         self.observation_spaces = {
@@ -517,11 +528,15 @@ class OvercookedMARL(ParallelEnv):
 
     def _get_obs(self):
         """
-        Generates observations for all agents, encoding the game state
-        in channels (N x M x TOTAL_CHANNELS).
-        
-        Uses ObservationBuilder to construct multi-channel observations following SRP.
+        Generates observations for all agents.
         """
+        if self.featurized_obs:
+            return self.featurized_observation_builder.build_observations(
+                self.state,
+                self.agents,
+                self.item_manager,
+                self.recipe_manager
+            )
         return self.observation_builder.build_observations(
             self.state, 
             self.agents, 

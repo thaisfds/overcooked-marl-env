@@ -255,6 +255,7 @@ ENVIRONMENT_CONFIG = {
     'render_mode': None,
     'verbose': False,
     'max_episode_steps': 1200,
+    'featurized_obs': True,  # ADICIONADO: observações 1D vetorizadas
 }
 
 param_grid = {
@@ -274,7 +275,8 @@ def env_creator(env_config=None):
         render_mode=ENVIRONMENT_CONFIG['render_mode'],
         map_path=ENVIRONMENT_CONFIG['map_path'], 
         num_fixed_agents=ENVIRONMENT_CONFIG['num_fixed_agents'],
-        verbose=ENVIRONMENT_CONFIG['verbose']
+        verbose=ENVIRONMENT_CONFIG['verbose'],
+        featurized_obs=ENVIRONMENT_CONFIG.get('featurized_obs', False)
     )
 
 # ----------------------------------------------------------------------
@@ -351,18 +353,8 @@ if __name__ == "__main__":
                 entropy_coeff=entropy_coeff,  # Coeficiente de entropia para aumentar exploração 
                 grad_clip=1.0,  # Clip gradients to prevent explosion (NaN/Inf)
                 model={
-                    # OPÇÃO 1: Usar conv_filters corrigido (tentativa inicial)
-                    # CORREÇÃO DA CNN: Ajuste para reduzir 7x7 para 1x1 usando stride=2.
-                    # Com stride=2, kernel=3, padding=0: 7x7 -> 3x3 -> 1x1
-                    "conv_filters": [
-                         [32, [3, 3], 2], # 7x7 -> 3x3 (stride=2 reduz mais rápido)
-                         [64, [3, 3], 2], # 3x3 -> 1x1 (stride=2 reduz para 1x1)
-                    ],
-                    # Adicionamos camadas densas para garantir a passagem correta
-                    "fcnet_hiddens": [128, 128]
-                    
-                    # OPÇÃO 2: Se Opção 1 não funcionar, descomente abaixo e comente acima
-                    # "custom_model": "cnn_ppo_model",
+                    "fcnet_hiddens": [64, 64],
+                    "fcnet_activation": "tanh",
                 }
             )
             .env_runners( 
