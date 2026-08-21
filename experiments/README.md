@@ -3,10 +3,12 @@
 This directory contains the reinforcement learning experiments for the Overcooked MARL environment, implemented using Ray RLlib (PPO).
 
 ## Files Overview
+- **[train_ppo.py](file:///home/thaiswsl/NewOvercookedEnv/experiments/train_ppo.py)**: **[NEW & OPTIMIZED]** Parameterized unified training script supporting parallel env runners and native parallel grid search.
 - **[ppo_overcookedRLlib.py](file:///home/thaiswsl/NewOvercookedEnv/experiments/ppo_overcookedRLlib.py)**: Training script for single-agent configuration.
 - **[ppo_overcookedRLlib2Agents.py](file:///home/thaiswsl/NewOvercookedEnv/experiments/ppo_overcookedRLlib2Agents.py)**: Training script for two-agent cooperative configurations.
 - **[ppo_model_evaluation.ipynb](file:///home/thaiswsl/NewOvercookedEnv/experiments/ppo_model_evaluation.ipynb)**: Jupyter notebook to evaluate single-agent policies.
 - **[ppo_model_evaluation2Agents.ipynb](file:///home/thaiswsl/NewOvercookedEnv/experiments/ppo_model_evaluation2Agents.ipynb)**: Jupyter notebook to evaluate two-agent cooperative policies.
+- **[ppo_plot_training_curves.ipynb](file:///home/thaiswsl/NewOvercookedEnv/experiments/ppo_plot_training_curves.ipynb)**: **[NEW]** Jupyter notebook to instantly compare learning curves of all trained models.
 
 ---
 
@@ -28,19 +30,48 @@ venv/bin/pip install seaborn
 
 First, make sure you are in the project root directory (`/home/thaiswsl/NewOvercookedEnv`) and have the virtual environment activated or use the direct virtual environment paths as shown below.
 
-### 1. Running Training Scripts (Python)
+### 1. Running the Unified Optimized Training Script (`train_ppo.py`)
 
-To run the single-agent PPO training experiment:
+This script supports training configurations dynamically via CLI arguments or parameter searches in the code.
+
+**CLI Options:**
+- `--map`: Map name (e.g. `default_map.txt`, `tutorial.txt`).
+- `--num-agents`: Number of agents to train (e.g. `2`, `3`).
+- `--episodes`: Total episodes to train.
+- `--workers`: Number of parallel environment rollout workers (rollout parallelization).
+- `--lr`: Learning rate override.
+- `--gamma`: Discount factor override.
+- `--batch-size`: Training batch size.
+- `--minibatch-size`: SGD minibatch size.
+- `--epochs`: Number of SGD epochs per batch update.
+- `--entropy-coeff`: Entropy coefficient.
+- `--gpus`: Number of GPUs to allocate (auto-detects CUDA devices).
+
+**Run single trial via CLI:**
 ```bash
-venv/bin/python experiments/ppo_overcookedRLlib.py
+venv/bin/python experiments/train_ppo.py --map default_map.txt --num-agents 2 --workers 3 --episodes 300
 ```
 
-To run the two-agent cooperative PPO training experiment:
-```bash
-venv/bin/python experiments/ppo_overcookedRLlib2Agents.py
+**Run native parallel Grid Search:**
+Edit the `HYPERPARAMETER_GRID` dictionary inside [`train_ppo.py`](file:///home/thaiswsl/NewOvercookedEnv/experiments/train_ppo.py):
+```python
+HYPERPARAMETER_GRID = {
+    "lr": [3e-4, 1e-3],          # Ray Tune runs both in parallel
+    "gamma": [0.90, 0.95],        # Ray Tune runs both in parallel
+    "entropy_coeff": [0.01],
+    "train_batch_size": [4000],
+    "sgd_minibatch_size": [128],
+    "update_epochs": [8],
+    "num_episodes": [300, 400],   # Handled dynamically per trial via stop_fn
+    "seed": [42]
+}
 ```
+Then, execute the script. Ray Tune will orchestrate concurrent trial execution based on system resources, saving checkpoints and `model_info.json` directly to the persistent `ray_results/` storage.
 
-*Note: Ray RLlib will automatically log tensorboard summaries and checkpoint files in `~/ray_results/`.*
+*Tip: You can combine the grid search with CLI arguments to override constant parameters (like map name or agent count) for all concurrent trials:*
+```bash
+venv/bin/python experiments/train_ppo.py --num-agents 3 --map tutorial.txt
+```
 
 ---
 

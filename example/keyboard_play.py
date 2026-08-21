@@ -230,9 +230,9 @@ if __name__ == "__main__":
     # Try using custom map template by default if it exists
     map_file = args.map
     if map_file is None:
-        template_map = "overcooked_marl_env/map/maps/simple_map.txt"
+        template_map = "overcooked_marl_env/map/maps/default_map.txt"
         if os.path.exists(template_map):
             map_file = template_map
-            print(f"Auto-selected simple map: {template_map}")
+            print(f"Auto-selected default map: {template_map}")
             
     play(map_file, args.recipes)

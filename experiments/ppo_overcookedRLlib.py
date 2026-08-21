@@ -245,12 +245,12 @@ def generate_params_string(params: Dict[str, Any]) -> str:
 # CONFIGURAÇÕES DO AMBIENTE E PARÂMETROS
 # ----------------------------------------------------------------------
 
-# Calcular caminho do mapa (simple_map.txt) - funciona tanto quando executado quanto quando importado
+# Calcular caminho do mapa (default_map.txt) - funciona tanto quando executado quanto quando importado
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_MAP_PATH_ABS = os.path.join(_SCRIPT_DIR, "overcooked_marl_env", "map", "maps", "simple_map.txt")
+_MAP_PATH_ABS = os.path.join(_SCRIPT_DIR, "overcooked_marl_env", "map", "maps", "default_map.txt")
 
 ENVIRONMENT_CONFIG = {
-    'map_path': _MAP_PATH_ABS,  # Usar simple_map.txt por padrão
+    'map_path': _MAP_PATH_ABS,  # Usar default_map.txt por padrão
     'num_fixed_agents': 1, 
     'render_mode': None,
     'verbose': False,
@@ -291,7 +291,7 @@ if __name__ == "__main__":
         print(f"AVISO: Mapa não encontrado em {ENVIRONMENT_CONFIG['map_path']}")
         print(f"Tentando usar caminho relativo...")
         # Fallback para caminho relativo
-        ENVIRONMENT_CONFIG['map_path'] = os.path.join("overcooked_marl_env", "map", "maps", "simple_map.txt")
+        ENVIRONMENT_CONFIG['map_path'] = os.path.join("overcooked_marl_env", "map", "maps", "default_map.txt")
     
     print(f"Mapa configurado: {ENVIRONMENT_CONFIG['map_path']}")
     
