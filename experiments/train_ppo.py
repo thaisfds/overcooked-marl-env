@@ -36,7 +36,7 @@ HYPERPARAMETER_GRID = {
     "train_batch_size": [4000],
     "sgd_minibatch_size": [128],
     "update_epochs": [8],
-    "num_episodes": [300],        # e.g., [300, 400]
+    "num_episodes": [100,200],        # e.g., [300, 400]
     "seed": [42]
 }
 
@@ -211,7 +211,7 @@ def main():
         )
         .env_runners(
             num_env_runners=args.workers,
-            rollout_fragment_length=rollout_fragment_length,
+            rollout_fragment_length="auto",
             batch_mode="truncate_episodes",
         )
         .multi_agent(
