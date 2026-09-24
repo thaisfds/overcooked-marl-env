@@ -20,64 +20,106 @@ class FeaturizedObservationBuilder:
       - 92:96: 2 nearest Trash Cans
     """
     
+    DEFAULT_RECIPE_INGREDIENTS = {
+        "SIMPLE_SALAD": ["tomato"],
+        "GARDEN_SALAD": ["tomato", "lettuce"],
+        "FRESH_SALAD": ["lettuce"],
+        "ONION_SOUP": ["onion"],
+        "ONION_SALAD": ["onion"],
+    }
+
     def __init__(self, recipe_manager=None):
         self.recipe_manager = recipe_manager
         
-    def _encode_item_type_onehot(self, item) -> np.ndarray:
-        onehot = np.zeros(8, dtype=np.float32)
+    def _encode_item_type_onehot(self, item, dispenser_slot_by_ing: Dict[str, int] = None) -> np.ndarray:
+        onehot = np.zeros(6, dtype=np.float32)
         if item is None:
             onehot[0] = 1.0
             return onehot
             
         name = item.get("name", "").lower()
-        if name == "tomato":
+        slot = item.get("origin_dispenser_slot", None)
+        if slot is None and dispenser_slot_by_ing:
+            slot = dispenser_slot_by_ing.get(name, None)
+            
+        if name == "plate" and not item.get("ingredients", []):
+            idx = 4
+        elif "plate" in name or item.get("is_combined", False) or item.get("ingredients", []):
+            idx = 5
+        elif slot is not None and 0 <= slot <= 3:
+            idx = min(slot + 1, 3)
+        elif name == "tomato":
             idx = 1
         elif name == "lettuce":
             idx = 2
-        elif name == "onion":
-            idx = 3
-        elif name == "cucumber":
-            idx = 4
-        elif name == "plate":
-            idx = 5
-        elif "plate" in name or item.get("is_combined", False):
-            idx = 6
         else:
-            idx = 7
+            idx = 3
             
         onehot[idx] = 1.0
         return onehot
 
-    def _encode_recipe_onehot(self, recipe_name: str) -> np.ndarray:
+    def _get_recipe_ingredients(self, recipe_name: str, recipe_manager=None) -> List[str]:
+        if not recipe_name:
+            return []
+        recipe_mgr = recipe_manager or self.recipe_manager
+        if recipe_mgr:
+            recipe = recipe_mgr.get_recipe_by_name(recipe_name)
+            if recipe and hasattr(recipe, "ingredients") and recipe.ingredients:
+                return [ing.lower() for ing in recipe.ingredients]
+        name_upper = recipe_name.upper()
+        if name_upper in self.DEFAULT_RECIPE_INGREDIENTS:
+            return self.DEFAULT_RECIPE_INGREDIENTS[name_upper]
+        return []
+
+    def _encode_recipe_compositional(self, recipe_name: str, recipe_manager=None, dispenser_slot_by_ing: Dict[str, int] = None) -> np.ndarray:
         onehot = np.zeros(7, dtype=np.float32)
         if not recipe_name:
             onehot[0] = 1.0
             return onehot
             
-        name = recipe_name.upper()
-        if name == "SIMPLE_SALAD":
+        name_upper = recipe_name.upper()
+        if name_upper == "SIMPLE_SALAD":
             idx = 1
-        elif name == "GARDEN_SALAD":
+        elif name_upper == "GARDEN_SALAD":
             idx = 2
-        elif name == "FRESH_SALAD":
+        elif name_upper == "FRESH_SALAD":
             idx = 3
-        elif name == "ONION_SOUP":
+        elif name_upper == "ONION_SOUP":
             idx = 4
-        elif name == "ONION_SALAD":
+        elif name_upper == "ONION_SALAD":
             idx = 5
         else:
-            idx = 6
-            
+            ingredients = self._get_recipe_ingredients(recipe_name, recipe_manager)
+            slots = set()
+            for ing in ingredients:
+                ing_lower = ing.lower()
+                slot = dispenser_slot_by_ing.get(ing_lower) if dispenser_slot_by_ing else None
+                if slot is None:
+                    if ing_lower == "tomato":
+                        slot = 0
+                    elif ing_lower == "lettuce":
+                        slot = 1
+                    elif ing_lower == "onion":
+                        slot = 2
+                    else:
+                        slot = 3
+                slots.add(slot)
+                
+            if slots == {0}:
+                idx = 1
+            elif slots == {0, 1}:
+                idx = 2
+            elif slots == {1}:
+                idx = 3
+            elif slots == {2}:
+                idx = 4
+            elif slots in ({2, 1}, {2, 0}):
+                idx = 5
+            else:
+                idx = 6
+                
         onehot[idx] = 1.0
         return onehot
-
-    def _get_recipe_ingredients(self, recipe_name: str, recipe_manager) -> List[str]:
-        if not recipe_name or not recipe_manager:
-            return []
-        recipe = recipe_manager.get_recipe_by_name(recipe_name)
-        if recipe:
-            return [ing.lower() for ing in recipe.ingredients]
-        return []
 
     def build_observations(
         self,
@@ -91,20 +133,25 @@ class FeaturizedObservationBuilder:
         H, W = map_size
         recipe_mgr = recipe_manager or self.recipe_manager
         
-        # 1. Parse all static locations
+        # 1. Parse all static locations & map dispenser slots deterministically
         dispensers_by_type = {}
-        chopping_boards = []
-        plate_dispensers = []
-        empty_counters = []
-        delivery_stations = []
-        trash_cans = []
+        dispenser_positions = sorted(list(game_state.get("dispensers", {}).keys()))
+        dispenser_slot_by_pos = {pos: idx for idx, pos in enumerate(dispenser_positions)}
+        dispenser_slot_by_ing = {}
         
-        # Parse dispensers from game state
         for (x, y), ing in game_state.get("dispensers", {}).items():
             ing_type = ing.lower()
             if ing_type not in dispensers_by_type:
                 dispensers_by_type[ing_type] = []
             dispensers_by_type[ing_type].append((x, y))
+            slot_idx = dispenser_slot_by_pos.get((x, y), 0)
+            dispenser_slot_by_ing[ing_type] = slot_idx
+
+        chopping_boards = []
+        plate_dispensers = []
+        empty_counters = []
+        delivery_stations = []
+        trash_cans = []
             
         # Parse other stations from static grid
         for y in range(H):
@@ -124,14 +171,18 @@ class FeaturizedObservationBuilder:
                     if (x, y) not in game_state.get("ground_instances", {}):
                         empty_counters.append((x, y))
                         
-        # 2. Get HUD recipe orders
-        recipe_queue = game_state.get("recipe_order", [])
+        # 2. Get HUD recipe orders (Dynamic FIFO queue of pending orders)
+        recipe_queue = list(game_state.get("recipe_order", []))
+        for delivered in game_state.get("delivered_recipes", []):
+            if delivered in recipe_queue:
+                recipe_queue.remove(delivered)
+        
         rec_1 = recipe_queue[0] if len(recipe_queue) > 0 else None
         rec_2 = recipe_queue[1] if len(recipe_queue) > 1 else None
         
         recipe_features = np.concatenate([
-            self._encode_recipe_onehot(rec_1),
-            self._encode_recipe_onehot(rec_2)
+            self._encode_recipe_compositional(rec_1, recipe_mgr, dispenser_slot_by_ing),
+            self._encode_recipe_compositional(rec_2, recipe_mgr, dispenser_slot_by_ing)
         ])
         
         # Determine unique ingredients needed right now
@@ -151,6 +202,31 @@ class FeaturizedObservationBuilder:
             holding_id = game_state["agent_holding_instance"].get(agent_id, None)
             holding_item = game_state["item_instances"].get(holding_id) if holding_id is not None else None
             
+            # Check tile immediately in front of agent
+            front_tile = (pos[0] + orient[0], pos[1] + orient[1])
+            ground_id = game_state.get("ground_instances", {}).get(front_tile, None)
+            front_ground_item = game_state.get("item_instances", {}).get(ground_id, None) if ground_id is not None else None
+            
+            front_cell_code = game_state["map_static"][front_tile[1], front_tile[0]] if (0 <= front_tile[1] < H and 0 <= front_tile[0] < W) else 0
+            front_cell_char = item_manager.get_cell_char(front_cell_code) if item_manager else ' '
+            
+            facing_station_code = 0.0
+            if front_cell_char == 'C':
+                facing_station_code = 0.25
+            elif front_cell_char == 'I':
+                facing_station_code = 0.50
+            elif front_cell_char == 'D':
+                facing_station_code = 0.75
+            elif front_cell_char in ('P', 'T'):
+                facing_station_code = 1.00
+
+            is_held_item_ready = 0.0
+            if holding_item is not None:
+                if holding_item.get("type") == "dish" or holding_item.get("state") == "READY":
+                    is_held_item_ready = 1.0
+                elif holding_item.get("cuts_completed", 0) >= holding_item.get("cuts_needed", 1) and holding_item.get("cuts_needed", 1) > 0:
+                    is_held_item_ready = 1.0
+            
             # Encode self state (14 dims)
             self_state = np.zeros(14, dtype=np.float32)
             self_state[0] = pos[0] / max(1, W - 1)
@@ -158,9 +234,15 @@ class FeaturizedObservationBuilder:
             self_state[2] = float(orient[0])
             self_state[3] = float(orient[1])
             self_state[4] = 1.0 if holding_item is not None else 0.0
-            self_state[5:13] = self._encode_item_type_onehot(holding_item)
+            self_state[5:11] = self._encode_item_type_onehot(holding_item, dispenser_slot_by_ing)
+            self_state[11] = is_held_item_ready
+            self_state[12] = facing_station_code
+            
+            # Dim 13: Cuts progress of held item OR item immediately in front on cutting board
             if holding_item is not None and "cuts_completed" in holding_item and "cuts_needed" in holding_item:
                 self_state[13] = holding_item["cuts_completed"] / max(1, holding_item["cuts_needed"])
+            elif front_ground_item is not None and "cuts_completed" in front_ground_item and "cuts_needed" in front_ground_item:
+                self_state[13] = front_ground_item["cuts_completed"] / max(1, front_ground_item["cuts_needed"])
             else:
                 self_state[13] = 0.0
                 
@@ -174,15 +256,44 @@ class FeaturizedObservationBuilder:
                 o_holding_id = game_state["agent_holding_instance"].get(o_agent, None)
                 o_holding_item = game_state["item_instances"].get(o_holding_id) if o_holding_id is not None else None
                 
+                o_front_tile = (o_pos[0] + o_orient[0], o_pos[1] + o_orient[1])
+                o_ground_id = game_state.get("ground_instances", {}).get(o_front_tile, None)
+                o_front_item = game_state.get("item_instances", {}).get(o_ground_id, None) if o_ground_id is not None else None
+                
+                o_front_cell_code = game_state["map_static"][o_front_tile[1], o_front_tile[0]] if (0 <= o_front_tile[1] < H and 0 <= o_front_tile[0] < W) else 0
+                o_front_cell_char = item_manager.get_cell_char(o_front_cell_code) if item_manager else ' '
+                
+                o_facing_station_code = 0.0
+                if o_front_cell_char == 'C':
+                    o_facing_station_code = 0.25
+                elif o_front_cell_char == 'I':
+                    o_facing_station_code = 0.50
+                elif o_front_cell_char == 'D':
+                    o_facing_station_code = 0.75
+                elif o_front_cell_char in ('P', 'T'):
+                    o_facing_station_code = 1.00
+
+                o_is_held_ready = 0.0
+                if o_holding_item is not None:
+                    if o_holding_item.get("type") == "dish" or o_holding_item.get("state") == "READY":
+                        o_is_held_ready = 1.0
+                    elif o_holding_item.get("cuts_completed", 0) >= o_holding_item.get("cuts_needed", 1) and o_holding_item.get("cuts_needed", 1) > 0:
+                        o_is_held_ready = 1.0
+                
                 offset = o_idx * 14
                 other_state[offset] = o_pos[0] / max(1, W - 1)
                 other_state[offset+1] = o_pos[1] / max(1, H - 1)
                 other_state[offset+2] = float(o_orient[0])
                 other_state[offset+3] = float(o_orient[1])
                 other_state[offset+4] = 1.0 if o_holding_item is not None else 0.0
-                other_state[offset+5:offset+13] = self._encode_item_type_onehot(o_holding_item)
+                other_state[offset+5:offset+11] = self._encode_item_type_onehot(o_holding_item, dispenser_slot_by_ing)
+                other_state[offset+11] = o_is_held_ready
+                other_state[offset+12] = o_facing_station_code
+                
                 if o_holding_item is not None and "cuts_completed" in o_holding_item and "cuts_needed" in o_holding_item:
                     other_state[offset+13] = o_holding_item["cuts_completed"] / max(1, o_holding_item["cuts_needed"])
+                elif o_front_item is not None and "cuts_completed" in o_front_item and "cuts_needed" in o_front_item:
+                    other_state[offset+13] = o_front_item["cuts_completed"] / max(1, o_front_item["cuts_needed"])
                 else:
                     other_state[offset+13] = 0.0
                     
