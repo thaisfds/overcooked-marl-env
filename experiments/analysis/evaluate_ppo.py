@@ -18,10 +18,11 @@ from ray.rllib.algorithms.algorithm import Algorithm
 from ray.tune.registry import register_env
 
 from overcooked_marl_env import OvercookedMARL
-from experiments.train_ppo import ParallelEnvToMultiAgent
+from experiments.training.train_ppo import ParallelEnvToMultiAgent
 
 def find_latest_checkpoint():
-    ray_results = Path(__file__).parent / "ray_results"
+    exp_dir = Path(__file__).resolve().parent.parent
+    ray_results = exp_dir / "ray_results"
     if not ray_results.exists():
         raise FileNotFoundError("ray_results directory not found")
         
@@ -43,6 +44,7 @@ def parse_args():
     parser.add_argument("--num-agents", type=int, default=1, help="Number of agents (default: 1)")
     parser.add_argument("--max-steps", type=int, default=800, help="Max steps per episode (default: 800)")
     parser.add_argument("--base-seed", type=int, default=42, help="Base random seed (default: 42)")
+    parser.add_argument("--log-vision", action="store_true", default=False, help="Enable step-by-step vision analysis logging (default: False)")
     return parser.parse_args()
 
 def main():
@@ -54,6 +56,34 @@ def main():
     print(f"  Episodes:     {args.num_episodes}")
     print(f"  Map:          {args.map}")
     print(f"  Agents:       {args.num_agents}")
+    print(f"  Vision Log:   {'ENABLED' if args.log_vision else 'DISABLED'}")
+    print("="*60 + "\n")
+    
+    # Determine experiment name from checkpoint path
+    exp_name = "evaluation"
+    parts = Path(checkpoint_path).parts
+    if "ray_results" in parts:
+        idx = parts.index("ray_results")
+        if idx + 1 < len(parts):
+            exp_name = parts[idx + 1]
+            
+    exp_dir = Path(__file__).resolve().parent.parent
+    log_dir = exp_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    if args.log_vision:
+        vision_dir = log_dir / "vision_analysis"
+        vision_dir.mkdir(parents=True, exist_ok=True)
+        vision_log_filename = f"vision_analysis_{exp_name}.log"
+        os.environ["OVERCOOKED_VISION_LOG"] = vision_log_filename
+        vision_log_path = vision_dir / vision_log_filename
+        if vision_log_path.exists():
+            vision_log_path.unlink()
+        print(f"  Vision Log:   {vision_log_path.name}")
+    else:
+        os.environ.pop("OVERCOOKED_VISION_LOG", None)
+        vision_log_path = None
+        print("  Vision Log:   DISABLED")
     print("="*60 + "\n")
     
     ray.init(ignore_reinit_error=True)
@@ -73,12 +103,6 @@ def main():
     
     # Load Algorithm from checkpoint
     algo = Algorithm.from_checkpoint(checkpoint_path)
-    
-    # Clear vision_analysis.log before evaluating fresh episodes
-    log_path = Path(__file__).parent / "logs" / "vision_analysis.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    if log_path.exists():
-        log_path.unlink()
         
     episode_results = []
     
@@ -92,7 +116,7 @@ def main():
         step_count = 0
         
         while not done and step_count < args.max_steps:
-            # Render step (writes step info to vision_analysis.log)
+            # Render step (writes step info to vision_analysis_<EXP_NAME>.log)
             env.render()
             
             # Compute actions from trained policy
@@ -148,10 +172,25 @@ def main():
         "episodes": episode_results
     }
     
-    # Save evaluation summary to JSON file
-    summary_json_path = Path(__file__).parent / "logs" / "evaluation_results.json"
+    # Save default evaluation summary
+    summary_json_path = log_dir / "evaluation_results.json"
     with open(summary_json_path, "w") as f:
         json.dump(stats, f, indent=2)
+        
+    # Also update/write experiment-specific log file in experiments/logs/
+    exp_log_file = log_dir / f"{exp_name}.json"
+    if exp_log_file.exists():
+        try:
+            with open(exp_log_file, "r") as f:
+                exp_data = json.load(f)
+            exp_data["evaluation"] = stats
+            with open(exp_log_file, "w") as f:
+                json.dump(exp_data, f, indent=2)
+        except Exception:
+            pass
+    else:
+        with open(log_dir / f"{exp_name}_evaluation.json", "w") as f:
+            json.dump(stats, f, indent=2)
         
     print("\n" + "="*60, flush=True)
     print("STATISTICAL EVALUATION SUMMARY", flush=True)
@@ -161,6 +200,8 @@ def main():
     print(f"  Min / Max Reward:     {stats['reward_min']:+.2f} / {stats['reward_max']:+.2f}", flush=True)
     print(f"  Mean Deliveries/Ep:   {stats['deliveries_mean']:.2f} (Total: {stats['deliveries_total']})", flush=True)
     print(f"  Mean Steps/Episode:   {stats['steps_mean']:.1f}", flush=True)
+    if vision_log_path:
+        print(f"  Vision Log saved to:  {vision_log_path}", flush=True)
     print(f"  Summary saved to:     {summary_json_path}", flush=True)
     print("="*60 + "\n", flush=True)
 

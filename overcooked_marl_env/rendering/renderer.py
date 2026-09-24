@@ -440,15 +440,21 @@ class Renderer:
                     
             vis_txt = self.font_small_bold.render(f"Focus: {closest_obj}", True, (200, 220, 255))
             
-            # Log analysis to file
+            # Optional log analysis to file (default: disabled)
             try:
                 import os
                 from pathlib import Path
-                log_dir = Path(__file__).resolve().parent.parent.parent / "experiments" / "logs"
-                os.makedirs(log_dir, exist_ok=True)
-                with open(log_dir / "vision_analysis.log", "a") as f:
-                    time_step = game_state.get("time_steps", 0)
-                    f.write(f"[Step {time_step:04d}] {agent_id} | Pos: {ax:02d},{ay:02d} | Hold: {inventory:10} | Focus: {closest_obj:20} | Score: {total_reward:+.1f} | Step Rwd: {step_reward:+.1f}\n")
+                log_filename = os.environ.get("OVERCOOKED_VISION_LOG", None)
+                if log_filename and log_filename.strip() and log_filename.strip().lower() not in ("0", "false", "off", "none"):
+                    log_dir = Path(__file__).resolve().parent.parent.parent / "experiments" / "logs" / "vision_analysis"
+                    os.makedirs(log_dir, exist_ok=True)
+                    log_str = log_filename.strip()
+                    if not log_str.endswith(".log"):
+                        log_str += ".log"
+                    log_filepath = log_dir / log_str if not Path(log_str).is_absolute() else Path(log_str)
+                    with open(log_filepath, "a") as f:
+                        time_step = game_state.get("time_steps", 0)
+                        f.write(f"[Step {time_step:04d}] {agent_id} | Pos: {ax:02d},{ay:02d} | Hold: {inventory:10} | Focus: {closest_obj:20} | Score: {total_reward:+.1f} | Step Rwd: {step_reward:+.1f}\n")
             except Exception:
                 pass
             

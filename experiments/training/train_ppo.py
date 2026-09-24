@@ -236,10 +236,10 @@ def main():
         return result.get("timesteps_total", 0) >= target_timesteps
         
     # Output path creation
-    script_dir = Path(__file__).parent.absolute()
+    exp_dir = Path(__file__).resolve().parent.parent
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     timestamp_dir_name = f"PPO_Marl_{timestamp}"
-    ray_results_base = script_dir / "ray_results" / timestamp_dir_name
+    ray_results_base = exp_dir / "ray_results" / timestamp_dir_name
     ray_results_base.mkdir(parents=True, exist_ok=True)
     
     params_str = f"map-{args.map.replace('.txt', '')}_agents-{args.num_agents}_workers{args.workers}"
@@ -385,7 +385,25 @@ def main():
             with open(target_dir / "model_info.json", "w") as f:
                 json.dump(model_info, f, indent=2)
                 
+            # Save experiment log in experiments/logs named after the ray_results folder
+            exp_logs_dir = exp_dir / "logs"
+            exp_logs_dir.mkdir(parents=True, exist_ok=True)
+            exp_log_file = exp_logs_dir / f"{timestamp_dir_name}.json"
+            
+            exp_summary = {
+                "ray_results_folder": timestamp_dir_name,
+                "trial_name": params_dir_name,
+                "checkpoint_path": checkpoint_path,
+                "timestamp": timestamp,
+                "hyperparameters": model_info["training_config"],
+                "training_reward_mean": float(avg_reward_last),
+                "evaluation": None
+            }
+            with open(exp_log_file, "w") as f:
+                json.dump(exp_summary, f, indent=2)
+                
             print(f"Trial {trial.trial_id} completed: reward={avg_reward_last:.2f} | Metadata saved: {target_dir / 'model_info.json'}")
+            print(f"Experiment log saved to: {exp_log_file}")
             
     except Exception as e:
         print(f"Error during training session: {e}")
