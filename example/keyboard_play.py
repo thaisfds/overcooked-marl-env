@@ -84,7 +84,7 @@ def run_countdown(env):
             
             pygame.time.wait(20)
 
-def play(map_path=None, custom_recipes=None):
+def play(map_path=None, custom_recipes=None, num_agents=1):
     # Initialize Pygame display and sound modules
     pygame.init()
     
@@ -92,6 +92,7 @@ def play(map_path=None, custom_recipes=None):
     env = OvercookedMARL(
         render_mode="human",
         map_path=map_path,
+        num_fixed_agents=num_agents,
         verbose=True,
         custom_recipes_path=custom_recipes
     )
@@ -225,6 +226,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Interactive Playtest for Overcooked MARL")
     parser.add_argument("--map", default=None, help="Path to map text file")
     parser.add_argument("--recipes", default=None, help="Path to recipes JSON file")
+    parser.add_argument("--agents", type=int, default=1, help="Number of agents to play with (default: 1)")
     args = parser.parse_args()
     
     # Try using custom map template by default if it exists
@@ -235,4 +237,4 @@ if __name__ == "__main__":
             map_file = template_map
             print(f"Auto-selected default map: {template_map}")
             
-    play(map_file, args.recipes)
+    play(map_file, args.recipes, num_agents=args.agents)

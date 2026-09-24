@@ -92,14 +92,6 @@ class InteractionHandler:
         # Get station type
         station_type = game_state["map_static"][iy, ix]
         
-        # Calculate proximity reward if agent is near delivery with complete plate
-        proximity_reward = self.reward_shaper._calculate_delivery_proximity_reward(agent_id, carrying_item, game_state)
-        
-        # Calculate "ready to combine" reward if agent has ready ingredient and is near plate (or vice versa)
-        ready_to_combine_reward = self.reward_shaper._calculate_ready_to_combine_reward(
-            agent_id, carrying_item, ground_item, game_state
-        )
-        
         # Debug output
         if verbose:
             self._print_interaction_info(
@@ -114,74 +106,62 @@ class InteractionHandler:
         delivery_code = self.item_manager.get_cell_code('D')
         trash_code = self.item_manager.get_cell_code('T')
         counter_code = self.item_manager.get_cell_code('#')
-        ingredient_dispenser_code = self.item_manager.get_cell_code('I')
         
         # Chopping board
         if station_type == chopping_code:
-            local_reward, global_reward = self._handle_chopping_board(
+            return self._handle_chopping_board(
                 agent_id, tile_pos, carrying_item, carrying_instance_id,
                 ground_item, ground_instance_id, game_state, verbose
             )
-            return local_reward + proximity_reward + ready_to_combine_reward, global_reward
         
         # Plate dispenser
         elif station_type == plate_code:
-            local_reward, global_reward = self._handle_plate_dispenser(
+            return self._handle_plate_dispenser(
                 agent_id, carrying_item, carrying_instance_id,
                 game_state, verbose
             )
-            return local_reward + proximity_reward + ready_to_combine_reward, global_reward
         
         # Ingredient dispenser (from map) - ONLY pickup, NEVER place
-        # Cannot place items on dispensers - only pick up ingredients when empty
         elif tile_pos in game_state["dispensers"]:
             if carrying_item:
-                # Tentativa de colocar item no dispenser - bloqueado
                 if verbose:
                     print(f"  Cannot place items on ingredient dispenser")
-                return proximity_reward + ready_to_combine_reward, 0.0
+                return 0.0, 0.0  # SEM PENALIDADE
             elif not ground_item:
-                # Pickup de ingrediente do dispenser
-                local_reward, global_reward = self._handle_ingredient_dispenser(
+                return self._handle_ingredient_dispenser(
                     agent_id, tile_pos, carrying_item,
                     game_state, verbose
                 )
-                return local_reward + proximity_reward + ready_to_combine_reward, global_reward
             else:
-                # Há item no chão do dispenser (não deveria acontecer)
                 if verbose:
                     print(f"  Invalid state: item on dispenser ground")
-                return proximity_reward + ready_to_combine_reward, 0.0
+                return 0.0, 0.0
         
         # Delivery station
         elif station_type == delivery_code:
-            local_reward, global_reward = self._handle_delivery(
+            return self._handle_delivery(
                 agent_id, carrying_item, carrying_instance_id,
                 game_state, verbose
             )
-            return local_reward + proximity_reward + ready_to_combine_reward, global_reward
         
         # Trash station - delete items
         elif station_type == trash_code:
-            local_reward, global_reward = self._handle_trash(
+            return self._handle_trash(
                 agent_id, carrying_item, carrying_instance_id,
                 game_state, verbose
             )
-            return local_reward + proximity_reward + ready_to_combine_reward, global_reward
         
         # Counter/table (for placing/picking/combining items)
-        # ONLY '#' counters - ingredient dispensers ('I') are handled above
         elif station_type == counter_code:
-            local_reward, global_reward = self._handle_counter(
+            return self._handle_counter(
                 agent_id, tile_pos, carrying_item, carrying_instance_id,
                 ground_item, ground_instance_id, game_state, verbose
             )
-            return local_reward + proximity_reward + ready_to_combine_reward, global_reward
         
         # Invalid interaction
         if verbose:
             print(f"  Invalid interaction location")
-        return proximity_reward + ready_to_combine_reward, 0.0  # Retorna recompensas mesmo em interação inválida
+        return self.rewards.invalid, 0.0
     
     def _handle_chopping_board(
         self,
@@ -242,12 +222,15 @@ class InteractionHandler:
                 if verbose:
                     print(f"  WARNING: Too many processed ingredients on ground ({processed_count})! Penalty: {accumulation_penalty}")
             
-            total_reward = self.rewards.process + repetition_penalty + accumulation_penalty
+            cut_reward = self.rewards.process if self.rewards.process != 1.0 else self.rewards.chop_cut
+            milestone_reward = self.rewards.chop_completed if is_ready(updated_item) else 0.0
+            total_reward = cut_reward + milestone_reward + repetition_penalty + accumulation_penalty
             
             if verbose:
-                cuts_done = updated_item.get("cuts_done", 0)
-                cuts_needed = updated_item.get("cuts_needed", DEFAULT_CUTS_NEEDED)
-                print(f"  Cutting... {cuts_done}/{cuts_needed} cuts")
+                cuts_done = updated_item.get("cuts_completed", updated_item.get("cuts_done", 0))
+                cuts_needed = updated_item.get("cuts_needed", 3)
+                print(f"  Cutting... {cuts_done}/{cuts_needed} cuts (+{cut_reward:.1f}" +
+                      (f" +{milestone_reward:.1f} complete milestone" if milestone_reward > 0 else "") + ")")
                 
                 if is_ready(updated_item):
                     print(f"  Item processed and ready to use!")
@@ -269,6 +252,29 @@ class InteractionHandler:
             if verbose:
                 print(f"  Picked up {ground_item['name']} from chopping board (+{self.rewards.pickup}" +
                       (f" +{progress_reward:.1f} progress" if progress_reward > 0 else "") + ")")
+            return total_reward, 0.0
+        
+        # Scenario 4: Carrying plate + ready ingredient on chopping board -> combine directly onto plate!
+        elif carrying_item and carrying_item.get("type") == ItemType.DISH and ground_item and is_ready(ground_item):
+            updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"])
+            self._update_item(carrying_instance_id, updated_plate, game_state)
+            
+            # Delete ingredient from chopping board
+            self._delete_item_instance(ground_instance_id, game_state)
+            del game_state["ground_instances"][(ix, iy)]
+            
+            # Calculate progress reward
+            progress_reward = self.reward_shaper._calculate_progress_reward(
+                'combine', carrying_item, ground_item, game_state
+            )
+            partial_plate_reward = self.reward_shaper._calculate_partial_plate_reward(updated_plate, game_state)
+            
+            total_reward = self.rewards.combine + progress_reward + partial_plate_reward
+            
+            if verbose:
+                print(f"  Combined {ground_item['name']} from chopping board with plate (+{self.rewards.combine}" +
+                      (f" +{progress_reward:.1f} progress" if progress_reward > 0 else "") +
+                      (f" +{partial_plate_reward:.1f} partial_plate" if partial_plate_reward > 0 else "") + ")")
             return total_reward, 0.0
         
         # Invalid chopping board interaction
@@ -498,6 +504,10 @@ class InteractionHandler:
                                      if game_state["map_static"][pos[1], pos[0]] == counter_code)
             
             reward = self.rewards.place
+            if is_useless_cycle:
+                reward += self.rewards.useless_cycle_penalty
+                if verbose:
+                    print(f"  WARNING: Useless pickup/place cycle detected! Penalty: {self.rewards.useless_cycle_penalty}")
             
             # Aplica penalidade progressiva se houver mais de 3 itens em bancadas
             if total_counter_items > 3:
@@ -579,29 +589,29 @@ class InteractionHandler:
         verbose: bool
     ) -> Tuple[float, float]:
         """Handle delivery interactions."""
+        invalid_pen = self.rewards.invalid if self.rewards.invalid != -0.5 else self.rewards.invalid_delivery_penalty
+        
         # Must be carrying a plate
         if not carrying_item or carrying_item.get("type") != ItemType.DISH:
             if verbose:
                 print(f"  Cannot deliver: not carrying a plate")
-            return self.rewards.invalid, 0.0
+            return invalid_pen, 0.0
         
         # Plate must have ingredients
         ingredients = carrying_item.get("ingredients", [])
         if not ingredients:
             if verbose:
                 print(f"  Cannot deliver: plate is empty")
-            return self.rewards.invalid, 0.0
+            return invalid_pen, 0.0
         
         # Validate recipe
         is_valid, recipe_name, recipe_reward = self.recipe_manager.validate_delivery(ingredients)
         
         if not is_valid:
-            # Recompensa de tentativa mesmo que falhe (incentiva exploração)
-            attempt_reward = self.rewards.delivery_attempt_reward
             if verbose:
                 ingredients_str = ", ".join(ingredients)
-                print(f"  Invalid recipe! Ingredients: [{ingredients_str}] (attempt reward: {attempt_reward})")
-            return attempt_reward, 0.0
+                print(f"  Invalid recipe! Ingredients: [{ingredients_str}] (penalty: {invalid_pen})")
+            return invalid_pen, 0.0
         
         # Check if it's the correct order
         is_correct_order = self._is_correct_order(recipe_name, game_state)
@@ -616,40 +626,43 @@ class InteractionHandler:
         
         # Calculate rewards
         base_reward = recipe_reward
-        order_bonus = recipe_reward * self.rewards.order_bonus_mult if is_correct_order else 0.0
+        order_bonus = (recipe_reward * self.rewards.order_bonus_mult) if is_correct_order else 0.0
         
-        # Bônus por completar sequência completa (pegar → picar → prato → entregar)
+        # Sequence complete bonus
         sequence_bonus = self.rewards.sequence_complete_bonus
         
-        # Bônus por múltiplas entregas consecutivas
-        # Contar quantas receitas já foram entregues (incluindo esta)
+        # Delivery multipliers
         num_deliveries = len(game_state.get("delivered_recipes", []))
         if num_deliveries == 1:
-            # Primeira entrega: sem multiplicador adicional
             delivery_multiplier = 1.0
         elif num_deliveries == 2:
-            # Segunda entrega: multiplicador 1.2
             delivery_multiplier = self.rewards.delivery_multiplier_2nd
         elif num_deliveries == 3:
-            # Terceira entrega: multiplicador 1.5
             delivery_multiplier = self.rewards.delivery_multiplier_3rd
         else:
-            # Quarta+ entrega: multiplicador 2.0
             delivery_multiplier = self.rewards.delivery_multiplier_4th_plus
         
-        # Aplicar multiplicador ao base_reward (não inclui order_bonus e sequence_bonus)
-        delivery_bonus = base_reward * (delivery_multiplier - 1.0)  # Bônus adicional
+        delivery_bonus = base_reward * (delivery_multiplier - 1.0)
         
-        total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus
-        global_reward_bonus = recipe_reward + order_bonus + delivery_bonus
+        # Check if episode is now complete (all dishes delivered)
+        episode_complete_bonus = 0.0
+        if game_state["dishes_pending"] <= 0:
+            episode_complete_bonus = self.rewards.episode_complete_bonus
+            if verbose:
+                print(f"  ALL DISHES DELIVERED! Episode Victory Bonus: +{episode_complete_bonus}")
+        
+        total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus
+        global_reward_bonus = recipe_reward + order_bonus + delivery_bonus + episode_complete_bonus
         
         if verbose:
             if is_correct_order:
                 print(f"  Recipe {recipe_name} delivered in correct order! (Delivery #{num_deliveries})")
-                print(f"  Reward: {base_reward} + Order Bonus: {order_bonus} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f})")
+                print(f"  Reward: {base_reward} + Order Bonus: {order_bonus} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f})" +
+                      (f" + Victory Bonus: {episode_complete_bonus}" if episode_complete_bonus > 0 else ""))
             else:
                 print(f"  Recipe {recipe_name} delivered out of order (Delivery #{num_deliveries})")
-                print(f"  Reward: {base_reward} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f}) (no order bonus)")
+                print(f"  Reward: {base_reward} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f}) (no order bonus)" +
+                      (f" + Victory Bonus: {episode_complete_bonus}" if episode_complete_bonus > 0 else ""))
         
         return total_reward, global_reward_bonus
     

@@ -177,7 +177,8 @@ class OvercookedMARL(ParallelEnv):
         """
         
         # Initialization of return dictionaries
-        rewards = {agent: 0.0 for agent in self.agents}
+        step_cost = getattr(self.interaction_handler.rewards, 'step_cost', -0.01)
+        rewards = {agent: step_cost for agent in self.agents}
         terminations = {agent: False for agent in self.agents}
         truncations = {agent: False for agent in self.agents}
         
@@ -487,6 +488,8 @@ class OvercookedMARL(ParallelEnv):
         
         items_on_ground = np.zeros(self.map_size, dtype=np.uint8) 
         
+        agent_start_pos = {k: v for k, v in agent_start_pos.items() if k in self.possible_agents}
+        
         carrying = {}
         for agent in self.possible_agents:
             if agent not in agent_start_pos:
@@ -505,12 +508,14 @@ class OvercookedMARL(ParallelEnv):
             
             carrying[agent] = 0  # 0 = not carrying anything (for backwards compatibility)
         
+        total_recipes_count = len(self.recipe_order) if hasattr(self, 'recipe_order') and len(self.recipe_order) > 0 else 3
+        
         state = {
             "map_static": map_static_np,
             "agent_pos": agent_start_pos,
             "carrying": carrying,
             "items_on_ground": items_on_ground,
-            "dishes_pending": 5,  # Aumentado de 3 para 5 para episódios mais longos
+            "dishes_pending": total_recipes_count,
             "time_steps": 0,
             "dispensers": dispenser_assignments,
             "recipe_order": self.recipe_order.copy() if hasattr(self, 'recipe_order') else [],  # List of recipes in order

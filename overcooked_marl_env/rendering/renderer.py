@@ -182,6 +182,8 @@ class Renderer:
         # Draw agents
         for agent_id, pos in game_state["agent_pos"].items():
             self._draw_agent(agent_id, pos, game_state)
+            self._draw_agent_vision(agent_id, pos, game_state)
+        
         
         # Draw HUD (Heads-Up Display) with game information
         self._draw_hud(game_state, agents, recipe_order)
@@ -375,8 +377,8 @@ class Renderer:
             self.window.blit(none_txt, (left_column_x + 95, delivered_badges_y + 2))
             
         # 2.2 Chef Status Cards (Bottom Right - side-by-side)
-        chef_card_width = 175
-        chef_card_height = 85
+        chef_card_width = 180
+        chef_card_height = 95
         chef_card_spacing = 15
         
         right_column_start = self.virtual_width - self.hud_padding - (chef_card_width * 2 + chef_card_spacing)
@@ -417,9 +419,125 @@ class Renderer:
             inv_color = (200, 235, 190) if inventory != "Empty" else (220, 200, 185)
             inv_txt = self.font_small_bold.render(f"Holding: {inventory}", True, inv_color)
             
+            # Find nearest object for the text HUD
+            ax, ay = game_state["agent_pos"][agent_id]
+            closest_obj = "None"
+            min_dist = float('inf')
+            H, W = game_state["map_static"].shape
+            for y in range(H):
+                for x in range(W):
+                    char = self.item_manager.get_cell_char(game_state["map_static"][y, x])
+                    dist = abs(ax - x) + abs(ay - y)
+                    if char in ['C', 'P', 'D'] and dist < min_dist:
+                        min_dist = dist
+                        name_map = {'C': 'Board', 'P': 'Plates', 'D': 'Delivery'}
+                        closest_obj = f"{name_map[char]} ({dist} steps)"
+            for (x, y), ing in game_state.get("dispensers", {}).items():
+                dist = abs(ax - x) + abs(ay - y)
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_obj = f"{ing.title()} ({dist} steps)"
+                    
+            vis_txt = self.font_small_bold.render(f"Focus: {closest_obj}", True, (200, 220, 255))
+            
+            # Log analysis to file
+            try:
+                import os
+                from pathlib import Path
+                log_dir = Path(__file__).resolve().parent.parent.parent / "experiments" / "logs"
+                os.makedirs(log_dir, exist_ok=True)
+                with open(log_dir / "vision_analysis.log", "a") as f:
+                    time_step = game_state.get("time_steps", 0)
+                    f.write(f"[Step {time_step:04d}] {agent_id} | Pos: {ax:02d},{ay:02d} | Hold: {inventory:10} | Focus: {closest_obj:20} | Score: {total_reward:+.1f} | Step Rwd: {step_reward:+.1f}\n")
+            except Exception:
+                pass
+            
             self.window.blit(score_txt, (card_x + 12, card_y + 30))
             self.window.blit(step_txt, (card_x + 100, card_y + 30))
-            self.window.blit(inv_txt, (card_x + 12, card_y + 55))
+            self.window.blit(inv_txt, (card_x + 12, card_y + 50))
+            self.window.blit(vis_txt, (card_x + 12, card_y + 70))
+    
+    def _draw_agent_vision(self, agent_id: str, pos: Tuple[int, int], game_state: Dict):
+        """Draw lines to represent what the agent's neural network is focusing on."""
+        H, W = game_state["map_static"].shape
+        ax, ay = pos
+        center_x, center_y = self._get_cell_center(ax, ay)
+        
+        closest_c = None
+        closest_p = None
+        closest_d = None
+        min_dist_c = float('inf')
+        min_dist_p = float('inf')
+        min_dist_d = float('inf')
+        
+        for y in range(H):
+            for x in range(W):
+                cell_code = game_state["map_static"][y, x]
+                char = self.item_manager.get_cell_char(cell_code)
+                dist = abs(ax - x) + abs(ay - y)
+                if char == 'C' and dist < min_dist_c:
+                    min_dist_c = dist
+                    closest_c = (x, y)
+                elif char == 'P' and dist < min_dist_p:
+                    min_dist_p = dist
+                    closest_p = (x, y)
+                elif char == 'D' and dist < min_dist_d:
+                    min_dist_d = dist
+                    closest_d = (x, y)
+                    
+        recipe_queue = list(game_state.get("recipe_order", []))
+        for delivered in game_state.get("delivered_recipes", []):
+            if delivered in recipe_queue:
+                recipe_queue.remove(delivered)
+        
+        needed_ingredients = []
+        if len(recipe_queue) > 0:
+            rec = recipe_queue[0]
+            if "SALAD" in rec:
+                needed_ingredients = ["tomato", "lettuce", "cucumber"]
+            elif "SOUP" in rec:
+                needed_ingredients = ["onion"]
+                
+        closest_ing = None
+        min_dist_i = float('inf')
+        for (x, y), ing in game_state.get("dispensers", {}).items():
+            if ing.lower() in needed_ingredients:
+                dist = abs(ax - x) + abs(ay - y)
+                if dist < min_dist_i:
+                    min_dist_i = dist
+                    closest_ing = (x, y)
+                    
+        line_surf = pygame.Surface((self.virtual_width, self.virtual_height), pygame.SRCALPHA)
+        
+        def draw_dashed_line(surf, color, start_pos, end_pos, width=2, dash_length=8):
+            x1, y1 = start_pos
+            x2, y2 = end_pos
+            dl = ((x2-x1)**2 + (y2-y1)**2)**0.5
+            if dl == 0: return
+            dashes = int(dl / dash_length)
+            for i in range(dashes):
+                if i % 2 == 0:
+                    sx = x1 + (x2-x1) * (i/dashes)
+                    sy = y1 + (y2-y1) * (i/dashes)
+                    ex = x1 + (x2-x1) * ((i+1)/dashes)
+                    ey = y1 + (y2-y1) * ((i+1)/dashes)
+                    pygame.draw.line(surf, color, (sx, sy), (ex, ey), width)
+                    
+        # Draw translucent dashed lines pointing to key focuses
+        if closest_c:
+            tx, ty = self._get_cell_center(*closest_c)
+            draw_dashed_line(line_surf, (200, 200, 200, 100), (center_x, center_y), (tx, ty), 2)
+        if closest_p:
+            tx, ty = self._get_cell_center(*closest_p)
+            draw_dashed_line(line_surf, (100, 100, 255, 100), (center_x, center_y), (tx, ty), 2)
+        if closest_d:
+            tx, ty = self._get_cell_center(*closest_d)
+            draw_dashed_line(line_surf, (255, 215, 0, 100), (center_x, center_y), (tx, ty), 2)
+        if closest_ing:
+            tx, ty = self._get_cell_center(*closest_ing)
+            draw_dashed_line(line_surf, (100, 255, 100, 100), (center_x, center_y), (tx, ty), 2)
+            
+        self.window.blit(line_surf, (0, 0))
     
     def close(self):
         """Clean up Pygame resources."""
