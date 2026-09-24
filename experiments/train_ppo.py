@@ -30,15 +30,16 @@ torch, nn = try_import_torch()
 # run trial combinations in parallel based on available CPU/GPU resources.
 # Passing CLI flags (e.g. --episodes 100) overrides these parameters.
 HYPERPARAMETER_GRID = {
-    "lr": [3e-4],                 # e.g., [3e-4, 1e-3]
-    "gamma": [0.90],              # e.g., [0.90, 0.95]
-    "entropy_coeff": [0.01],      # e.g., [0.01, 0.15]
-    "train_batch_size": [4000],
-    "sgd_minibatch_size": [128],
-    "update_epochs": [8],
-    "num_episodes": [100,200],        # e.g., [300, 400]
+    "lr": [8e-4],                 # Reduced learning rate for logit sharpening
+    "gamma": [0.98],              # High discount factor
+    "entropy_coeff": [0.01],      # Low entropy coefficient to enforce deterministic logits
+    "train_batch_size": [8000],   # Large batch
+    "sgd_minibatch_size": [256],  # Proportional minibatch
+    "update_epochs": [10],        # 10 epochs for fine-grained policy updates
+    "num_episodes": [1000],       # Extended 1000 episodes for full deterministic consolidation
     "seed": [42]
 }
+
 
 class ParallelEnvToMultiAgent(MultiAgentEnv):
     """Wrapper to convert PettingZoo ParallelEnv to RLlib MultiAgentEnv."""
@@ -202,8 +203,8 @@ def main():
             entropy_coeff=tune_entropy,
             grad_clip=1.0,
             model={
-                "fcnet_hiddens": [64, 64],
-                "fcnet_activation": "tanh",
+                "fcnet_hiddens": [128, 128],
+                "fcnet_activation": "relu",
             }
         )
         .resources(
