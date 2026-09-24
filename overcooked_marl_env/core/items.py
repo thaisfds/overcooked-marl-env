@@ -68,6 +68,18 @@ INGREDIENTS = {
             'READY': 'C'
         }
     },
+    'onion': {
+        'color': (238, 130, 238), 
+        'cuts_needed': DEFAULT_CUTS_NEEDED, 
+        'char': 'o',
+        'state_chars': {
+            'RAW': 'o',
+            'CHOPPING_1': '1',
+            'CHOPPING_2': '2',
+            'CHOPPING_3': '3',
+            'READY': 'O'
+        }
+    },
 }
 
 def register_custom_ingredient(name, color, cuts_needed=3, char=None, state_chars=None):

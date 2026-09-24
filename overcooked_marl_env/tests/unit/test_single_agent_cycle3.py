@@ -43,9 +43,9 @@ class TestSingleAgentCycle3(unittest.TestCase):
         rec1_updated = obs[agent_id][56:63]
         rec2_updated = obs[agent_id][63:70]
 
-        # HUD must now reflect GARDEN_SALAD as first pending order
+        # HUD must now reflect GARDEN_SALAD as first pending order and ONION_SOUP as second
         self.assertEqual(np.argmax(rec1_updated), 2)  # GARDEN_SALAD
-        self.assertEqual(np.argmax(rec2_updated), 1)  # SIMPLE_SALAD (the 3rd in default_map)
+        self.assertEqual(np.argmax(rec2_updated), 4)  # ONION_SOUP (the 3rd in default_map)
 
     def test_chopping_board_visual_dimension(self):
         """Test dimension 13 in self_state shows cutting progress even when hands are empty."""

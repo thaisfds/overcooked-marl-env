@@ -67,6 +67,28 @@ class FreshSaladRecipe(Recipe):
         )
 
 
+class OnionSoupRecipe(Recipe):
+    """Onion soup with just onion."""
+    
+    def __init__(self):
+        super().__init__(
+            name="ONION_SOUP",
+            ingredients=["onion"],
+            reward=150.0
+        )
+
+
+class OnionSaladRecipe(Recipe):
+    """Onion salad with lettuce and onion."""
+    
+    def __init__(self):
+        super().__init__(
+            name="ONION_SALAD",
+            ingredients=["lettuce", "onion"],
+            reward=250.0
+        )
+
+
 class RecipeManager:
     """Manages all available recipes and validates combinations."""
     
@@ -87,6 +109,8 @@ class RecipeManager:
             SimpleSaladRecipe(),
             GardenSaladRecipe(),
             FreshSaladRecipe(),
+            OnionSoupRecipe(),
+            OnionSaladRecipe(),
         ]
     
     @classmethod
@@ -260,4 +284,6 @@ RECIPE_DEFINITIONS = {
     "SIMPLE_SALAD": SimpleSaladRecipe(),
     "GARDEN_SALAD": GardenSaladRecipe(),
     "FRESH_SALAD": FreshSaladRecipe(),
+    "ONION_SOUP": OnionSoupRecipe(),
+    "ONION_SALAD": OnionSaladRecipe(),
 }

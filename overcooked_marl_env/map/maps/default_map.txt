@@ -4,12 +4,16 @@ ____________
 |#      0 #|
 |#        D|
 |#      1 #|
-|######IIT#|
+|#####IIIT#|
 ____________
 
 # Dispensers (name x y)
-tomato 7 5
+tomato 6 5
+onion 7 5
 lettuce 8 5
 
 # Recipes
-SIMPLE_SALAD, GARDEN_SALAD, SIMPLE_SALAD
+SIMPLE_SALAD, GARDEN_SALAD, ONION_SOUP
+
+
+
