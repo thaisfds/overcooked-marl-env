@@ -9,7 +9,7 @@ echo "STARTING FULL EXPERIMENT CYCLE (TRAIN + EVALUATE)"
 echo "=================================================="
 
 # 1. Train model
-venv/bin/python experiments/training/train_ppo.py --num-agents 1 --workers 2
+venv/bin/python experiments/training/train_ppo.py --num-agents 1 --workers 8
 
 echo "=================================================="
 echo "TRAINING COMPLETED - STARTING EVALUATION"

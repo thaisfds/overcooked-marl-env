@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import os
+os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
+os.environ["AIR_VERBOSITY"] = "0"
 import argparse
 import time
 import json
@@ -99,6 +101,7 @@ def convert_to_serializable(obj):
     return obj
 
 def parse_args():
+    default_workers = max(2, min(12, os.cpu_count() - 2)) if hasattr(os, 'cpu_count') and os.cpu_count() else 4
     parser = argparse.ArgumentParser(description="Optimized, parameterized RLlib PPO training for Overcooked MARL.")
     parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (e.g. default_map.txt, tutorial.txt)")
     parser.add_argument("--num-agents", type=int, default=2, help="Number of agents to train with")
@@ -109,10 +112,25 @@ def parse_args():
     parser.add_argument("--minibatch-size", type=int, default=None, help="Override minibatch size")
     parser.add_argument("--epochs", type=int, default=None, help="Override updates per batch")
     parser.add_argument("--entropy-coeff", type=float, default=None, help="Override entropy coefficient")
-    parser.add_argument("--workers", type=int, default=3, help="Number of parallel env rollout workers")
+    parser.add_argument("--workers", type=int, default=default_workers, help="Number of parallel env rollout workers")
     parser.add_argument("--gpus", type=int, default=1 if torch.cuda.is_available() else 0, help="Number of GPUs to allocate")
     parser.add_argument("--seed", type=int, default=None, help="Override random seed")
     return parser.parse_args()
+
+class TrainingProgressCallback(tune.Callback):
+    """Callback to compute training progress percentage and update trial results for Ray Tune reporting."""
+    def on_trial_result(self, iteration, trials, trial, result, **info):
+        config = result.get("config", {})
+        env_config_dict = config.get("env_config", {})
+        episodes_limit = env_config_dict.get("num_episodes", 300)
+        target_timesteps = episodes_limit * 800
+        timesteps_total = result.get("timesteps_total", 0)
+        if target_timesteps > 0:
+            pct = min(100.0, (timesteps_total / target_timesteps) * 100.0)
+            result["progress_pct"] = f"{pct:.1f}%"
+        else:
+            result["progress_pct"] = "0.0%"
+
 
 def main():
     args = parse_args()
@@ -226,7 +244,7 @@ def main():
     config_dict['sgd_minibatch_size'] = tune_minibatch_size
     config_dict['train_batch_size'] = tune_batch_size
     config_dict['seed'] = tune_seed
-    
+
     # Custom stopping criteria evaluator based on dynamic trial configuration episodes
     def stop_fn(trial_id, result):
         config = result.get("config", {})
@@ -245,6 +263,17 @@ def main():
     params_str = f"map-{args.map.replace('.txt', '')}_agents-{args.num_agents}_workers{args.workers}"
     params_dir_name = f"PPO_Marl_{params_str}"
     
+    # Configure custom CLI progress reporter
+    progress_reporter = tune.CLIReporter(
+        metric_columns={
+            "training_iteration": "iter",
+            "time_total_s": "total time (s)",
+            "timesteps_total": "ts",
+            "progress_pct": "progress (%)",
+            "env_runners/episode_reward_mean": "reward_mean",
+        }
+    )
+
     start_time = time.time()
     
     try:
@@ -253,9 +282,11 @@ def main():
             name=params_dir_name,
             stop=stop_fn,
             config=config_dict,
-            checkpoint_freq=10,
+            checkpoint_freq=25,
             checkpoint_at_end=True,
             verbose=1,
+            progress_reporter=progress_reporter,
+            callbacks=[TrainingProgressCallback()],
             storage_path=str(ray_results_base.resolve())
         )
         
