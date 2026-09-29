@@ -90,5 +90,5 @@ python -m unittest overcooked_marl_env/tests/unit/test_interaction_handler.py
 
 ### Treinar modelos
 ```bash
-venv/bin/python experiments/train_ppo.py --num-agents 1 --map default_map.txt --episodes 150 --workers 4
+venv/bin/python experiments/training/train_ppo.py --num-agents 1 --map default_map.txt --episodes 150 --workers 4
 ```
