@@ -1,3 +1,4 @@
+import math
 from typing import Dict, Tuple, Optional, List, Any
 from dataclasses import dataclass
 from ..core.items import ItemType, ItemState, is_ready
@@ -20,60 +21,60 @@ class RewardValues:
     - Penalties for wasteful/cyclic actions (empty/wrong delivery, useless cycles, trash).
     """
     # Step living cost (encourages fastest path)
-    step_cost: float = -0.01
+    step_cost: float = -0.005
 
     # Basic movements / placements
-    pickup: float = 1.0
-    place: float = 0.1
+    pickup: float = 0.0
+    place: float = 0.0
     place_on_chop: float = 5.0
 
     # Chopping / Processing
-    chop_cut: float = 3.0
-    chop_completed: float = 20.0
-    process: float = 3.0  # legacy alias for chop_cut
+    chop_cut: float = 1.0
+    chop_completed: float = 8.0
+    process: float = 1.0  # legacy alias for chop_cut
 
     # Assembly / Combining
-    combine: float = 3.0
-    progress_pickup_needed: float = 12.0
-    progress_place_on_chop: float = 25.0
-    progress_pickup_ready: float = 10.0
-    progress_combine_ready: float = 5.0
-    progress_pickup_complete_plate: float = 30.0
-    plate_complete_bonus: float = 50.0
-    progress_pickup_plate_with_ready: float = 20.0
-    progress_ready_to_combine: float = 0.0  # removed loop exploit
-    progress_partial_plate: float = 5.0
-    progress_ingredient_added_base: float = 3.0
-    progress_ingredient_added_increment: float = 3.0
+    combine: float = 0.0
+    progress_pickup_needed: float = 3.0
+    progress_place_on_chop: float = 5.0
+    progress_pickup_ready: float = 2.0
+    progress_combine_ready: float = 10.0
+    progress_pickup_complete_plate: float = 5.0
+    plate_complete_bonus: float = 15.0
+    progress_pickup_plate_with_ready: float = 3.0
+    progress_ready_to_combine: float = 3.0
+    progress_partial_plate: float = 3.0
+    progress_ingredient_added_base: float = 2.0
+    progress_ingredient_added_increment: float = 2.0
 
-    # Deliveries
-    delivery_base: float = 500.0
-    order_bonus: float = 300.0
-    order_bonus_mult: float = 0.5
-    sequence_complete_bonus: float = 50.0
-    episode_complete_bonus: float = 200.0
+    # Deliveries (Direct Sparse Primary Objective)
+    delivery_base: float = 0.0
+    order_bonus: float = 0.0
+    order_bonus_mult: float = 0.0
+    sequence_complete_bonus: float = 0.0
+    episode_complete_bonus: float = 0.0
 
     # Multipliers
-    delivery_multiplier_2nd: float = 1.1
-    delivery_multiplier_3rd: float = 1.2
-    delivery_multiplier_4th_plus: float = 1.3
+    delivery_multiplier_2nd: float = 1.0
+    delivery_multiplier_3rd: float = 1.0
+    delivery_multiplier_4th_plus: float = 1.0
 
-    # Proximity & Attempts (disabled to eliminate gaming)
+    # Proximity & Attempts (disabled)
     delivery_proximity_reward: float = 0.0
     delivery_attempt_reward: float = 0.0
     delivery_distance_max: int = 5
 
     # Penalties
-    invalid: float = -0.3
-    invalid_delivery_penalty: float = -20.0
-    trash_penalty: float = -10.0
-    unneeded_pickup_penalty: float = -2.0
-    useless_cycle_penalty: float = -1.0
-    useless_cycle: float = -1.0
-    repetition_penalty: float = -0.3
-    accumulation_penalty: float = -0.5
-    accumulation_threshold: int = 3
-    counter_clutter_penalty: float = -0.5
+    invalid: float = -0.1
+    invalid_delivery_penalty: float = -5.0
+    trash_penalty: float = -1.0
+    unneeded_pickup_penalty: float = -1.0
+    useless_cycle_penalty: float = -0.5
+    useless_cycle: float = -0.5
+    repetition_penalty: float = -0.5
+    accumulation_penalty: float = 0.0
+    accumulation_threshold: int = 5
+    counter_clutter_penalty: float = 0.0
 
 
 class RewardShaper:
@@ -246,7 +247,10 @@ class RewardShaper:
         if action_type == 'pickup_ingredient' and carrying_item:
             ingredient_name = carrying_item.get("name", "").lower()
             if ingredient_name in req_lower:
-                progress_reward += self.rewards.progress_pickup_needed
+                if self._check_ingredient_already_processed(ingredient_name, game_state):
+                    progress_reward += self.rewards.unneeded_pickup_penalty
+                else:
+                    progress_reward += self.rewards.progress_pickup_needed
             else:
                 # Check if it belongs to ANY pending recipe
                 all_pending_reqs = []
@@ -299,4 +303,7 @@ class RewardShaper:
                 if sorted([i.lower() for i in plate_ingredients]) == sorted(req_lower):
                     progress_reward += self.rewards.progress_pickup_complete_plate
         
-        return progress_reward
+        # Apply MAPPO Reward Shaping Annealing (exponential decay as recipes are delivered)
+        num_delivered = len(game_state.get("delivered_recipes", []))
+        annealing_decay = math.exp(-num_delivered * 0.4)
+        return progress_reward * annealing_decay

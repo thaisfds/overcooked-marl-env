@@ -41,7 +41,7 @@ class SimpleSaladRecipe(Recipe):
         super().__init__(
             name="SIMPLE_SALAD",
             ingredients=["lettuce"],
-            reward=100.0
+            reward=20.0
         )
 
 
@@ -52,7 +52,7 @@ class GardenSaladRecipe(Recipe):
         super().__init__(
             name="GARDEN_SALAD",
             ingredients=["lettuce", "tomato"],
-            reward=200.0
+            reward=25.0
         )
 
 
@@ -63,7 +63,7 @@ class FreshSaladRecipe(Recipe):
         super().__init__(
             name="FRESH_SALAD",
             ingredients=["lettuce", "tomato", "cucumber"],
-            reward=300.0
+            reward=30.0
         )
 
 
@@ -74,7 +74,7 @@ class OnionSoupRecipe(Recipe):
         super().__init__(
             name="ONION_SOUP",
             ingredients=["onion"],
-            reward=150.0
+            reward=30.0
         )
 
 
@@ -85,7 +85,7 @@ class OnionSaladRecipe(Recipe):
         super().__init__(
             name="ONION_SALAD",
             ingredients=["lettuce", "onion"],
-            reward=250.0
+            reward=35.0
         )
 
 

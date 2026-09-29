@@ -581,9 +581,28 @@ class TestInteractionHandler(OvercookedTestCase):
             "agent_0", self.game_state, verbose=False
         )
         
-        # Assert
-        self.assertEqual(local_reward, 8.0)  # Recipe reward
-        self.assertEqual(global_reward, 8.0)  # No bonus (wrong order)
+        # Assert - accepted because cucumber_dish is in pending HUD orders, but receives base reward without order bonus
+        self.assertEqual(local_reward, 8.0)
+        self.assertEqual(global_reward, 8.0)
+
+    def test_delivery_unrequested_recipe_penalized(self):
+        """Test delivering a recipe NOT present in pending HUD orders is rejected with penalty."""
+        plate = create_plate()
+        plate = add_ingredient_to_plate(plate, "tomato")
+        plate_id = self._create_item_instance(plate)
+        self.game_state["agent_holding_instance"]["agent_0"] = plate_id
+        
+        self.game_state["recipe_order"] = ["salad", "salad"]
+        self.game_state["map_static"][5, 6] = 6  # Delivery
+        self.recipe_manager.validate_delivery.return_value = (True, "unrequested_dish", 10.0)
+        
+        local_reward, global_reward = self.handler.handle_interaction(
+            "agent_0", self.game_state, verbose=False
+        )
+        
+        # Assert - wipes all points earned for that dish (-10.0)
+        self.assertEqual(local_reward, -10.0)
+        self.assertEqual(global_reward, -10.0)
     
     # Helper Method Tests
     

@@ -150,9 +150,10 @@ class OvercookedMARL(ParallelEnv):
         self.state["expected_recipe_index"] = 0
         self.state["delivered_recipes"] = []
         
-        # Ensure rewards are reset to zero
+        # Ensure rewards and position histories are reset to zero
         self.state["accumulated_rewards"] = {agent: 0.0 for agent in self.possible_agents}
         self.state["last_step_rewards"] = {agent: 0.0 for agent in self.possible_agents}
+        self.position_history = {agent: [] for agent in self.possible_agents}
         
         observations = self._get_obs()
         info = self._get_info()

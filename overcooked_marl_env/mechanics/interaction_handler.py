@@ -159,9 +159,19 @@ class InteractionHandler:
             )
         
         # Invalid interaction
+        game_state.setdefault("action_history", {}).setdefault(agent_id, []).append(
+            ('interact_invalid', tile_pos)
+        )
+        if len(game_state["action_history"][agent_id]) > 10:
+            game_state["action_history"][agent_id].pop(0)
+            
+        repetition_penalty = 0.0
+        if self.reward_shaper._check_action_repetition(agent_id, 'interact_invalid', game_state):
+            repetition_penalty = self.rewards.repetition_penalty
+            
         if verbose:
-            print(f"  Invalid interaction location")
-        return self.rewards.invalid, 0.0
+            print(f"  Invalid interaction location (penalty: {self.rewards.invalid + repetition_penalty:.2f})")
+        return self.rewards.invalid + repetition_penalty, 0.0
     
     def _handle_chopping_board(
         self,
@@ -278,9 +288,19 @@ class InteractionHandler:
             return total_reward, 0.0
         
         # Invalid chopping board interaction
+        game_state.setdefault("action_history", {}).setdefault(agent_id, []).append(
+            ('interact_invalid', tile_pos)
+        )
+        if len(game_state["action_history"][agent_id]) > 10:
+            game_state["action_history"][agent_id].pop(0)
+
+        repetition_penalty = 0.0
+        if self.reward_shaper._check_action_repetition(agent_id, 'interact_invalid', game_state):
+            repetition_penalty = self.rewards.repetition_penalty
+
         if verbose:
-            print(f"  Invalid chopping board interaction")
-        return self.rewards.invalid, 0.0
+            print(f"  Invalid chopping board interaction (penalty: {self.rewards.invalid + repetition_penalty:.2f})")
+        return self.rewards.invalid + repetition_penalty, 0.0
     
     def _handle_plate_dispenser(
         self,
@@ -363,9 +383,19 @@ class InteractionHandler:
         """Handle interactions with ingredient dispensers."""
         # Can only pick up if not carrying anything
         if carrying_item:
+            game_state.setdefault("action_history", {}).setdefault(agent_id, []).append(
+                ('interact_invalid', tile_pos)
+            )
+            if len(game_state["action_history"][agent_id]) > 10:
+                game_state["action_history"][agent_id].pop(0)
+
+            repetition_penalty = 0.0
+            if self.reward_shaper._check_action_repetition(agent_id, 'interact_invalid', game_state):
+                repetition_penalty = self.rewards.repetition_penalty
+
             if verbose:
-                print(f"  Cannot pick up ingredient: hands full")
-            return 0.0, 0.0  # SEM PENALIDADE
+                print(f"  Cannot pick up ingredient: hands full (penalty: {self.rewards.invalid + repetition_penalty:.2f})")
+            return self.rewards.invalid + repetition_penalty, 0.0
         
         dispenser_data = game_state["dispensers"][tile_pos]
         
@@ -551,8 +581,8 @@ class InteractionHandler:
         
         # Invalid counter interaction
         if verbose:
-            print(f"  Invalid counter interaction")
-        return 0.0, 0.0  # SEM PENALIDADE
+            print(f"  Invalid counter interaction (penalty: {self.rewards.invalid})")
+        return self.rewards.invalid, 0.0
     
     def _handle_trash(
         self,
@@ -588,8 +618,7 @@ class InteractionHandler:
         game_state: Dict,
         verbose: bool
     ) -> Tuple[float, float]:
-        """Handle delivery interactions."""
-        invalid_pen = self.rewards.invalid if self.rewards.invalid != -0.5 else self.rewards.invalid_delivery_penalty
+        invalid_pen = self.rewards.invalid_delivery_penalty
         
         # Must be carrying a plate
         if not carrying_item or carrying_item.get("type") != ItemType.DISH:
@@ -613,8 +642,26 @@ class InteractionHandler:
                 print(f"  Invalid recipe! Ingredients: [{ingredients_str}] (penalty: {invalid_pen})")
             return invalid_pen, 0.0
         
-        # Check if it's the correct order
-        is_correct_order = self._is_correct_order(recipe_name, game_state)
+        # Get remaining pending orders in HUD queue
+        recipe_order = game_state.get("recipe_order", [])
+        pending_orders = list(recipe_order)
+        for delivered in game_state.get("delivered_recipes", []):
+            if delivered in pending_orders:
+                pending_orders.remove(delivered)
+        
+        # Must match a recipe currently requested in pending HUD orders
+        if recipe_name not in pending_orders:
+            unrequested_penalty = -abs(recipe_reward)
+            if verbose:
+                print(f"  Recipe {recipe_name} is not in pending HUD orders! Wiping dish points (penalty: {unrequested_penalty:.1f})")
+            
+            # Delete unrequested plate to clear hands, but do NOT count as successful delivery
+            self._delete_item_instance(carrying_instance_id, game_state)
+            del game_state["agent_holding_instance"][agent_id]
+            return unrequested_penalty, unrequested_penalty
+            
+        # Check if it's strictly the top order in HUD queue (for order bonus)
+        is_correct_order = (len(pending_orders) > 0 and recipe_name == pending_orders[0])
         
         # Register delivery
         game_state["delivered_recipes"].append(recipe_name)

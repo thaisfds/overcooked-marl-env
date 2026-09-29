@@ -109,9 +109,9 @@ class TestSingleAgentCycle3(unittest.TestCase):
         self.assertEqual(self.env.state["dishes_pending"], 1)
         self.assertFalse(terminations[agent_id])
 
-        # Deliver 3rd recipe (SIMPLE_SALAD) - should trigger episode complete bonus and termination
+        # Deliver 3rd recipe (ONION_SOUP) - should trigger episode complete bonus and termination
         plate3 = create_plate()
-        plate3 = add_ingredient_to_plate(plate3, "lettuce")
+        plate3 = add_ingredient_to_plate(plate3, "onion")
         plate3_id = self.env.interaction_handler._create_item_instance(plate3, self.env.state)
         self.env.state["agent_holding_instance"][agent_id] = plate3_id
         self.env.state["agent_pos"][agent_id] = (9, 3)
