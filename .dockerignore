@@ -1,0 +1,24 @@
+# Ignore virtual environment
+venv/
+.venv/
+env/
+
+# Ignore heavy training results and logs
+experiments/ray_results/
+experiments/logs/
+
+# Ignore git and ide configuration
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Ignore python cache and build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+.pytest_cache/
