@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 import os
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+if os.environ.get("HOME") in (None, "", "/"):
+    os.environ["HOME"] = str(PROJECT_ROOT)
+os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = str(PROJECT_ROOT / "experiments" / "ray_results")
 os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 os.environ["AIR_VERBOSITY"] = "0"
 import argparse
@@ -32,13 +38,13 @@ torch, nn = try_import_torch()
 # run trial combinations in parallel based on available CPU/GPU resources.
 # Passing CLI flags (e.g. --episodes 100) overrides these parameters.
 HYPERPARAMETER_GRID = {
-    "lr": [8e-4],                 # Reduced learning rate for logit sharpening
-    "gamma": [0.98],              # High discount factor
-    "entropy_coeff": [0.01],      # Low entropy coefficient to enforce deterministic logits
-    "train_batch_size": [8000],   # Large batch
-    "sgd_minibatch_size": [256],  # Proportional minibatch
-    "update_epochs": [10],        # 10 epochs for fine-grained policy updates
-    "num_episodes": [1000],       # Extended 1000 episodes for full deterministic consolidation
+    "lr": [3e-4, 5e-4],           # 3e-4 (mais estável) vs 5e-4 (convergência rápida)
+    "gamma": [0.98, 0.99],        # 0.98 (padrão) vs 0.99 (foco em longo prazo para 4 receitas)
+    "entropy_coeff": [0.02, 0.05], # 0.02 (mais focado) vs 0.05 (maior exploração)
+    "train_batch_size": [8000],
+    "sgd_minibatch_size": [256],
+    "update_epochs": [10],
+    "num_episodes": [1],
     "seed": [42]
 }
 
@@ -63,8 +69,7 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
     
     def step(self, action_dict):
         obs, rewards, terminations, truncations, infos = self.env.step(action_dict)
-        # Reward scaling to prevent gradient explosion and stabilize learning
-        scaled_rewards = {agent: r * 0.01 for agent, r in rewards.items()}
+        scaled_rewards = {agent: r for agent, r in rewards.items()}
         
         all_terminated = all(terminations.get(agent, False) for agent in self.agents)
         all_truncated = all(truncations.get(agent, False) for agent in self.agents)
@@ -122,8 +127,8 @@ class TrainingProgressCallback(tune.Callback):
     def on_trial_result(self, iteration, trials, trial, result, **info):
         config = result.get("config", {})
         env_config_dict = config.get("env_config", {})
-        episodes_limit = env_config_dict.get("num_episodes", 300)
-        target_timesteps = episodes_limit * 800
+        episodes_limit = env_config_dict.get("num_episodes", 100)
+        target_timesteps = episodes_limit * 3000
         timesteps_total = result.get("timesteps_total", 0)
         if target_timesteps > 0:
             pct = min(100.0, (timesteps_total / target_timesteps) * 100.0)
@@ -249,8 +254,8 @@ def main():
     def stop_fn(trial_id, result):
         config = result.get("config", {})
         env_config_dict = config.get("env_config", {})
-        episodes_limit = env_config_dict.get("num_episodes", 300)
-        target_timesteps = episodes_limit * 800
+        episodes_limit = env_config_dict.get("num_episodes", 100)
+        target_timesteps = episodes_limit * 3000
         return result.get("timesteps_total", 0) >= target_timesteps
         
     # Output path creation
@@ -282,7 +287,7 @@ def main():
             name=params_dir_name,
             stop=stop_fn,
             config=config_dict,
-            checkpoint_freq=25,
+            checkpoint_freq=1,
             checkpoint_at_end=True,
             verbose=1,
             progress_reporter=progress_reporter,
@@ -295,7 +300,8 @@ def main():
         print(f"Total duration: {(time.time() - start_time)/60:.2f} minutes")
         print("="*50 + "\n")
         
-        # Save model_info.json for each completed trial
+        # Collect and compare all trials in Grid Search
+        all_trials_summary = []
         for trial in analysis.trials:
             trial_dir = None
             for attr in ['local_path', 'logdir', 'path']:
@@ -310,14 +316,12 @@ def main():
             if not trial_dir or not trial_dir.exists():
                 continue
                 
-            # Construct persistent target directory inside the workspace results folder
             target_dir = Path(ray_results_base) / params_dir_name / trial_dir.name
             target_dir.mkdir(parents=True, exist_ok=True)
                 
             trial_config = trial.config
             trial_env_config = trial_config.get("env_config", {})
             
-            # Read progress curves from trial_dir (where Tune keeps active log files)
             learning_curves_data = []
             progress_csv = trial_dir / "progress.csv"
             if progress_csv.exists():
@@ -336,7 +340,6 @@ def main():
                 except Exception:
                     pass
                     
-            # Resolve trial checkpoint path
             checkpoint_path = None
             if hasattr(trial, 'checkpoint') and trial.checkpoint:
                 try:
@@ -347,7 +350,6 @@ def main():
                 except Exception:
                     pass
                     
-            # Map checkpoint_path to the persistent target directory if it contains /tmp
             if checkpoint_path:
                 if "/tmp/" in checkpoint_path or not os.path.exists(checkpoint_path):
                     checkpoint_dir_name = Path(checkpoint_path).name
@@ -356,7 +358,6 @@ def main():
                         checkpoint_path = str(persistent_checkpoint_path.resolve())
                     
             if not checkpoint_path or not os.path.exists(checkpoint_path):
-                # Search inside the persistent target directory first
                 checkpoints = sorted(
                     [d for d in target_dir.iterdir() if d.is_dir() and d.name.startswith('checkpoint_')],
                     key=lambda x: int(x.name.split('_')[-1]) if x.name.split('_')[-1].isdigit() else 0,
@@ -365,7 +366,6 @@ def main():
                 if checkpoints:
                     checkpoint_path = str(checkpoints[0].resolve())
                 else:
-                    # Fallback to the temp trial dir
                     checkpoints = sorted(
                         [d for d in trial_dir.iterdir() if d.is_dir() and d.name.startswith('checkpoint_')],
                         key=lambda x: int(x.name.split('_')[-1]) if x.name.split('_')[-1].isdigit() else 0,
@@ -374,16 +374,14 @@ def main():
                     if checkpoints:
                         checkpoint_path = str(checkpoints[0].resolve())
                     
-            # Get reward mean metric
-            avg_reward_last = 0.0
+            avg_reward_last = None
             if hasattr(trial, 'last_result') and trial.last_result:
                 if 'env_runners' in trial.last_result and isinstance(trial.last_result['env_runners'], dict):
                     env_runners = trial.last_result['env_runners']
-                    avg_reward_last = env_runners.get('episode_reward_mean', env_runners.get('episode_return_mean', 0.0))
+                    avg_reward_last = env_runners.get('episode_reward_mean', env_runners.get('episode_return_mean', None))
                 elif 'episode_reward_mean' in trial.last_result:
                     avg_reward_last = trial.last_result['episode_reward_mean']
                     
-            # Format custom config name
             p_lr = trial_config.get('lr', 3e-4)
             p_gamma = trial_config.get('gamma', 0.90)
             p_batch = trial_config.get('train_batch_size', 4000)
@@ -396,9 +394,10 @@ def main():
             config_name = f"PPO_Config_{config_str}"
             
             model_info = {
+                'trial_id': trial.trial_id,
                 'config_name': config_name,
                 'checkpoint_path': checkpoint_path,
-                'avg_reward': float(avg_reward_last),
+                'avg_reward': float(avg_reward_last) if avg_reward_last is not None and not np.isnan(avg_reward_last) else None,
                 'learning_curves': learning_curves_data,
                 'training_config': {
                     'learning_rate': float(p_lr),
@@ -412,29 +411,81 @@ def main():
                 }
             }
             
-            # Save model_info.json in the persistent target_dir
             with open(target_dir / "model_info.json", "w") as f:
                 json.dump(model_info, f, indent=2)
                 
-            # Save experiment log in experiments/logs named after the ray_results folder
-            exp_logs_dir = exp_dir / "logs"
-            exp_logs_dir.mkdir(parents=True, exist_ok=True)
-            exp_log_file = exp_logs_dir / f"{timestamp_dir_name}.json"
-            
-            exp_summary = {
-                "ray_results_folder": timestamp_dir_name,
-                "trial_name": params_dir_name,
-                "checkpoint_path": checkpoint_path,
-                "timestamp": timestamp,
-                "hyperparameters": model_info["training_config"],
-                "training_reward_mean": float(avg_reward_last),
-                "evaluation": None
-            }
-            with open(exp_log_file, "w") as f:
-                json.dump(exp_summary, f, indent=2)
-                
-            print(f"Trial {trial.trial_id} completed: reward={avg_reward_last:.2f} | Metadata saved: {target_dir / 'model_info.json'}")
-            print(f"Experiment log saved to: {exp_log_file}")
+            all_trials_summary.append(model_info)
+
+        # Sort trials by avg_reward (highest first, handling None/NaN)
+        all_trials_summary.sort(key=lambda t: t['avg_reward'] if t['avg_reward'] is not None else -999999.0, reverse=True)
+        best_trial = all_trials_summary[0] if all_trials_summary else None
+
+        # Save logs and unified export bundle
+        exp_logs_dir = exp_dir / "logs"
+        exp_logs_dir.mkdir(parents=True, exist_ok=True)
+        exp_log_file = exp_logs_dir / f"{timestamp_dir_name}.json"
+
+        exp_summary_data = {
+            "ray_results_folder": timestamp_dir_name,
+            "experiment_timestamp": timestamp,
+            "total_trials": len(all_trials_summary),
+            "best_trial": best_trial,
+            "all_trials": all_trials_summary,
+            "evaluation": None
+        }
+
+        with open(exp_log_file, "w") as f:
+            json.dump(exp_summary_data, f, indent=2)
+
+        exports_dir = exp_dir / "exports" / f"run_{timestamp}"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+
+        with open(exports_dir / "experiment_summary.json", "w") as f:
+            json.dump(exp_summary_data, f, indent=2)
+
+        # Build comprehensive Markdown comparison table for all Grid Search trials
+        table_rows = []
+        for rank, t in enumerate(all_trials_summary, 1):
+            cfg = t['training_config']
+            reward_str = f"{t['avg_reward']:+.2f}" if t['avg_reward'] is not None else "N/A"
+            cp_str = f"`.../{Path(t['checkpoint_path']).name}`" if t['checkpoint_path'] else "N/A"
+            table_rows.append(f"| {rank} | `{t['trial_id']}` | {cfg['learning_rate']} | {cfg['gamma']} | {cfg['entropy_coeff']} | **{reward_str}** | {cp_str} |")
+
+        table_md = "\n".join(table_rows)
+        best_reward_str = f"{best_trial['avg_reward']:+.2f}" if (best_trial and best_trial.get('avg_reward') is not None) else "N/A"
+        best_trial_id = best_trial['trial_id'] if best_trial else "N/A"
+        best_cfg_json = json.dumps(best_trial['training_config'], indent=2) if best_trial else "{}"
+        best_cp_path = best_trial.get('checkpoint_path', 'N/A') if best_trial else "N/A"
+
+        summary_md = f"""# Relatório de Experimento - Grid Search PPO Overcooked
+* **Data/Hora:** {timestamp}
+* **Sessão:** `{timestamp_dir_name}`
+* **Total de Combinações/Trials:** {len(all_trials_summary)}
+* **Melhor Recompensa de Treino:** {best_reward_str} (Trial `{best_trial_id}`)
+
+## Tabela Comparativa dos Hiperparâmetros (Ordenado pelos Melhores Resultados)
+| Rank | Trial ID | LR | Gamma | Entropy | Recompensa Média | Checkpoint |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+{table_md}
+
+## Detalhes do Melhor Modelo Encontrado
+* **Checkpoint Path:** `{best_cp_path}`
+* **Comando para Visualização:**
+  ```bash
+  python3 experiments/visualization/visualize_model.py {best_cp_path}
+  ```
+
+### Hiperparâmetros do Melhor Modelo:
+```json
+{best_cfg_json}
+```
+"""
+        with open(exports_dir / "summary_report.md", "w") as f:
+            f.write(summary_md)
+
+        print(f"Grid search completed with {len(all_trials_summary)} trials.")
+        print(f"Best Trial: {best_trial['trial_id']} | Reward: {best_trial['avg_reward']}")
+        print(f"📦 Unified multi-trial export bundle created at: {exports_dir}")
             
     except Exception as e:
         print(f"Error during training session: {e}")

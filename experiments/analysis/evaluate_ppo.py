@@ -8,10 +8,16 @@ from pathlib import Path
 import numpy as np
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # Set headless environment for Pygame before loading imports
 os.environ["SDL_VIDEODRIVER"] = "dummy"
+
+# Ensure HOME and Ray cache dir point to project directory
+if os.environ.get("HOME") in (None, "", "/"):
+    os.environ["HOME"] = str(PROJECT_ROOT)
+os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = str(PROJECT_ROOT / "experiments" / "ray_results")
 
 import ray
 from ray.rllib.algorithms.algorithm import Algorithm
@@ -191,6 +197,20 @@ def main():
     else:
         with open(log_dir / f"{exp_name}_evaluation.json", "w") as f:
             json.dump(stats, f, indent=2)
+            
+    # Update unified export bundle in experiments/exports/
+    exports_dir = exp_dir / "exports" / f"run_{exp_name}"
+    if exports_dir.exists():
+        with open(exports_dir / "evaluation_results.json", "w") as f:
+            json.dump(stats, f, indent=2)
+        # Update summary_report.md
+        report_path = exports_dir / "summary_report.md"
+        if report_path.exists():
+            with open(report_path, "a") as f:
+                f.write(f"\n\n## Avaliação Pós-Treino ({args.num_episodes} episódios)\n")
+                f.write(f"* **Recompensa Média:** {stats['reward_mean']:+.2f} (± {stats['reward_std']:.2f})\n")
+                f.write(f"* **Mín / Máx Recompensa:** {stats['reward_min']:+.2f} / {stats['reward_max']:+.2f}\n")
+                f.write(f"* **Média de Entregas/Ep:** {stats['deliveries_mean']:.2f} (Total: {stats['deliveries_total']})\n")
         
     print("\n" + "="*60, flush=True)
     print("STATISTICAL EVALUATION SUMMARY", flush=True)
