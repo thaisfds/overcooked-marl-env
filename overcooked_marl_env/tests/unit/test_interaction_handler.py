@@ -518,7 +518,7 @@ class TestInteractionHandler(OvercookedTestCase):
         )
         
         # Assert
-        self.assertEqual(local_reward, -2.0)  # INVALID_INTERACTION_PENALTY
+        self.assertEqual(local_reward, self.handler.rewards.invalid_delivery_penalty)
         self.assertEqual(global_reward, 0.0)
         
         # Plate should NOT be deleted
@@ -539,7 +539,7 @@ class TestInteractionHandler(OvercookedTestCase):
         )
         
         # Assert
-        self.assertEqual(local_reward, -2.0)  # INVALID_INTERACTION_PENALTY
+        self.assertEqual(local_reward, self.handler.rewards.invalid_delivery_penalty)
         self.assertEqual(global_reward, 0.0)
     
     def test_delivery_empty_plate(self):
@@ -557,7 +557,7 @@ class TestInteractionHandler(OvercookedTestCase):
         )
         
         # Assert
-        self.assertEqual(local_reward, -2.0)  # INVALID_INTERACTION_PENALTY
+        self.assertEqual(local_reward, self.handler.rewards.invalid_delivery_penalty)
         self.assertEqual(global_reward, 0.0)
     
     def test_delivery_wrong_order_no_bonus(self):
