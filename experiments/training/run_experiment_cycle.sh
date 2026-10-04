@@ -7,7 +7,6 @@ cd "$PROJECT_ROOT"
 if [ "$HOME" = "/" ] || [ -z "$HOME" ]; then
     export HOME="$PROJECT_ROOT"
 fi
-export RAY_AIR_LOCAL_CACHE_DIR="$PROJECT_ROOT/experiments/ray_results"
 
 echo "=================================================="
 echo "STARTING FULL EXPERIMENT CYCLE (TRAIN + EVALUATE)"

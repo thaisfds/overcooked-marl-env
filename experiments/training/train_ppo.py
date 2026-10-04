@@ -5,7 +5,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 if os.environ.get("HOME") in (None, "", "/"):
     os.environ["HOME"] = str(PROJECT_ROOT)
-os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = str(PROJECT_ROOT / "experiments" / "ray_results")
 os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 os.environ["AIR_VERBOSITY"] = "0"
 import argparse
@@ -38,13 +37,13 @@ torch, nn = try_import_torch()
 # run trial combinations in parallel based on available CPU/GPU resources.
 # Passing CLI flags (e.g. --episodes 100) overrides these parameters.
 HYPERPARAMETER_GRID = {
-    "lr": [3e-4, 5e-4],           # 3e-4 (mais estável) vs 5e-4 (convergência rápida)
-    "gamma": [0.98, 0.99],        # 0.98 (padrão) vs 0.99 (foco em longo prazo para 4 receitas)
-    "entropy_coeff": [0.02, 0.05], # 0.02 (mais focado) vs 0.05 (maior exploração)
+    "lr": [3e-4],           # 3e-4 (mais estável) vs 5e-4 (convergência rápida)
+    "gamma": [0.99],        # 0.98 (padrão) vs 0.99 (foco em longo prazo para 4 receitas)
+    "entropy_coeff": [0.05], # 0.02 (mais focado) vs 0.05 (maior exploração)
     "train_batch_size": [8000],
     "sgd_minibatch_size": [256],
     "update_epochs": [10],
-    "num_episodes": [1],
+    "num_episodes": [300],
     "seed": [42]
 }
 
@@ -287,7 +286,7 @@ def main():
             name=params_dir_name,
             stop=stop_fn,
             config=config_dict,
-            checkpoint_freq=1,
+            checkpoint_freq=25,
             checkpoint_at_end=True,
             verbose=1,
             progress_reporter=progress_reporter,
@@ -472,7 +471,7 @@ def main():
 * **Checkpoint Path:** `{best_cp_path}`
 * **Comando para Visualização:**
   ```bash
-  python3 experiments/visualization/visualize_model.py {best_cp_path}
+  venv/bin/python experiments/visualization/visualize_model.py {best_cp_path}
   ```
 
 ### Hiperparâmetros do Melhor Modelo:

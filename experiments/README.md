@@ -67,12 +67,10 @@ venv/bin/python experiments/analysis/evaluate_ppo.py --num-episodes 5 --log-visi
 
 ---
 
-### 3. Visualization Notebooks (`experiments/visualization/`)
+### 3. Model Visualization (`experiments/visualization/`)
 
-Launch Jupyter Notebook:
+Render real-time Pygame graphical rollouts of any checkpoint (or automatically load the latest model):
 ```bash
-venv/bin/jupyter notebook --ip=0.0.0.0 --no-browser
+python3 experiments/visualization/visualize_model.py [checkpoint_path]
 ```
 
-- **`visualize_best_model.ipynb`**: Renders real-time Pygame graphical rollouts of the top checkpoint.
-- **`curves_and_performance.ipynb`**: Renders training reward curves, log ranking tables, action distributions, and step-by-step vision log focus/score trajectory charts.

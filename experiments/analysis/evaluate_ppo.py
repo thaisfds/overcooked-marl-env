@@ -14,10 +14,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 # Set headless environment for Pygame before loading imports
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
-# Ensure HOME and Ray cache dir point to project directory
+# Ensure HOME is writable for non-root container users
 if os.environ.get("HOME") in (None, "", "/"):
     os.environ["HOME"] = str(PROJECT_ROOT)
-os.environ["RAY_AIR_LOCAL_CACHE_DIR"] = str(PROJECT_ROOT / "experiments" / "ray_results")
 
 import ray
 from ray.rllib.algorithms.algorithm import Algorithm
