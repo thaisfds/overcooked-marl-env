@@ -44,7 +44,7 @@ def find_latest_checkpoint():
 def parse_args():
     parser = argparse.ArgumentParser(description="Multi-episode statistical evaluation for trained PPO models.")
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint directory (default: latest in ray_results)")
-    parser.add_argument("--num-episodes", type=int, default=5, help="Number of evaluation episodes to run (default: 5)")
+    parser.add_argument("--num-episodes", type=int, default=20, help="Number of evaluation episodes to run (default: 20)")
     parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (default: default_map.txt)")
     parser.add_argument("--num-agents", type=int, default=1, help="Number of agents (default: 1)")
     parser.add_argument("--max-steps", type=int, default=800, help="Max steps per episode (default: 800)")

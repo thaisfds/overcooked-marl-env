@@ -124,6 +124,7 @@ def parse_args():
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="Checkpoint frequency in iterations (default: 10)")
     parser.add_argument("--keep-checkpoints-num", type=int, default=5, help="Number of recent checkpoints to keep (default: 5)")
     parser.add_argument("--resume", type=str, default="AUTO", choices=["AUTO", "LOCAL", "FALSE"], help="Auto-resume crashed trials (default: AUTO)")
+    parser.add_argument("--concurrent", type=int, default=2, help="Number of concurrent trials to train in parallel (default: 2)")
     return parser.parse_args()
 
 class TrainingProgressCallback(tune.Callback):
@@ -235,10 +236,10 @@ def main():
             }
         )
         .resources(
-            num_gpus=args.gpus
+            num_gpus=(args.gpus / max(1, args.concurrent)) if args.gpus > 0 else 0
         )
         .env_runners(
-            num_env_runners=args.workers,
+            num_env_runners=max(1, args.workers // max(1, args.concurrent)),
             rollout_fragment_length="auto",
             batch_mode="truncate_episodes",
         )
@@ -295,6 +296,7 @@ def main():
             checkpoint_freq=args.checkpoint_freq,
             checkpoint_at_end=True,
             keep_checkpoints_num=args.keep_checkpoints_num,
+            max_concurrent_trials=args.concurrent,
             resume=resume_val,
             verbose=1,
             progress_reporter=progress_reporter,

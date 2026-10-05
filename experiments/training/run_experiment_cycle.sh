@@ -26,20 +26,22 @@ else
     PYTHON_CMD="python"
 fi
 
-WORKERS=${WORKERS:-4}
+WORKERS=${WORKERS:-6}
+CONCURRENT=${CONCURRENT:-3}
 
 echo "Using Python executable: $PYTHON_CMD"
 echo "Workers count: $WORKERS"
+echo "Concurrent trials: $CONCURRENT"
 
 # 1. Train model
-$PYTHON_CMD experiments/training/train_ppo.py --num-agents 1 --workers $WORKERS "$@"
+$PYTHON_CMD experiments/training/train_ppo.py --num-agents 1 --workers $WORKERS --concurrent $CONCURRENT "$@"
 
 echo "=================================================="
 echo "TRAINING COMPLETED - STARTING EVALUATION"
 echo "=================================================="
 
 # 2. Evaluate model
-$PYTHON_CMD experiments/analysis/evaluate_ppo.py --num-episodes 5
+$PYTHON_CMD experiments/analysis/evaluate_ppo.py --num-episodes 20
 
 echo "=================================================="
 echo "EXPERIMENT CYCLE COMPLETED SUCCESSFULLY"
