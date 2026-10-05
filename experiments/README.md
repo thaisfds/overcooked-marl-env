@@ -15,12 +15,18 @@ experiments/
 │   └── find_best_params.py                  # Checkpoint discovery tool for ray_results
 │
 ├── visualization/                           # 🎨 Visualization notebooks & plotting tools
-│   ├── visualize_best_model.ipynb           # Interactive Pygame graphical simulation notebook
-│   ├── curves_and_performance.ipynb         # Unified performance suite (curves, ranking, logs, vision)
-│   ├── plot_curves.py                       # CLI training curves PNG generator
-│   └── learning_curves.png                  # Exported training curve image
+│   ├── visualize_model.py                   # Pygame graphical rollout simulation script
+│   └── curves_and_performance.ipynb         # Unified performance suite (curves, ranking, logs, vision)
 │
-└── logs/                                    # 📊 Experiment logs & summaries
+├── utils/                                   # 🛠️ Persistent results logging & metrics utilities
+│   └── results_tracker.py                   # Appends training + eval metrics to CSV/JSON
+│
+├── ray_results/                             # 📦 Ray Tune checkpoints & training event logs
+│
+└── logs/                                    # 📊 Unified metrics, CSV summaries & vision logs
+    ├── experiments_summary.csv              # Global accumulative results table (CSV)
+    ├── experiments_summary.json             # Global accumulative results history (JSON)
+    ├── latest_summary.md                    # Markdown summary report of the latest run
     └── vision_analysis/                     # Step-by-step vision log files (.log)
 ```
 

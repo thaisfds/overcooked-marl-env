@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 import os
 from pathlib import Path
+import sys
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 if os.environ.get("HOME") in (None, "", "/"):
     os.environ["HOME"] = str(PROJECT_ROOT)
@@ -31,20 +34,19 @@ except ImportError:
 torch, nn = try_import_torch()
 
 # ======================================================================
-# HYPERPARAMETER GRID SEARCH CONFIGURATION
+# HYPERPARAMETER GRID SEARCH CONFIGURATION (LONG-RUN / 1-WEEK SERVER GRID)
 # ======================================================================
-# Edit this dictionary to define search spaces. Ray Tune will automatically
-# run trial combinations in parallel based on available CPU/GPU resources.
-# Passing CLI flags (e.g. --episodes 100) overrides these parameters.
+# Optimized for VeRLab 'magritte' server:
+# CPU: Intel Core i7-3770K (8 threads) | GPU: GTX Titan X 12GB | RAM: 32GB
 HYPERPARAMETER_GRID = {
-    "lr": [3e-4],           # 3e-4 (mais estável) vs 5e-4 (convergência rápida)
-    "gamma": [0.99],        # 0.98 (padrão) vs 0.99 (foco em longo prazo para 4 receitas)
-    "entropy_coeff": [0.05], # 0.02 (mais focado) vs 0.05 (maior exploração)
-    "train_batch_size": [8000],
-    "sgd_minibatch_size": [256],
-    "update_epochs": [10],
-    "num_episodes": [300],
-    "seed": [42]
+    "lr": [1e-4, 3e-4, 5e-4],            # Taxa de aprendizado: Estável (1e-4) -> Padrão (3e-4) -> Rápido (5e-4)
+    "gamma": [0.98, 0.99, 0.995],        # Fator de desconto: Visão de longo prazo para receitas complexas
+    "entropy_coeff": [0.01, 0.03, 0.05], # Exploração sustentada em layouts difíceis
+    "train_batch_size": [4000, 8000],    # Volume de amostragem por atualização
+    "sgd_minibatch_size": [256],         # Tamanho de minibatch PPO
+    "update_epochs": [8, 12],            # Passos de atualização PPO por amostragem
+    "num_episodes": [2000],              # Episódios por trial (garante convergência completa do agente)
+    "seed": [42]                         # Semente aleatória
 }
 
 
@@ -119,6 +121,9 @@ def parse_args():
     parser.add_argument("--workers", type=int, default=default_workers, help="Number of parallel env rollout workers")
     parser.add_argument("--gpus", type=int, default=1 if torch.cuda.is_available() else 0, help="Number of GPUs to allocate")
     parser.add_argument("--seed", type=int, default=None, help="Override random seed")
+    parser.add_argument("--checkpoint-freq", type=int, default=10, help="Checkpoint frequency in iterations (default: 10)")
+    parser.add_argument("--keep-checkpoints-num", type=int, default=5, help="Number of recent checkpoints to keep (default: 5)")
+    parser.add_argument("--resume", type=str, default="AUTO", choices=["AUTO", "LOCAL", "FALSE"], help="Auto-resume crashed trials (default: AUTO)")
     return parser.parse_args()
 
 class TrainingProgressCallback(tune.Callback):
@@ -279,6 +284,7 @@ def main():
     )
 
     start_time = time.time()
+    resume_val = False if args.resume == "FALSE" else (True if args.resume == "LOCAL" else "AUTO")
     
     try:
         analysis = tune.run(
@@ -286,8 +292,10 @@ def main():
             name=params_dir_name,
             stop=stop_fn,
             config=config_dict,
-            checkpoint_freq=25,
+            checkpoint_freq=args.checkpoint_freq,
             checkpoint_at_end=True,
+            keep_checkpoints_num=args.keep_checkpoints_num,
+            resume=resume_val,
             verbose=1,
             progress_reporter=progress_reporter,
             callbacks=[TrainingProgressCallback()],
@@ -415,6 +423,27 @@ def main():
                 
             all_trials_summary.append(model_info)
 
+            # Record in persistent experiment results history
+            try:
+                from experiments.utils.results_tracker import record_experiment_entry
+                record_experiment_entry({
+                    "timestamp": timestamp,
+                    "experiment_id": timestamp_dir_name,
+                    "trial_id": trial.trial_id,
+                    "map_name": args.map,
+                    "num_agents": args.num_agents,
+                    "learning_rate": float(p_lr),
+                    "gamma": float(p_gamma),
+                    "entropy_coeff": float(p_entropy),
+                    "batch_size": int(p_batch),
+                    "num_episodes": int(p_episodes),
+                    "train_reward_mean": float(avg_reward_last) if avg_reward_last is not None and not np.isnan(avg_reward_last) else "N/A",
+                    "status": "COMPLETED",
+                    "checkpoint_path": checkpoint_path or ""
+                })
+            except Exception as tracker_err:
+                print(f"[WARNING] Could not update results tracker: {tracker_err}")
+
         # Sort trials by avg_reward (highest first, handling None/NaN)
         all_trials_summary.sort(key=lambda t: t['avg_reward'] if t['avg_reward'] is not None else -999999.0, reverse=True)
         best_trial = all_trials_summary[0] if all_trials_summary else None
@@ -434,12 +463,6 @@ def main():
         }
 
         with open(exp_log_file, "w") as f:
-            json.dump(exp_summary_data, f, indent=2)
-
-        exports_dir = exp_dir / "exports" / f"run_{timestamp}"
-        exports_dir.mkdir(parents=True, exist_ok=True)
-
-        with open(exports_dir / "experiment_summary.json", "w") as f:
             json.dump(exp_summary_data, f, indent=2)
 
         # Build comprehensive Markdown comparison table for all Grid Search trials
@@ -479,12 +502,17 @@ def main():
 {best_cfg_json}
 ```
 """
-        with open(exports_dir / "summary_report.md", "w") as f:
+
+        # Save summary report in logs directory
+        summary_md_file = exp_logs_dir / f"{timestamp_dir_name}_summary.md"
+        with open(summary_md_file, "w") as f:
+            f.write(summary_md)
+        with open(exp_logs_dir / "latest_summary.md", "w") as f:
             f.write(summary_md)
 
         print(f"Grid search completed with {len(all_trials_summary)} trials.")
         print(f"Best Trial: {best_trial['trial_id']} | Reward: {best_trial['avg_reward']}")
-        print(f"📦 Unified multi-trial export bundle created at: {exports_dir}")
+        print(f"📊 Summary report created at: {summary_md_file}")
             
     except Exception as e:
         print(f"Error during training session: {e}")

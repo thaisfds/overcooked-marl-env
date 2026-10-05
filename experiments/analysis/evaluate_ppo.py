@@ -197,19 +197,31 @@ def main():
         with open(log_dir / f"{exp_name}_evaluation.json", "w") as f:
             json.dump(stats, f, indent=2)
             
-    # Update unified export bundle in experiments/exports/
-    exports_dir = exp_dir / "exports" / f"run_{exp_name}"
-    if exports_dir.exists():
-        with open(exports_dir / "evaluation_results.json", "w") as f:
-            json.dump(stats, f, indent=2)
-        # Update summary_report.md
-        report_path = exports_dir / "summary_report.md"
-        if report_path.exists():
-            with open(report_path, "a") as f:
+    # Update summary report in log_dir if present
+    for report_file in [log_dir / f"{exp_name}_summary.md", log_dir / "latest_summary.md"]:
+        if report_file.exists():
+            with open(report_file, "a") as f:
                 f.write(f"\n\n## Avaliação Pós-Treino ({args.num_episodes} episódios)\n")
                 f.write(f"* **Recompensa Média:** {stats['reward_mean']:+.2f} (± {stats['reward_std']:.2f})\n")
                 f.write(f"* **Mín / Máx Recompensa:** {stats['reward_min']:+.2f} / {stats['reward_max']:+.2f}\n")
                 f.write(f"* **Média de Entregas/Ep:** {stats['deliveries_mean']:.2f} (Total: {stats['deliveries_total']})\n")
+
+    # Update persistent results tracker with evaluation metrics
+    try:
+        from experiments.utils.results_tracker import record_experiment_entry
+        record_experiment_entry({
+            "experiment_id": exp_name,
+            "map_name": args.map,
+            "num_agents": args.num_agents,
+            "eval_reward_mean": stats['reward_mean'],
+            "eval_reward_std": stats['reward_std'],
+            "eval_deliveries_mean": stats['deliveries_mean'],
+            "eval_steps_mean": stats['steps_mean'],
+            "status": "EVALUATED",
+            "checkpoint_path": checkpoint_path
+        })
+    except Exception as tracker_err:
+        print(f"[WARNING] Could not update results tracker: {tracker_err}")
         
     print("\n" + "="*60, flush=True)
     print("STATISTICAL EVALUATION SUMMARY", flush=True)

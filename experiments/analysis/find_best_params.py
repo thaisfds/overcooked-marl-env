@@ -6,22 +6,39 @@ from pathlib import Path
 
 def find_best_parameters():
     """
-    Scans the ray_results directory for all training trials, reads their progress,
+    Scans persistent results history and ray_results directory for all training trials,
     and returns the hyperparameters of the trial that achieved the highest reward.
     """
-    # Get the absolute path to the ray_results directory
     script_dir = Path(__file__).parent.absolute()
-    ray_results = script_dir / 'ray_results'
+    exp_dir = script_dir.parent
+    summary_json = exp_dir / 'logs' / 'experiments_summary.json'
+    ray_results = exp_dir / 'ray_results'
     
     best_reward = -float('inf')
     best_params = None
     best_trial = None
 
-    if not ray_results.exists():
-        print(f'Directory not found: {ray_results}')
-        return
-
-    print(f"Scanning {ray_results} for best PPO parameters...\n")
+    # 1. Try reading persistent experiment summary
+    if summary_json.exists():
+        try:
+            with open(summary_json, 'r', encoding='utf-8') as f:
+                entries = json.load(f)
+            for e in entries:
+                rw = e.get('eval_reward_mean')
+                if not isinstance(rw, (int, float)):
+                    rw = e.get('train_reward_mean')
+                if isinstance(rw, (int, float)) and float(rw) > best_reward:
+                    best_reward = float(rw)
+                    best_trial = e.get('experiment_id')
+                    best_params = {
+                        'lr': e.get('learning_rate'),
+                        'gamma': e.get('gamma'),
+                        'entropy_coeff': e.get('entropy_coeff'),
+                        'train_batch_size': e.get('batch_size'),
+                        'env_config': {'num_episodes': e.get('num_episodes')}
+                    }
+        except Exception:
+            pass
 
     # Iterate over all PPO_* trial directories
     for trial_dir in ray_results.rglob('PPO_*'):

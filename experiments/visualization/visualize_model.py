@@ -64,16 +64,61 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
 
 
 def discover_latest_or_best_checkpoint(ray_results_dir="experiments/ray_results"):
+    exp_dir = project_root / "experiments"
+    summary_json = exp_dir / "logs" / "experiments_summary.json"
+    
+    best_cp = None
+    best_score = -float('inf')
+    num_agents = 1
+    map_name = "default_map.txt"
+    
+    # 1. Prioritize reading persistent experiment history from logs/experiments_summary.json
+    if summary_json.exists():
+        try:
+            with open(summary_json, "r", encoding="utf-8") as f:
+                entries = json.load(f)
+                
+            for e in entries:
+                cp_str = e.get("checkpoint_path", "")
+                if not cp_str:
+                    continue
+                cp_path = Path(cp_str).resolve()
+                if not cp_path.exists():
+                    continue
+                    
+                score = -float('inf')
+                eval_rw = e.get("eval_reward_mean")
+                train_rw = e.get("train_reward_mean")
+                if isinstance(eval_rw, (int, float)):
+                    score = float(eval_rw)
+                elif isinstance(train_rw, (int, float)):
+                    score = float(train_rw)
+                    
+                if score > best_score or best_cp is None:
+                    best_score = score
+                    best_cp = cp_path
+                    num_agents = int(e.get("num_agents", 1))
+                    map_name = e.get("map_name", "default_map.txt")
+        except Exception:
+            pass
+
+    if best_cp:
+        print(f"🏆 Best checkpoint discovered from history ({summary_json.name}):")
+        print(f"   Checkpoint: {best_cp}")
+        print(f"   Score:      {best_score:+.2f} | Map: {map_name} | Agents: {num_agents}")
+        return best_cp, num_agents, map_name
+
+    # 2. Fallback: Scan ray_results directory for checkpoint folders
     results_path = Path(ray_results_dir).resolve()
     if not results_path.exists():
-        results_path = project_root / "experiments" / "ray_results"
+        results_path = exp_dir / "ray_results"
         
     checkpoints = []
     for cp_path in results_path.glob("**/checkpoint_*"):
         if cp_path.is_dir() and (cp_path / "rllib_checkpoint.json").exists():
             avg_reward = -999999.0
-            num_agents = 1
-            map_name = "default_map.txt"
+            n_agents = 1
+            m_name = "default_map.txt"
             
             for info_dir in [cp_path.parent, cp_path.parents[1]]:
                 info_file = info_dir / "model_info.json"
@@ -82,18 +127,17 @@ def discover_latest_or_best_checkpoint(ray_results_dir="experiments/ray_results"
                         with open(info_file, "r") as f:
                             meta = json.load(f)
                             avg_reward = float(meta.get("avg_reward", -999999.0))
-                            num_agents = int(meta.get("num_agents", 1))
-                            map_name = meta.get("map", "default_map.txt")
+                            n_agents = int(meta.get("num_agents", 1))
+                            m_name = meta.get("map", "default_map.txt")
                             break
                     except Exception:
                         pass
                         
             iter_num = int(cp_path.name.split("_")[-1]) if cp_path.name.split("_")[-1].isdigit() else 0
             mtime = cp_path.stat().st_mtime
-            checkpoints.append((cp_path.resolve(), avg_reward, iter_num, mtime, num_agents, map_name))
+            checkpoints.append((cp_path.resolve(), avg_reward, iter_num, mtime, n_agents, m_name))
                 
-    # Sort by modification time (mtime) and iteration number descending to pick the most recent checkpoint
-    checkpoints.sort(key=lambda x: (x[3], x[2]), reverse=True)
+    checkpoints.sort(key=lambda x: (x[1], x[3]), reverse=True)
     if not checkpoints:
         return None, 1, "default_map.txt"
     latest = checkpoints[0]

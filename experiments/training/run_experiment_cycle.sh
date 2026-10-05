@@ -44,3 +44,7 @@ $PYTHON_CMD experiments/analysis/evaluate_ppo.py --num-episodes 5
 echo "=================================================="
 echo "EXPERIMENT CYCLE COMPLETED SUCCESSFULLY"
 echo "=================================================="
+
+# 3. Print persistent results summary
+$PYTHON_CMD -c "from experiments.utils.results_tracker import generate_markdown_summary_table; print('\n' + generate_markdown_summary_table())"
+
