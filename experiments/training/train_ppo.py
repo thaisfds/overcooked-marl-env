@@ -119,7 +119,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=None, help="Override updates per batch")
     parser.add_argument("--entropy-coeff", type=float, default=None, help="Override entropy coefficient")
     parser.add_argument("--workers", type=int, default=default_workers, help="Number of parallel env rollout workers")
-    parser.add_argument("--gpus", type=int, default=1 if torch.cuda.is_available() else 0, help="Number of GPUs to allocate")
+    parser.add_argument("--gpus", type=float, default=1.0, help="Total GPUs to allocate across concurrent trials (default: 1.0)")
     parser.add_argument("--seed", type=int, default=None, help="Override random seed")
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="Checkpoint frequency in iterations (default: 10)")
     parser.add_argument("--keep-checkpoints-num", type=int, default=5, help="Number of recent checkpoints to keep (default: 5)")
