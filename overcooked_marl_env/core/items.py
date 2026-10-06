@@ -175,7 +175,8 @@ def create_ingredient(name, cuts_needed=DEFAULT_CUTS_NEEDED):
         "cuts_needed": cuts_needed,
         "cuts_done": 0,
         "combinable": False,
-        "base_color": base_color  # Store base color in item
+        "base_color": base_color,  # Store base color in item
+        "shaping_reward_accumulated": 0.0
     }
 
 
@@ -191,7 +192,8 @@ def create_plate():
         "type": ItemType.DISH,
         "state": ItemState.EMPTY,
         "ingredients": [],
-        "color": (240, 240, 240)  # Light gray for plate
+        "color": (240, 240, 240),  # Light gray for plate
+        "shaping_reward_accumulated": 0.0
     }
 
 
@@ -324,13 +326,14 @@ def can_process(item):
     return state == ItemState.RAW or is_processing(item)
 
 
-def add_ingredient_to_plate(plate, ingredient_name):
+def add_ingredient_to_plate(plate, ingredient_name, ingredient_item=None):
     """
     Adds an ingredient to a plate.
     
     Args:
         plate: Plate dictionary
         ingredient_name: Name of the ingredient to add
+        ingredient_item: Optional ingredient dictionary to transfer accumulated shaping reward
     
     Returns:
         Updated plate dictionary
@@ -342,6 +345,12 @@ def add_ingredient_to_plate(plate, ingredient_name):
         plate["ingredients"] = []
     
     plate["ingredients"].append(ingredient_name)
+    
+    if "shaping_reward_accumulated" not in plate:
+        plate["shaping_reward_accumulated"] = 0.0
+        
+    if ingredient_item and isinstance(ingredient_item, dict):
+        plate["shaping_reward_accumulated"] += ingredient_item.get("shaping_reward_accumulated", 0.0)
     
     # Update state
     if plate["state"] == ItemState.EMPTY:

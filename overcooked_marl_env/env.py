@@ -89,7 +89,7 @@ class OvercookedMARL(ParallelEnv):
         self.interaction_handler = InteractionHandler(self.item_manager, self.recipe_manager)
         
         # Rendering System (Phase 7)
-        self.renderer = Renderer(self.item_manager, render_mode=render_mode)
+        self.renderer = Renderer(self.item_manager, render_mode=render_mode, recipe_manager=self.recipe_manager)
         
         action_space_single = spaces.Discrete(5) 
         

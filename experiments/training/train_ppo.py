@@ -45,7 +45,7 @@ HYPERPARAMETER_GRID = {
     "train_batch_size": [4000, 8000],    # Volume de amostragem por atualização
     "sgd_minibatch_size": [256],         # Tamanho de minibatch PPO
     "update_epochs": [8, 12],            # Passos de atualização PPO por amostragem
-    "num_episodes": [2000],              # Episódios por trial (garante convergência completa do agente)
+    "num_episodes": [500, 700, 1000],              # Episódios por trial (garante convergência completa do agente)
     "seed": [42]                         # Semente aleatória
 }
 

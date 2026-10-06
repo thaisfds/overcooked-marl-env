@@ -39,16 +39,18 @@ class Renderer:
     and follows the Single Responsibility Principle.
     """
     
-    def __init__(self, item_manager, render_mode: str = "human"):
+    def __init__(self, item_manager, render_mode: str = "human", recipe_manager=None):
         """
         Initialize the renderer.
         
         Args:
             item_manager: ItemManager instance for cell code lookups
             render_mode: "human" for Pygame or "ascii" for ASCII
+            recipe_manager: Optional RecipeManager instance for dynamic recipe lookups
         """
         self.item_manager = item_manager
         self.render_mode = render_mode
+        self.recipe_manager = recipe_manager
         
         # Pygame-specific attributes
         self.window = None
@@ -251,13 +253,13 @@ class Renderer:
             self.font_large = pygame.font.Font(None, 36)
             self.font_small_bold = pygame.font.Font(None, 18)
         
-        # Recipes mapping to their respective ingredients
-        RECIPE_INGREDIENTS = {
-            "SIMPLE_SALAD": ["tomato", "lettuce"],
-            "GARDEN_SALAD": ["tomato", "lettuce", "onion"],
-            "FRESH_SALAD": ["tomato", "lettuce", "cucumber"],
+        # Fallback recipe ingredients mapping if recipe_manager is not present
+        FALLBACK_RECIPE_INGREDIENTS = {
+            "SIMPLE_SALAD": ["lettuce"],
+            "GARDEN_SALAD": ["lettuce", "tomato"],
+            "FRESH_SALAD": ["lettuce", "tomato", "cucumber"],
             "ONION_SOUP": ["onion", "onion", "onion"],
-            "ONION_SALAD": ["onion", "lettuce"]
+            "ONION_SALAD": ["lettuce", "onion"]
         }
         
         # Colors for the ingredient visual badges
@@ -297,8 +299,15 @@ class Renderer:
             name_surf = self.font_small_bold.render(display_name, True, (255, 250, 240))
             self.window.blit(name_surf, (card_x + 6, card_y + 4))
             
-            # Recipe Ingredients (small circular badges)
-            ingredients = RECIPE_INGREDIENTS.get(recipe, [])
+            # Recipe Ingredients (small circular badges) - fetch dynamically from recipe_manager
+            ingredients = []
+            if self.recipe_manager:
+                recipe_obj = self.recipe_manager.get_recipe_by_name(recipe)
+                if recipe_obj:
+                    ingredients = recipe_obj.ingredients
+            if not ingredients:
+                ingredients = FALLBACK_RECIPE_INGREDIENTS.get(recipe, [])
+                
             for ing_idx, ing in enumerate(ingredients):
                 color, char = ING_COLORS.get(ing, ((150, 150, 150), "?"))
                 badge_x = card_x + 8 + ing_idx * 22
@@ -499,10 +508,16 @@ class Renderer:
         needed_ingredients = []
         if len(recipe_queue) > 0:
             rec = recipe_queue[0]
-            if "SALAD" in rec:
-                needed_ingredients = ["tomato", "lettuce", "cucumber"]
-            elif "SOUP" in rec:
-                needed_ingredients = ["onion"]
+            if self.recipe_manager:
+                recipe = self.recipe_manager.get_recipe_by_name(rec)
+                if recipe and hasattr(recipe, "ingredients") and recipe.ingredients:
+                    needed_ingredients = [ing.lower() for ing in recipe.ingredients]
+            if not needed_ingredients:
+                if "SALAD" in rec:
+                    needed_ingredients = ["tomato", "lettuce", "cucumber"]
+                elif "SOUP" in rec:
+                    needed_ingredients = ["onion"]
+
                 
         closest_ing = None
         min_dist_i = float('inf')

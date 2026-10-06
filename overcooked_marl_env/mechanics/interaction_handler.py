@@ -197,6 +197,8 @@ class InteractionHandler:
                 'place_on_chop', carrying_item, None, game_state
             )
             total_reward = self.rewards.place_on_chop + progress_reward
+            if total_reward > 0:
+                carrying_item["shaping_reward_accumulated"] = carrying_item.get("shaping_reward_accumulated", 0.0) + total_reward
             
             if verbose:
                 print(f"  Placed {carrying_item['name']} on chopping board (+{self.rewards.place_on_chop}" + 
@@ -214,7 +216,6 @@ class InteractionHandler:
                 game_state["action_history"][agent_id].pop(0)
             
             updated_item = advance_processing(ground_item)
-            self._update_item(ground_instance_id, updated_item, game_state)
             
             # Check for repetition penalty
             repetition_penalty = 0.0
@@ -235,6 +236,10 @@ class InteractionHandler:
             cut_reward = self.rewards.process if self.rewards.process != 1.0 else self.rewards.chop_cut
             milestone_reward = self.rewards.chop_completed if is_ready(updated_item) else 0.0
             total_reward = cut_reward + milestone_reward + repetition_penalty + accumulation_penalty
+            
+            reward_gained = max(0.0, cut_reward + milestone_reward)
+            updated_item["shaping_reward_accumulated"] = updated_item.get("shaping_reward_accumulated", 0.0) + reward_gained
+            self._update_item(ground_instance_id, updated_item, game_state)
             
             if verbose:
                 cuts_done = updated_item.get("cuts_completed", updated_item.get("cuts_done", 0))
@@ -258,6 +263,8 @@ class InteractionHandler:
             del game_state["ground_instances"][(ix, iy)]
             
             total_reward = self.rewards.pickup + progress_reward
+            if total_reward > 0:
+                ground_item["shaping_reward_accumulated"] = ground_item.get("shaping_reward_accumulated", 0.0) + total_reward
             
             if verbose:
                 print(f"  Picked up {ground_item['name']} from chopping board (+{self.rewards.pickup}" +
@@ -266,8 +273,7 @@ class InteractionHandler:
         
         # Scenario 4: Carrying plate + ready ingredient on chopping board -> combine directly onto plate!
         elif carrying_item and carrying_item.get("type") == ItemType.DISH and ground_item and is_ready(ground_item):
-            updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"])
-            self._update_item(carrying_instance_id, updated_plate, game_state)
+            updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"], ground_item)
             
             # Delete ingredient from chopping board
             self._delete_item_instance(ground_instance_id, game_state)
@@ -280,6 +286,9 @@ class InteractionHandler:
             partial_plate_reward = self.reward_shaper._calculate_partial_plate_reward(updated_plate, game_state)
             
             total_reward = self.rewards.combine + progress_reward + partial_plate_reward
+            if total_reward > 0:
+                updated_plate["shaping_reward_accumulated"] = updated_plate.get("shaping_reward_accumulated", 0.0) + total_reward
+            self._update_item(carrying_instance_id, updated_plate, game_state)
             
             if verbose:
                 print(f"  Combined {ground_item['name']} from chopping board with plate (+{self.rewards.combine}" +
@@ -326,6 +335,9 @@ class InteractionHandler:
                     print(f"  Ready ingredient nearby - ready to combine!")
             
             total_reward = self.rewards.pickup + progress_reward
+            if total_reward > 0:
+                plate["shaping_reward_accumulated"] = plate.get("shaping_reward_accumulated", 0.0) + total_reward
+                self._update_item(plate_instance, plate, game_state)
             
             if verbose:
                 print(f"  Picked up an empty plate from dispenser (instance: {plate_instance})" +
@@ -335,7 +347,7 @@ class InteractionHandler:
         # Scenario 2: Pick up plate and combine with READY ingredient
         elif carrying_item and is_ready(carrying_item):
             plate = create_plate()
-            plate = add_ingredient_to_plate(plate, carrying_item["name"])
+            plate = add_ingredient_to_plate(plate, carrying_item["name"], carrying_item)
             plate_instance = self._create_item_instance(plate, game_state)
             
             # Delete the ingredient
@@ -359,6 +371,10 @@ class InteractionHandler:
             total_reward = (self.rewards.pickup + self.rewards.combine + 
                           progress_reward + pickup_plate_with_ready_reward + 
                           partial_plate_reward)
+            
+            if total_reward > 0:
+                plate["shaping_reward_accumulated"] = plate.get("shaping_reward_accumulated", 0.0) + total_reward
+                self._update_item(plate_instance, plate, game_state)
             
             if verbose:
                 print(f"  Picked up plate and combined with {carrying_item['name']} (instance: {plate_instance})" +
@@ -420,6 +436,9 @@ class InteractionHandler:
             'pickup_ingredient', ingredient, None, game_state
         )
         total_reward = self.rewards.pickup + progress_reward
+        if total_reward > 0:
+            ingredient["shaping_reward_accumulated"] = ingredient.get("shaping_reward_accumulated", 0.0) + total_reward
+            self._update_item(item_instance, ingredient, game_state)
         
         if verbose:
             print(f"  Picked up {ingredient['name']} from dispenser (instance: {item_instance})" +
@@ -473,14 +492,11 @@ class InteractionHandler:
         
         # Scenario 1: Carrying READY item + plate on counter → combine
         if is_carrying_ready and is_ground_dish:
-            updated_plate = add_ingredient_to_plate(ground_item, carrying_item["name"])
+            updated_plate = add_ingredient_to_plate(ground_item, carrying_item["name"], carrying_item)
             
             # Delete ingredient
             self._delete_item_instance(carrying_instance_id, game_state)
             del game_state["agent_holding_instance"][agent_id]
-            
-            # Update plate on counter
-            self._update_item(ground_instance_id, updated_plate, game_state)
             
             # Calculate progress reward
             progress_reward = self.reward_shaper._calculate_progress_reward(
@@ -491,6 +507,11 @@ class InteractionHandler:
             partial_plate_reward = self.reward_shaper._calculate_partial_plate_reward(updated_plate, game_state)
             
             total_reward = self.rewards.combine + progress_reward + partial_plate_reward
+            if total_reward > 0:
+                updated_plate["shaping_reward_accumulated"] = updated_plate.get("shaping_reward_accumulated", 0.0) + total_reward
+            
+            # Update plate on counter
+            self._update_item(ground_instance_id, updated_plate, game_state)
             
             if verbose:
                 print(f"  Combined {carrying_item['name']} with plate on counter (+{self.rewards.combine}" +
@@ -500,8 +521,7 @@ class InteractionHandler:
         
         # Scenario 2: Carrying plate + READY item on counter → pick up and combine
         elif is_carrying_dish and is_ground_ready:
-            updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"])
-            self._update_item(carrying_instance_id, updated_plate, game_state)
+            updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"], ground_item)
             
             # Delete ingredient from counter
             self._delete_item_instance(ground_instance_id, game_state)
@@ -516,6 +536,10 @@ class InteractionHandler:
             partial_plate_reward = self.reward_shaper._calculate_partial_plate_reward(updated_plate, game_state)
             
             total_reward = self.rewards.combine + progress_reward + partial_plate_reward
+            if total_reward > 0:
+                updated_plate["shaping_reward_accumulated"] = updated_plate.get("shaping_reward_accumulated", 0.0) + total_reward
+            
+            self._update_item(carrying_instance_id, updated_plate, game_state)
             
             if verbose:
                 print(f"  Combined {ground_item['name']} from counter with plate (+{self.rewards.combine}" +
@@ -572,6 +596,9 @@ class InteractionHandler:
                 )
             
             total_reward = self.rewards.pickup + progress_reward
+            if total_reward > 0:
+                ground_item["shaping_reward_accumulated"] = ground_item.get("shaping_reward_accumulated", 0.0) + total_reward
+                self._update_item(ground_instance_id, ground_item, game_state)
             
             if verbose:
                 print(f"  Picked up {get_ingredient_display_name(ground_item)} from counter (+{self.rewards.pickup}" +
@@ -596,15 +623,20 @@ class InteractionHandler:
         Handle interactions with trash station.
         
         Trash deletes items completely - they cease to exist.
+        Applies exact reward clawback of all accumulated shaping rewards plus base trash penalty.
         """
         if carrying_item:
+            shaping_accumulated = carrying_item.get("shaping_reward_accumulated", 0.0)
+            # Penalty is full clawback of all accumulated shaping rewards + base trash penalty
+            penalty = -shaping_accumulated + self.rewards.trash_penalty
+
             # Delete the item completely
             self._delete_item_instance(carrying_instance_id, game_state)
             del game_state["agent_holding_instance"][agent_id]
             
             if verbose:
-                print(f"  Discarded {get_ingredient_display_name(carrying_item)} in trash (PENALIDADE: {self.rewards.trash_penalty})")
-            return self.rewards.trash_penalty, 0.0  # PENALIDADE por desperdiçar item
+                print(f"  Discarded {get_ingredient_display_name(carrying_item)} in trash (Estorno: -{shaping_accumulated:.1f}, Taxa: {self.rewards.trash_penalty:.1f} => Total: {penalty:.1f})")
+            return penalty, 0.0  # PENALIDADE por desperdiçar item
         
         if verbose:
             print(f"  Cannot use trash: not carrying anything")

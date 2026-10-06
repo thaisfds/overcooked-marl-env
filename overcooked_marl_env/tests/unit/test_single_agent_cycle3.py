@@ -43,23 +43,23 @@ class TestSingleAgentCycle3(unittest.TestCase):
         rec1_updated = obs[agent_id][56:63]
         rec2_updated = obs[agent_id][63:70]
 
-        # HUD must now reflect GARDEN_SALAD as first pending order and ONION_SOUP as second
+        # HUD must now reflect GARDEN_SALAD as first pending order and FRESH_SALAD as second
         self.assertEqual(np.argmax(rec1_updated), 2)  # GARDEN_SALAD
-        self.assertEqual(np.argmax(rec2_updated), 4)  # ONION_SOUP (the 3rd in default_map)
+        self.assertEqual(np.argmax(rec2_updated), 3)  # FRESH_SALAD (the 3rd in default_map)
 
     def test_chopping_board_visual_dimension(self):
         """Test dimension 13 in self_state shows cutting progress even when hands are empty."""
         agent_id = "agent_0"
-        # Place agent facing cutting board at (7, 1)
-        self.env.state["agent_pos"][agent_id] = (7, 2)
-        self.env.state["agent_orientation"][agent_id] = (0, -1)  # Facing North -> (7, 1) is 'C'
+        # Place agent facing cutting board at (3, 1) from (3, 2)
+        self.env.state["agent_pos"][agent_id] = (3, 2)
+        self.env.state["agent_orientation"][agent_id] = (0, -1)  # Facing North -> (3, 1) is 'C'
 
-        # Put a raw tomato with 3 cuts needed on chopping board (7, 1)
+        # Put a raw tomato with 3 cuts needed on chopping board (3, 1)
         tomato = create_ingredient("tomato")
         tomato["cuts_completed"] = 1
         tomato["cuts_needed"] = 3
         t_id = self.env.interaction_handler._create_item_instance(tomato, self.env.state)
-        self.env.state["ground_instances"][(7, 1)] = t_id
+        self.env.state["ground_instances"][(3, 1)] = t_id
 
         obs = self.env._get_obs()
         self.assertAlmostEqual(obs[agent_id][13], 1.0 / 3.0, places=4)
@@ -82,9 +82,9 @@ class TestSingleAgentCycle3(unittest.TestCase):
         plate_id = self.env.interaction_handler._create_item_instance(plate, self.env.state)
         self.env.state["agent_holding_instance"][agent_id] = plate_id
 
-        # Place agent in front of delivery station D (10, 3)
-        self.env.state["agent_pos"][agent_id] = (9, 3)
-        self.env.state["agent_orientation"][agent_id] = (1, 0)  # Facing East -> (10, 3) is 'D'
+        # Place agent in front of delivery station D (6, 3) from (5, 3) facing East
+        self.env.state["agent_pos"][agent_id] = (5, 3)
+        self.env.state["agent_orientation"][agent_id] = (1, 0)  # Facing East -> (6, 3) is 'D'
 
         # Deliver 1st recipe (SIMPLE_SALAD)
         actions = {agent_id: 4}  # Interact
@@ -101,7 +101,7 @@ class TestSingleAgentCycle3(unittest.TestCase):
         plate2 = add_ingredient_to_plate(plate2, "tomato")
         plate2_id = self.env.interaction_handler._create_item_instance(plate2, self.env.state)
         self.env.state["agent_holding_instance"][agent_id] = plate2_id
-        self.env.state["agent_pos"][agent_id] = (9, 3)
+        self.env.state["agent_pos"][agent_id] = (5, 3)
         self.env.state["agent_orientation"][agent_id] = (1, 0)
 
         obs, rewards, terminations, truncations, infos = self.env.step(actions)
@@ -109,12 +109,14 @@ class TestSingleAgentCycle3(unittest.TestCase):
         self.assertEqual(self.env.state["dishes_pending"], initial_dishes - 2)
         self.assertFalse(terminations[agent_id])
 
-        # Deliver 3rd recipe (ONION_SOUP)
+        # Deliver 3rd recipe (FRESH_SALAD)
         plate3 = create_plate()
-        plate3 = add_ingredient_to_plate(plate3, "onion")
+        plate3 = add_ingredient_to_plate(plate3, "lettuce")
+        plate3 = add_ingredient_to_plate(plate3, "tomato")
+        plate3 = add_ingredient_to_plate(plate3, "cucumber")
         plate3_id = self.env.interaction_handler._create_item_instance(plate3, self.env.state)
         self.env.state["agent_holding_instance"][agent_id] = plate3_id
-        self.env.state["agent_pos"][agent_id] = (9, 3)
+        self.env.state["agent_pos"][agent_id] = (5, 3)
         self.env.state["agent_orientation"][agent_id] = (1, 0)
 
         obs, rewards, terminations, truncations, infos = self.env.step(actions)
@@ -128,7 +130,7 @@ class TestSingleAgentCycle3(unittest.TestCase):
         plate_id = self.env.interaction_handler._create_item_instance(plate, self.env.state)
         self.env.state["agent_holding_instance"][agent_id] = plate_id
 
-        self.env.state["agent_pos"][agent_id] = (9, 3)
+        self.env.state["agent_pos"][agent_id] = (5, 3)
         self.env.state["agent_orientation"][agent_id] = (1, 0)
 
         actions = {agent_id: 4}
@@ -141,19 +143,19 @@ class TestSingleAgentCycle3(unittest.TestCase):
         agent_id = "agent_0"
         initial_dishes = self.env.state["dishes_pending"]
         
-        # 1. Pick lettuce at dispenser (8, 5) from position (8, 4) facing South
-        self.env.state["agent_pos"][agent_id] = (8, 4)
+        # 1. Pick lettuce at dispenser (3, 5) from position (3, 4) facing South
+        self.env.state["agent_pos"][agent_id] = (3, 4)
         self.env.state["agent_orientation"][agent_id] = (0, 1)
         obs, r1, _, _, _ = self.env.step({agent_id: 4})
         self.assertIn(agent_id, self.env.state["agent_holding_instance"])
         self.assertLessEqual(r1[agent_id], 0.0)  # Raw pickup has no milestone bonus (prevents trash farming)
 
-        # 2. Place on chopping board (7, 1) from position (7, 2) facing North
-        self.env.state["agent_pos"][agent_id] = (7, 2)
+        # 2. Place on chopping board (3, 1) from position (3, 2) facing North
+        self.env.state["agent_pos"][agent_id] = (3, 2)
         self.env.state["agent_orientation"][agent_id] = (0, -1)
         obs, r2, _, _, _ = self.env.step({agent_id: 4})
         self.assertNotIn(agent_id, self.env.state["agent_holding_instance"])
-        self.assertIn((7, 1), self.env.state["ground_instances"])
+        self.assertIn((3, 1), self.env.state["ground_instances"])
         self.assertGreater(r2[agent_id], 5.0)  # Place on chop milestone
 
         # 3. Chop 3 times
@@ -161,27 +163,27 @@ class TestSingleAgentCycle3(unittest.TestCase):
         obs, r_c2, _, _, _ = self.env.step({agent_id: 4})  # cut 2
         obs, r_c3, _, _, _ = self.env.step({agent_id: 4})  # cut 3 (completion)
         self.assertGreater(r_c3[agent_id], r_c1[agent_id])  # Completion milestone is higher than single cut
-        chopped_id = self.env.state["ground_instances"][(7, 1)]
+        chopped_id = self.env.state["ground_instances"][(3, 1)]
         self.assertTrue(self.env.state["item_instances"][chopped_id]["state"] == ItemState.READY)
 
-        # 4. Pick plate at dispenser (9, 1) from position (9, 2) facing North
-        self.env.state["agent_pos"][agent_id] = (9, 2)
+        # 4. Pick plate at dispenser (4, 1) from position (4, 2) facing North
+        self.env.state["agent_pos"][agent_id] = (4, 2)
         self.env.state["agent_orientation"][agent_id] = (0, -1)
         obs, r_p, _, _, _ = self.env.step({agent_id: 4})
         self.assertIn(agent_id, self.env.state["agent_holding_instance"])
         plate_inst_id = self.env.state["agent_holding_instance"][agent_id]
         self.assertEqual(self.env.state["item_instances"][plate_inst_id]["type"], ItemType.DISH)
 
-        # 5. Combine plate with chopped lettuce at (7, 1) from (7, 2) facing North
-        self.env.state["agent_pos"][agent_id] = (7, 2)
+        # 5. Combine plate with chopped lettuce at (3, 1) from (3, 2) facing North
+        self.env.state["agent_pos"][agent_id] = (3, 2)
         self.env.state["agent_orientation"][agent_id] = (0, -1)
         obs, r_comb, _, _, _ = self.env.step({agent_id: 4})
         self.assertGreater(r_comb[agent_id], 20.0)  # Combine + plate completed bonus
         plate_item = self.env.state["item_instances"][plate_inst_id]
         self.assertIn("lettuce", plate_item["ingredients"])
 
-        # 6. Deliver at (10, 3) from (9, 3) facing East
-        self.env.state["agent_pos"][agent_id] = (9, 3)
+        # 6. Deliver at (6, 3) from (5, 3) facing East
+        self.env.state["agent_pos"][agent_id] = (5, 3)
         self.env.state["agent_orientation"][agent_id] = (1, 0)
         obs, r_del, term, trunc, _ = self.env.step({agent_id: 4})
         self.assertGreater(r_del[agent_id], 20.0)  # Delivery reward
@@ -191,6 +193,7 @@ class TestSingleAgentCycle3(unittest.TestCase):
         # 7. Verify next order is GARDEN_SALAD
         rec1_onehot = obs[agent_id][56:63]
         self.assertEqual(np.argmax(rec1_onehot), 2)  # GARDEN_SALAD is now active
+
 
 if __name__ == "__main__":
     unittest.main()

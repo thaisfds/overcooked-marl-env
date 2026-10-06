@@ -68,6 +68,8 @@ class RewardValues:
     invalid: float = -0.1
     invalid_delivery_penalty: float = -5.0
     trash_penalty: float = -10.0
+    trash_ready_penalty: float = -30.0
+    trash_dish_penalty: float = -60.0
     unneeded_pickup_penalty: float = -2.0
     useless_cycle_penalty: float = -2.0
     useless_cycle: float = -2.0
@@ -210,8 +212,6 @@ class RewardShaper:
         if 0 < matching_count < total_required:
             completion_ratio = matching_count / total_required
             return self.rewards.progress_partial_plate * completion_ratio
-        elif matching_count == total_required:
-            return self.rewards.plate_complete_bonus
         
         return 0.0
 

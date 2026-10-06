@@ -21,11 +21,11 @@ class FeaturizedObservationBuilder:
     """
     
     DEFAULT_RECIPE_INGREDIENTS = {
-        "SIMPLE_SALAD": ["tomato"],
-        "GARDEN_SALAD": ["tomato", "lettuce"],
-        "FRESH_SALAD": ["lettuce"],
+        "SIMPLE_SALAD": ["lettuce"],
+        "GARDEN_SALAD": ["lettuce", "tomato"],
+        "FRESH_SALAD": ["lettuce", "tomato", "cucumber"],
         "ONION_SOUP": ["onion"],
-        "ONION_SALAD": ["onion"],
+        "ONION_SALAD": ["lettuce", "onion"],
     }
 
     def __init__(self, recipe_manager=None):
@@ -77,6 +77,13 @@ class FeaturizedObservationBuilder:
             onehot[0] = 1.0
             return onehot
             
+        recipe_mgr = recipe_manager or self.recipe_manager
+        if recipe_mgr:
+            idx = recipe_mgr.get_recipe_index(recipe_name)
+            if 0 < idx < 7:
+                onehot[idx] = 1.0
+                return onehot
+
         name_upper = recipe_name.upper()
         if name_upper == "SIMPLE_SALAD":
             idx = 1
@@ -120,6 +127,7 @@ class FeaturizedObservationBuilder:
                 
         onehot[idx] = 1.0
         return onehot
+
 
     def build_observations(
         self,

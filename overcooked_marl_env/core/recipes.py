@@ -67,27 +67,6 @@ class FreshSaladRecipe(Recipe):
         )
 
 
-class OnionSoupRecipe(Recipe):
-    """Onion soup with just onion."""
-    
-    def __init__(self):
-        super().__init__(
-            name="ONION_SOUP",
-            ingredients=["onion"],
-            reward=30.0
-        )
-
-
-class OnionSaladRecipe(Recipe):
-    """Onion salad with lettuce and onion."""
-    
-    def __init__(self):
-        super().__init__(
-            name="ONION_SALAD",
-            ingredients=["lettuce", "onion"],
-            reward=35.0
-        )
-
 
 class RecipeManager:
     """Manages all available recipes and validates combinations."""
@@ -109,8 +88,6 @@ class RecipeManager:
             SimpleSaladRecipe(),
             GardenSaladRecipe(),
             FreshSaladRecipe(),
-            OnionSoupRecipe(),
-            OnionSaladRecipe(),
         ]
     
     @classmethod
@@ -224,6 +201,29 @@ class RecipeManager:
                 return recipe
         return None
     
+    def get_recipe_index(self, name: str) -> int:
+        """
+        Get 1-based index of a recipe by name.
+        Returns 0 if not found.
+        
+        Args:
+            name: Recipe name (case-insensitive)
+        """
+        if not name:
+            return 0
+        name_upper = name.upper()
+        for idx, recipe in enumerate(self.recipes, start=1):
+            if recipe.name == name_upper:
+                return idx
+        return 0
+
+    def get_recipe_ingredients_map(self) -> dict:
+        """
+        Get dictionary mapping recipe names to lists of required ingredients.
+        """
+        return {r.name: list(r.ingredients) for r in self.recipes}
+
+    
     def get_all_recipe_names(self):
         """
         Get list of all available recipe names.
@@ -284,6 +284,4 @@ RECIPE_DEFINITIONS = {
     "SIMPLE_SALAD": SimpleSaladRecipe(),
     "GARDEN_SALAD": GardenSaladRecipe(),
     "FRESH_SALAD": FreshSaladRecipe(),
-    "ONION_SOUP": OnionSoupRecipe(),
-    "ONION_SALAD": OnionSaladRecipe(),
 }

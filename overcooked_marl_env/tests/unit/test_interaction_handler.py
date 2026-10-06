@@ -444,9 +444,10 @@ class TestInteractionHandler(OvercookedTestCase):
         self.assertEqual(global_reward, 0.0)
     
     def test_trash_deletes_plate_with_ingredients(self):
-        """Test that trash can delete even plates with ingredients."""
-        # Setup: carrying plate with ingredients
+        """Test that trash can delete even plates with ingredients and claws back shaping rewards."""
+        # Setup: carrying plate with ingredients and accumulated shaping reward
         plate = create_plate()
+        plate["shaping_reward_accumulated"] = 35.0
         plate = add_ingredient_to_plate(plate, "tomato")
         plate = add_ingredient_to_plate(plate, "lettuce")
         plate_id = self._create_item_instance(plate)
@@ -459,8 +460,8 @@ class TestInteractionHandler(OvercookedTestCase):
             "agent_0", self.game_state, verbose=False
         )
         
-        # Assert
-        self.assertEqual(local_reward, 2.0)  # PLACE_REWARD
+        # Assert - Reward clawback (-35.0) + trash_penalty (2.0 in legacy rewards config)
+        self.assertEqual(local_reward, -35.0 + self.handler.rewards.trash_penalty)
         
         # Plate should be completely deleted
         self.assertNotIn(plate_id, self.game_state["item_instances"])
