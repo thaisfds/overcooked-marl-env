@@ -643,6 +643,54 @@ class TestInteractionHandler(OvercookedTestCase):
         is_correct = self.handler._is_correct_order("salad", self.game_state)
         self.assertTrue(is_correct)  # Still correct (second salad)
 
+    # Duplicate Ingredient Prevention Tests
+
+    def test_duplicate_ingredient_lock_on_items(self):
+        """Test items.add_ingredient_to_plate ignores duplicate ingredients."""
+        plate = create_plate()
+        plate = add_ingredient_to_plate(plate, "lettuce")
+        self.assertEqual(plate["ingredients"], ["lettuce"])
+
+        # Try adding duplicate lettuce
+        plate = add_ingredient_to_plate(plate, "lettuce")
+        self.assertEqual(plate["ingredients"], ["lettuce"])
+
+        # Add different ingredient
+        plate = add_ingredient_to_plate(plate, "tomato")
+        self.assertEqual(plate["ingredients"], ["lettuce", "tomato"])
+
+    def test_combine_duplicate_ingredient_on_counter_returns_invalid(self):
+        """Test combining an ingredient already on a plate returns invalid reward."""
+        # Set agent at (5, 5) facing up (0, -1) -> front tile is (5, 4)
+        self.game_state["agent_pos"]["agent_0"] = (5, 5)
+        self.game_state["agent_orientation"]["agent_0"] = (0, -1)
+        tile_in_front = (5, 4)
+        self.game_state["map_static"][5, 4] = 1  # Counter
+
+        # Set up plate with lettuce on counter
+        plate = create_plate()
+        plate = add_ingredient_to_plate(plate, "lettuce")
+        plate_id = self._create_item_instance(plate)
+        self.game_state["ground_instances"][tile_in_front] = plate_id
+
+        # Agent holds ready lettuce
+        lettuce = create_ingredient("lettuce")
+        lettuce["state"] = ItemState.READY
+        lettuce_id = self._create_item_instance(lettuce)
+        self.game_state["agent_holding_instance"]["agent_0"] = lettuce_id
+
+        # Interact to combine
+        local_reward, _ = self.handler.handle_interaction("agent_0", self.game_state, verbose=False)
+
+        # Assert duplicate combine was rejected with invalid reward
+        self.assertEqual(local_reward, self.handler.rewards.invalid)
+        self.assertEqual(self.game_state["item_instances"][plate_id]["ingredients"], ["lettuce"])
+        self.assertEqual(self.game_state["agent_holding_instance"]["agent_0"], lettuce_id)
+
+
+
 
 if __name__ == "__main__":
+    import unittest
     unittest.main()
+
