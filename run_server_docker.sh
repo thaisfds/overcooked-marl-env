@@ -9,17 +9,12 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "=================================================="
-echo "1. Pulling latest code updates from GitHub..."
-echo "=================================================="
-git pull origin main
-
-echo "=================================================="
-echo "2. Building Docker image (overcooked_marl:latest)..."
+echo "1. Building Docker image (overcooked_marl:latest)..."
 echo "=================================================="
 docker build -t overcooked_marl:latest .
 
 echo "=================================================="
-echo "3. Running Docker Container with GPU access..."
+echo "2. Running Docker Container with GPU access..."
 echo "=================================================="
 docker run --rm -it \
   --gpus all \
