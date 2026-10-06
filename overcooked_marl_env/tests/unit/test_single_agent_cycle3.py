@@ -148,7 +148,8 @@ class TestSingleAgentCycle3(unittest.TestCase):
         self.env.state["agent_orientation"][agent_id] = (0, 1)
         obs, r1, _, _, _ = self.env.step({agent_id: 4})
         self.assertIn(agent_id, self.env.state["agent_holding_instance"])
-        self.assertLessEqual(r1[agent_id], 0.0)  # Raw pickup has no milestone bonus (prevents trash farming)
+        self.assertGreater(r1[agent_id], 0.0)  # Pickup needed ingredient receives positive milestone shaping
+
 
         # 2. Place on chopping board (3, 1) from position (3, 2) facing North
         self.env.state["agent_pos"][agent_id] = (3, 2)

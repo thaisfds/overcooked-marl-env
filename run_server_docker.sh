@@ -18,8 +18,9 @@ if [ -t 0 ]; then
 fi
 
 echo "=================================================="
-echo "1. Pulling latest code changes (git pull)..."
+echo "1. Pulling latest code changes from git ..."
 echo "=================================================="
+git fetch
 git pull
 
 echo "=================================================="

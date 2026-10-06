@@ -35,7 +35,7 @@ class RewardValues:
 
     # Assembly / Combining
     combine: float = 0.0
-    progress_pickup_needed: float = 0.0
+    progress_pickup_needed: float = 5.0
     progress_place_on_chop: float = 5.0
     progress_pickup_ready: float = 2.0
     progress_combine_ready: float = 10.0
@@ -66,18 +66,19 @@ class RewardValues:
 
     # Penalties (Anti-Reward Hacking & Efficiency)
     invalid: float = -0.01
-    invalid_delivery_penalty: float = -5.0
+    invalid_delivery_penalty: float = -2.0
 
     trash_penalty: float = -10.0
     trash_ready_penalty: float = -30.0
     trash_dish_penalty: float = -60.0
-    unneeded_pickup_penalty: float = -2.0
-    useless_cycle_penalty: float = -2.0
-    useless_cycle: float = -2.0
-    repetition_penalty: float = -1.0
+    unneeded_pickup_penalty: float = 0.0
+    useless_cycle_penalty: float = 0.0
+    useless_cycle: float = 0.0
+    repetition_penalty: float = 0.0
     accumulation_penalty: float = 0.0
     accumulation_threshold: int = 5
-    counter_clutter_penalty: float = -1.0
+    counter_clutter_penalty: float = 0.0
+
 
 
 class RewardShaper:
