@@ -34,20 +34,21 @@ except ImportError:
 torch, nn = try_import_torch()
 
 # ======================================================================
-# HYPERPARAMETER GRID SEARCH CONFIGURATION (LONG-RUN / 1-WEEK SERVER GRID)
+# HYPERPARAMETER GRID SEARCH CONFIGURATION (OPTIMIZED 8-HOUR SERVER GRID)
 # ======================================================================
-# Optimized for VeRLab 'magritte' server:
-# CPU: Intel Core i7-3770K (8 threads) | GPU: GTX Titan X 12GB | RAM: 32GB
+# 48 trials total (12 batches of 4 parallel trials = ~7.5 - 8 hours total duration)
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 3e-4, 5e-4],            # Taxa de aprendizado: Estável (1e-4) -> Padrão (3e-4) -> Rápido (5e-4)
-    "gamma": [0.98, 0.99, 0.995],        # Fator de desconto: Visão de longo prazo para receitas complexas
-    "entropy_coeff": [0.01, 0.03, 0.05], # Exploração sustentada em layouts difíceis
-    "train_batch_size": [4000, 8000],    # Volume de amostragem por atualização
+    "lr": [1e-4, 3e-4, 5e-4],            # Taxas de aprendizado
+    "gamma": [0.98, 0.99],               # Fatores de desconto (curto vs longo prazo)
+    "entropy_coeff": [0.01, 0.03],       # Coeficientes de entropia para exploração
+    "train_batch_size": [4000, 8000],    # Volumes de amostragem por atualização
     "sgd_minibatch_size": [256],         # Tamanho de minibatch PPO
-    "update_epochs": [8, 12],            # Passos de atualização PPO por amostragem
-    "num_episodes": [500, 700, 1000],              # Episódios por trial (garante convergência completa do agente)
+    "update_epochs": [8, 12],            # Passos de otimização por batch
+    "num_episodes": [500],               # 500 episódios por trial (~1.5M timesteps, ~35-40 min por lote)
     "seed": [42]                         # Semente aleatória
 }
+
+
 
 
 class ParallelEnvToMultiAgent(MultiAgentEnv):

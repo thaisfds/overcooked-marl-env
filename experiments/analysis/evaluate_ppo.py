@@ -106,8 +106,14 @@ def main():
     env_name = "overcooked_marl_parallel"
     register_env(env_name, lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
     
-    # Load Algorithm from checkpoint
-    algo = Algorithm.from_checkpoint(checkpoint_path)
+    algo = None
+    policies = None
+    try:
+        algo = Algorithm.from_checkpoint(checkpoint_path)
+    except Exception as e:
+        print(f"[INFO] Algorithm loading fallback to direct Policy loading: {e}")
+        from ray.rllib.policy.policy import Policy
+        policies = Policy.from_checkpoint(checkpoint_path)
         
     episode_results = []
     
@@ -127,9 +133,18 @@ def main():
             # Compute actions from trained policy
             actions = {}
             for agent_id, agent_obs in obs.items():
-                policy_id = f"policy_{agent_id}"
-                action = algo.compute_single_action(agent_obs, policy_id=policy_id, explore=False)
+                if algo is not None:
+                    action = algo.compute_single_action(agent_obs, policy_id=f"policy_{agent_id}", explore=False)
+                else:
+                    policy_id = f"policy_{agent_id}"
+                    pol = policies.get(policy_id) or next(iter(policies.values()))
+                    res = pol.compute_single_action(agent_obs, explore=False)
+                    action = res[0]
+                    if isinstance(action, (tuple, list, np.ndarray)):
+                        action = action[0]
+                    action = int(action)
                 actions[agent_id] = action
+
                 
             obs, rewards, terminations, truncations, infos = env.step(actions)
             for agent_id, r in rewards.items():

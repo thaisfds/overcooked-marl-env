@@ -65,8 +65,9 @@ class RewardValues:
     delivery_distance_max: int = 5
 
     # Penalties (Anti-Reward Hacking & Efficiency)
-    invalid: float = -0.1
+    invalid: float = -0.01
     invalid_delivery_penalty: float = -5.0
+
     trash_penalty: float = -10.0
     trash_ready_penalty: float = -30.0
     trash_dish_penalty: float = -60.0

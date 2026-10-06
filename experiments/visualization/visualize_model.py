@@ -172,8 +172,16 @@ def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_m
     if ray.is_initialized():
         ray.shutdown()
     ray.init(ignore_reinit_error=True, include_dashboard=False)
-    
-    algorithm = Algorithm.from_checkpoint(str(cp_abs_path))
+
+    algorithm = None
+    policies = None
+    try:
+        algorithm = Algorithm.from_checkpoint(str(cp_abs_path))
+    except Exception as e:
+        print(f"[INFO] Algorithm loading fallback to direct Policy loading: {e}")
+        from ray.rllib.policy.policy import Policy
+        policies = Policy.from_checkpoint(str(cp_abs_path))
+
     env = ParallelEnvToMultiAgent(env_creator_fn())
     
     try:
@@ -194,19 +202,21 @@ def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_m
                 actions = {}
                 for agent_id, obs in obs_dict.items():
                     try:
-                        raw_action = algorithm.compute_single_action(obs, policy_id=f"policy_{agent_id}", explore=explore)
+                        if algorithm is not None:
+                            raw_action = algorithm.compute_single_action(obs, policy_id=f"policy_{agent_id}", explore=explore)
+                        else:
+                            policy_id = f"policy_{agent_id}"
+                            pol = policies.get(policy_id) or next(iter(policies.values()))
+                            res = pol.compute_single_action(obs, explore=explore)
+                            raw_action = res[0]
                         if isinstance(raw_action, (tuple, list, np.ndarray)):
                             raw_action = raw_action[0]
                         action = int(raw_action)
-                    except Exception:
-                        try:
-                            raw_action = algorithm.compute_single_action(obs, explore=explore)
-                            if isinstance(raw_action, (tuple, list, np.ndarray)):
-                                raw_action = raw_action[0]
-                            action = int(raw_action)
-                        except Exception:
-                            action = 0
+                    except Exception as err:
+                        print(f"Error computing action for {agent_id}: {err}")
+                        action = 0
                     actions[agent_id] = action
+
                     
                 obs_dict, rewards, terminations, truncations, infos = env.step(actions)
                 episode_reward += sum(rewards.values())
