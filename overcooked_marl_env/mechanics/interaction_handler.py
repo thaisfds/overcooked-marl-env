@@ -273,7 +273,13 @@ class InteractionHandler:
         
         # Scenario 4: Carrying plate + ready ingredient on chopping board -> combine directly onto plate!
         elif carrying_item and carrying_item.get("type") == ItemType.DISH and ground_item and is_ready(ground_item):
+            if ground_item["name"] in carrying_item.get("ingredients", []):
+                if verbose:
+                    print(f"  Cannot combine: {ground_item['name']} already present on plate")
+                return self.rewards.invalid, 0.0
+
             updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"], ground_item)
+
             
             # Delete ingredient from chopping board
             self._delete_item_instance(ground_instance_id, game_state)
@@ -492,6 +498,11 @@ class InteractionHandler:
         
         # Scenario 1: Carrying READY item + plate on counter → combine
         if is_carrying_ready and is_ground_dish:
+            if carrying_item["name"] in ground_item.get("ingredients", []):
+                if verbose:
+                    print(f"  Cannot combine: {carrying_item['name']} already present on plate")
+                return self.rewards.invalid, 0.0
+
             updated_plate = add_ingredient_to_plate(ground_item, carrying_item["name"], carrying_item)
             
             # Delete ingredient
@@ -521,7 +532,13 @@ class InteractionHandler:
         
         # Scenario 2: Carrying plate + READY item on counter → pick up and combine
         elif is_carrying_dish and is_ground_ready:
+            if ground_item["name"] in carrying_item.get("ingredients", []):
+                if verbose:
+                    print(f"  Cannot combine: {ground_item['name']} already present on plate")
+                return self.rewards.invalid, 0.0
+
             updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"], ground_item)
+
             
             # Delete ingredient from counter
             self._delete_item_instance(ground_instance_id, game_state)

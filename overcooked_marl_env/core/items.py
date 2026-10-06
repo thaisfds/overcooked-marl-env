@@ -344,7 +344,12 @@ def add_ingredient_to_plate(plate, ingredient_name, ingredient_item=None):
     if "ingredients" not in plate:
         plate["ingredients"] = []
     
+    # Do not allow duplicate ingredients on the same plate
+    if ingredient_name in plate["ingredients"]:
+        return plate
+
     plate["ingredients"].append(ingredient_name)
+
     
     if "shaping_reward_accumulated" not in plate:
         plate["shaping_reward_accumulated"] = 0.0
