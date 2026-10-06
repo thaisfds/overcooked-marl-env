@@ -25,6 +25,7 @@ WORKDIR /app
 # Copiar requirements e instalar dependencias Python
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cu121 && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copiar o código do projeto para o container

@@ -236,7 +236,7 @@ def main():
             }
         )
         .resources(
-            num_gpus=(args.gpus / max(1, args.concurrent)) if args.gpus > 0 else 0
+            num_gpus=(args.gpus / max(1, args.concurrent)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
         )
         .env_runners(
             num_env_runners=max(1, args.workers // max(1, args.concurrent)),
