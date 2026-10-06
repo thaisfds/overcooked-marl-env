@@ -26,8 +26,8 @@ else
     PYTHON_CMD="python"
 fi
 
-WORKERS=${WORKERS:-6}
-CONCURRENT=${CONCURRENT:-3}
+WORKERS=${WORKERS:-4}
+CONCURRENT=${CONCURRENT:-4}
 
 echo "Using Python executable: $PYTHON_CMD"
 echo "Workers count: $WORKERS"
