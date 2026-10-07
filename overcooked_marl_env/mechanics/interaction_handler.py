@@ -727,16 +727,10 @@ class InteractionHandler:
         # Sequence complete bonus
         sequence_bonus = self.rewards.sequence_complete_bonus
         
-        # Delivery multipliers
+        # Dynamic delivery multipliers for any N dishes (1.0 for 1st, +0.5 per extra delivery)
         num_deliveries = len(game_state.get("delivered_recipes", []))
-        if num_deliveries == 1:
-            delivery_multiplier = 1.0
-        elif num_deliveries == 2:
-            delivery_multiplier = self.rewards.delivery_multiplier_2nd
-        elif num_deliveries == 3:
-            delivery_multiplier = self.rewards.delivery_multiplier_3rd
-        else:
-            delivery_multiplier = self.rewards.delivery_multiplier_4th_plus
+        mult_step = getattr(self.rewards, "delivery_multiplier_step", 0.5)
+        delivery_multiplier = 1.0 + max(0, num_deliveries - 1) * mult_step
         
         delivery_bonus = base_reward * (delivery_multiplier - 1.0)
         

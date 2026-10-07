@@ -34,18 +34,19 @@ except ImportError:
 torch, nn = try_import_torch()
 
 # ======================================================================
-# HYPERPARAMETER GRID SEARCH CONFIGURATION (OPTIMIZED 8-HOUR SERVER GRID)
+# HYPERPARAMETER GRID SEARCH CONFIGURATION (OPTIMIZED TOP-PERFORMING GRID)
 # ======================================================================
-# 48 trials total (12 batches of 4 parallel trials = ~7.5 - 8 hours total duration)
+# Focused on top-performing hyperparameters discovered in logs (lr=1e-4..3e-4, gamma=0.98..0.99, 12 epochs)
+# Extended to 1000 episodes (~3M timesteps) to allow agents to master 2nd+ deliveries.
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 3e-4, 5e-4],            # Taxas de aprendizado
-    "gamma": [0.98, 0.99],               # Fatores de desconto (curto vs longo prazo)
-    "entropy_coeff": [0.01, 0.03],       # Coeficientes de entropia para exploração
-    "train_batch_size": [4000, 8000],    # Volumes de amostragem por atualização
-    "sgd_minibatch_size": [256],         # Tamanho de minibatch PPO
-    "update_epochs": [8, 12],            # Passos de otimização por batch
-    "num_episodes": [500],               # 500 episódios por trial (~1.5M timesteps, ~35-40 min por lote)
-    "seed": [42]                         # Semente aleatória
+    "lr": [1e-4, 2e-4, 3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
+    "gamma": [0.98, 0.99],               # High-performing discount factors
+    "entropy_coeff": [0.01, 0.03],       # High-performing entropy range for exploration
+    "train_batch_size": [4000, 8000],    # Optimal batch sizes for trajectory collection
+    "sgd_minibatch_size": [256],         # PPO minibatch size
+    "update_epochs": [12],               # Top-performing update epochs (12 epochs)
+    "num_episodes": [1000],              # Extended training duration (~3.0M timesteps for 2nd+ deliveries)
+    "seed": [42]                         # Random seed
 }
 
 

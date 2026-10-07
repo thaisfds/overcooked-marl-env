@@ -50,14 +50,12 @@ class RewardValues:
     # Deliveries (Direct Sparse Primary Objective)
     delivery_base: float = 0.0
     order_bonus: float = 0.0
-    order_bonus_mult: float = 0.0
-    sequence_complete_bonus: float = 0.0
-    episode_complete_bonus: float = 0.0
+    order_bonus_mult: float = 0.5
+    sequence_complete_bonus: float = 50.0
+    episode_complete_bonus: float = 5000.0  # Huge 5000pt victory bonus when 0 pending dishes remain!
 
-    # Multipliers
-    delivery_multiplier_2nd: float = 1.0
-    delivery_multiplier_3rd: float = 1.0
-    delivery_multiplier_4th_plus: float = 1.0
+    # Dynamic Multipliers (Formula: 1.0 + step * (k - 1) for the k-th delivery)
+    delivery_multiplier_step: float = 0.5   # Dynamic +50% multiplier per extra delivery (1st=1.0x, 2nd=1.5x, 3rd=2.0x, N-th=1+0.5*(N-1)x)
 
     # Proximity & Attempts (disabled)
     delivery_proximity_reward: float = 0.0
@@ -305,7 +303,7 @@ class RewardShaper:
                 if sorted([i.lower() for i in plate_ingredients]) == sorted(req_lower):
                     progress_reward += self.rewards.progress_pickup_complete_plate
         
-        # Apply MAPPO Reward Shaping Annealing (exponential decay as recipes are delivered)
+        # Apply MAPPO Reward Shaping Annealing (gentle decay as recipes are delivered)
         num_delivered = len(game_state.get("delivered_recipes", []))
-        annealing_decay = math.exp(-num_delivered * 0.4)
+        annealing_decay = math.exp(-num_delivered * 0.15)
         return progress_reward * annealing_decay

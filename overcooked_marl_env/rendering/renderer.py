@@ -463,7 +463,15 @@ class Renderer:
                     log_filepath = log_dir / log_str if not Path(log_str).is_absolute() else Path(log_str)
                     with open(log_filepath, "a") as f:
                         time_step = game_state.get("time_steps", 0)
-                        f.write(f"[Step {time_step:04d}] {agent_id} | Pos: {ax:02d},{ay:02d} | Hold: {inventory:10} | Focus: {closest_obj:20} | Score: {total_reward:+.1f} | Step Rwd: {step_reward:+.1f}\n")
+                        delivered = game_state.get("delivered_recipes", [])
+                        recipe_order = game_state.get("recipe_order", [])
+                        pending = list(recipe_order)
+                        for d in delivered:
+                            if d in pending:
+                                pending.remove(d)
+                        del_str = ", ".join(delivered) if delivered else "None"
+                        pend_str = ", ".join(pending) if pending else "None"
+                        f.write(f"[Step {time_step:04d}] {agent_id} | Pos: {ax:02d},{ay:02d} | Hold: {inventory:10} | Focus: {closest_obj:20} | Score: {total_reward:+.1f} | Step Rwd: {step_reward:+.1f} | Delivered: [{del_str}] | Pending: [{pend_str}]\n")
             except Exception:
                 pass
             
