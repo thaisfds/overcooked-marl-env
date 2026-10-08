@@ -173,7 +173,7 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
 
         # Extract trial ID from directory name
         dir_name = trial_dir.name
-        t_match = re.search(r'parallel_(\d+_\d+)', dir_name)
+        t_match = re.search(r'parallel_([a-zA-Z0-9]+_\d+)', dir_name)
         trial_id = t_match.group(1) if t_match else dir_name[:15]
 
         if trial_id in known_trial_ids:
@@ -682,7 +682,7 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-Model 20-Second Rollout Visualizer for Overcooked MARL.")
-    parser.add_argument("--seconds", type=float, default=35.0, help="Duration to visualize each model in seconds (default: 35.0)")
+    parser.add_argument("--seconds", type=float, default=20.0, help="Duration to visualize each model in seconds (default: 20.0)")
     parser.add_argument("--delay", type=int, default=50, help="Step delay in ms (default: 50 ms, ~20 FPS)")
     parser.add_argument("--ray-results", type=str, default="experiments/ray_results", help="Directory containing Ray experiment results")
     parser.add_argument("--summary", type=str, default=None, help="Path to summary markdown file (e.g. PPO_Marl_20261006_215831_summary.md)")
