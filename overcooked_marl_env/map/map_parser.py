@@ -25,7 +25,7 @@ responsible for parsing, not validation or game logic.
 
 import os
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 from ..core.items import ItemManager
 from .map_config import (
     AGENT_ID_PREFIX, DISPENSER_LINE_PARTS,
@@ -51,9 +51,9 @@ class MapParser:
     Uses ItemManager for consistent cell code mapping with env.py.
     """
     
-    def __init__(self):
+    def __init__(self, item_manager: Optional[ItemManager] = None):
         """Initialize the map parser with ItemManager for cell codes."""
-        self.item_manager = ItemManager()
+        self.item_manager = item_manager if item_manager is not None else ItemManager()
     
     def parse_file(self, map_path: str) -> dict:
         """
@@ -200,7 +200,7 @@ class MapParser:
                     agent_positions[agent_id] = (x, y)
                     grid[y, x] = self.item_manager.get_cell_code(' ')  # Agent position is walkable
                 # Check if it's a known character
-                elif char in self.item_manager.CHAR_TO_NUM:
+                elif char in self.item_manager.CHAR_TO_NUM or char in self.item_manager.TILES:
                     grid[y, x] = self.item_manager.get_cell_code(char)
                 else:
                     # Unknown character - treat as empty for now

@@ -9,7 +9,7 @@ responsible for validation, not parsing or loading.
 """
 
 import numpy as np
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple, Set, Optional, Any
 from .map_config import (
     GRID_DIMENSIONS, POSITION_TUPLE_SIZE,
     REPORT_SEPARATOR_WIDTH, MIN_MAP_WIDTH, MIN_MAP_HEIGHT,
@@ -40,15 +40,17 @@ class MapValidator:
     maintainable and testable.
     """
     
-    def __init__(self, strict: bool = True):
+    def __init__(self, strict: bool = True, recipe_manager: Optional[Any] = None):
         """
         Initialize the map validator.
         
         Args:
             strict: If True, raises exceptions on validation errors.
                    If False, logs warnings but continues.
+            recipe_manager: Optional RecipeManager instance for custom recipe validation.
         """
         self.strict = strict
+        self.recipe_manager = recipe_manager
         self.validation_errors: List[str] = []
         self.validation_warnings: List[str] = []
     
@@ -313,10 +315,16 @@ class MapValidator:
             # Not a critical error - game will use defaults
             return True
         
-        available_recipes = get_available_recipes()
+        if self.recipe_manager is not None:
+            available_recipes = self.recipe_manager.get_all_recipe_names()
+        else:
+            available_recipes = get_available_recipes()
+        
+        available_map = {r.strip().upper(): r for r in available_recipes}
         
         for recipe_name in recipes:
-            if recipe_name not in available_recipes:
+            recipe_clean = recipe_name.strip().upper()
+            if recipe_clean not in available_map:
                 self._add_error(
                     f"Unknown recipe: {recipe_name}. "
                     f"Available: {', '.join(available_recipes)}"

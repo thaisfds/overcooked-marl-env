@@ -51,7 +51,7 @@ class TestGameState(unittest.TestCase):
         self.assertEqual(self.game_state.map_size, (3, 3))
         self.assertEqual(len(self.game_state.agents), 2)
         self.assertEqual(self.game_state.time_steps, 0)
-        self.assertEqual(self.game_state.dishes_pending, 3)
+        self.assertEqual(self.game_state.dishes_pending, 2)
         self.assertEqual(self.game_state.expected_recipe_index, 0)
     
     def test_agent_positions(self):
@@ -160,7 +160,7 @@ class TestGameState(unittest.TestCase):
         # Mark recipe as delivered
         self.game_state.mark_recipe_delivered()
         self.assertEqual(self.game_state.get_delivered_count(), 1)
-        self.assertEqual(self.game_state.dishes_pending, 2)
+        self.assertEqual(self.game_state.dishes_pending, 1)
         self.assertEqual(self.game_state.get_current_expected_recipe(), "GARDEN_SALAD")
         
         # Deliver second recipe

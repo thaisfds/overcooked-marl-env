@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Dict, Tuple, Any, List, Optional
-from ..core.items import ItemType, ItemState, is_ready
+from ..core.items import ItemType, ItemState, is_ready, is_plate
+from ..core.recipes import OrderQueue
 from ..core.constants import MAX_EPISODE_STEPS
 
 class FeaturizedObservationBuilder:
@@ -43,11 +44,10 @@ class FeaturizedObservationBuilder:
         return []
 
     def _get_pending_recipes(self, game_state: Dict[str, Any]) -> List[str]:
-        recipe_queue = list(game_state.get("recipe_order", []))
-        for delivered in game_state.get("delivered_recipes", []):
-            if delivered in recipe_queue:
-                recipe_queue.remove(delivered)
-        return recipe_queue
+        return OrderQueue.get_pending(
+            game_state.get("recipe_order", []),
+            game_state.get("delivered_recipes", [])
+        )
 
     def _build_map_ingredient_catalog(self, game_state: Dict[str, Any], recipe_manager=None) -> List[str]:
         """Builds a deterministic, sorted catalog of up to 8 unique ingredients present in this map/recipes."""
@@ -69,8 +69,7 @@ class FeaturizedObservationBuilder:
         if item is None:
             cat[0] = 1.0
             return cat
-        itype = item.get("type")
-        if itype == ItemType.DISH or "plate" in item.get("name", "").lower():
+        if is_plate(item):
             cat[3] = 1.0
         elif is_ready(item):
             cat[2] = 1.0
@@ -78,13 +77,25 @@ class FeaturizedObservationBuilder:
             cat[1] = 1.0
         return cat
 
+    def _get_item_cuts_progress(self, item: Optional[Dict]) -> float:
+        """
+        Returns normalized cutting/processing progress in [0.0, 1.0].
+        Handles both 'cuts_completed' and 'cuts_done', plus instant/ready items.
+        """
+        if not item or item.get("type") != ItemType.INGREDIENT:
+            return 0.0
+        if is_ready(item):
+            return 1.0
+        cuts_done = item.get("cuts_completed", item.get("cuts_done", 0))
+        cuts_needed = item.get("cuts_needed", 0)
+        return float(cuts_done) / max(1.0, float(cuts_needed)) if cuts_needed > 0 else 0.0
+
     def _get_item_ingredients_multihot(self, item: Optional[Dict], ing_to_slot: Dict[str, int]) -> np.ndarray:
         """Returns 8-dim multi-hot of ingredients present in the item (or plate)."""
         multihot = np.zeros(8, dtype=np.float32)
         if not item or not ing_to_slot:
             return multihot
-        itype = item.get("type")
-        if itype == ItemType.DISH or "plate" in item.get("name", "").lower():
+        if is_plate(item):
             for ing in item.get("ingredients", []):
                 slot = ing_to_slot.get(ing.lower())
                 if slot is not None and 0 <= slot < 8:
@@ -151,7 +162,7 @@ class FeaturizedObservationBuilder:
                     else:
                         g_item = item_instances.get(iid)
                         if g_item:
-                            if g_item.get("type") == ItemType.DISH or "plate" in g_item.get("name", "").lower():
+                            if is_plate(g_item):
                                 counters_with_dishes.append((x, y))
                             elif is_ready(g_item):
                                 counters_with_ready_ing.append((x, y))
@@ -223,17 +234,14 @@ class FeaturizedObservationBuilder:
             self_state[5:9] = self._get_item_category_onehot(holding_item)
             self_state[9:17] = self._get_item_ingredients_multihot(holding_item, ing_to_slot)
 
-            cuts_progress = 0.0
-            if holding_item is not None and "cuts_completed" in holding_item and "cuts_needed" in holding_item:
-                cuts_progress = float(holding_item["cuts_completed"]) / max(1, float(holding_item["cuts_needed"]))
-            self_state[17] = cuts_progress
+            self_state[17] = self._get_item_cuts_progress(holding_item)
             self_state[18] = 1.0 if (holding_item is not None and is_ready(holding_item)) else 0.0
 
             # Dish Target Alignment
             is_holding_target = 0.0
             is_holding_invalid = 0.0
             dish_ratio = 0.0
-            if holding_item is not None and (holding_item.get("type") == ItemType.DISH or "plate" in holding_item.get("name", "").lower()):
+            if is_plate(holding_item):
                 plate_ings = [i.lower() for i in holding_item.get("ingredients", [])]
                 if rec_1:
                     dish_ratio = len(plate_ings) / max(1, len(rec1_req))
@@ -260,14 +268,14 @@ class FeaturizedObservationBuilder:
                 f_char = item_manager.get_cell_char(f_code) if item_manager else ' '
                 if f_char == '#':
                     f_station_norm = 0.2
-                elif f_char in ('C', 'S', 'W', 'F', 'O'):
-                    f_station_norm = 0.4
                 elif f_char == 'I':
                     f_station_norm = 0.6
                 elif f_char == 'D':
                     f_station_norm = 0.8
                 elif f_char in ('P', 'T'):
                     f_station_norm = 1.0
+                elif f_char not in (' ', '|', '_'):
+                    f_station_norm = 0.4
                 else:
                     f_station_norm = 0.0
                 facing_state[0] = f_station_norm
@@ -276,7 +284,7 @@ class FeaturizedObservationBuilder:
                 f_item = item_instances.get(f_iid) if f_iid is not None else None
                 if f_item is not None:
                     facing_state[1] = 1.0
-                    is_f_dish = f_item.get("type") == ItemType.DISH or "plate" in f_item.get("name", "").lower()
+                    is_f_dish = is_plate(f_item)
                     facing_state[2] = 1.0 if is_f_dish else 0.0
                     if is_f_dish and rec_1:
                         f_plate_ings = [i.lower() for i in f_item.get("ingredients", [])]
@@ -286,8 +294,7 @@ class FeaturizedObservationBuilder:
                         facing_state[4] = 1.0 if is_ready(f_item) else 0.0
                         if rec_1 and f_item.get("name", "").lower() in rec1_req:
                             facing_state[5] = 1.0
-                    if "cuts_completed" in f_item and "cuts_needed" in f_item:
-                        facing_state[6] = float(f_item["cuts_completed"]) / max(1, float(f_item["cuts_needed"]))
+                    facing_state[6] = self._get_item_cuts_progress(f_item)
                     if is_f_dish:
                         facing_state[7] = 1.0 if f_item.get("ingredients") else 0.75
                     else:
@@ -320,7 +327,7 @@ class FeaturizedObservationBuilder:
                 o_holding_ready_dish = 0.0
                 o_holds_needed = 0.0
                 if o_item is not None:
-                    if (o_item.get("type") == ItemType.DISH or "plate" in o_item.get("name", "").lower()) and rec_1:
+                    if is_plate(o_item) and rec_1:
                         o_ings = [i.lower() for i in o_item.get("ingredients", [])]
                         if sorted(o_ings) == sorted(rec1_req):
                             o_holding_ready_dish = 1.0
@@ -333,8 +340,7 @@ class FeaturizedObservationBuilder:
                 if 0 <= o_ftile[0] < W and 0 <= o_ftile[1] < H:
                     other_state[offset + 11] = float(map_static[o_ftile[1], o_ftile[0]]) / 10.0
                 other_state[offset + 12] = 1.0  # partner is active
-                if o_item and "cuts_completed" in o_item and "cuts_needed" in o_item:
-                    other_state[offset + 13] = float(o_item["cuts_completed"]) / max(1, float(o_item["cuts_needed"]))
+                other_state[offset + 13] = self._get_item_cuts_progress(o_item)
                 other_state[offset + 14] = o_holds_needed
                 if transfer_counters:
                     tc_dist = min(abs(o_pos[0] - tc[0]) + abs(o_pos[1] - tc[1]) for tc in transfer_counters)
@@ -346,7 +352,7 @@ class FeaturizedObservationBuilder:
             needed_ings_rec1 = []
             if rec_1:
                 # If holding a dish, find what ingredients are still missing
-                held_ings = [i.lower() for i in holding_item.get("ingredients", [])] if (holding_item and (holding_item.get("type") == ItemType.DISH or "plate" in holding_item.get("name", "").lower())) else []
+                held_ings = [i.lower() for i in holding_item.get("ingredients", [])] if is_plate(holding_item) else []
                 missing = [ing for ing in rec1_req if ing not in held_ings]
                 needed_ings_rec1 = missing if missing else rec1_req
             for ing_idx, ing_name in enumerate(needed_ings_rec1[:4]):
@@ -386,8 +392,7 @@ class FeaturizedObservationBuilder:
                     if app_item is not None:
                         appliance_and_flow_state[base_a + 3] = 1.0  # is occupied
                         appliance_and_flow_state[base_a + 4] = 1.0 if is_ready(app_item) else 0.0
-                        if "cuts_completed" in app_item and "cuts_needed" in app_item:
-                            appliance_and_flow_state[base_a + 5] = float(app_item["cuts_completed"]) / max(1, float(app_item["cuts_needed"]))
+                        appliance_and_flow_state[base_a + 5] = self._get_item_cuts_progress(app_item)
 
             # Goal-Directed Appliance Beacon (2 dims: 22:24)
             beacon_target = None
@@ -396,7 +401,7 @@ class FeaturizedObservationBuilder:
             elif holding_item and not is_ready(holding_item) and processing_appliances:
                 # Holding raw ingredient: point to closest available processing appliance
                 beacon_target = min(processing_appliances, key=lambda a: abs(a[0] - pos[0]) + abs(a[1] - pos[1]))
-            elif holding_item and (holding_item.get("type") == ItemType.DISH or "plate" in holding_item.get("name", "").lower()):
+            elif is_plate(holding_item):
                 # Holding plate: point to closest appliance with ready food, or ready counter
                 ready_sources = []
                 for app in processing_appliances:

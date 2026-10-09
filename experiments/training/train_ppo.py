@@ -38,19 +38,28 @@ torch, nn = try_import_torch()
 # ======================================================================
 # Focused on top-performing hyperparameters discovered in logs (lr=1e-4..3e-4, gamma=0.98..0.99, 12 epochs)
 # Extended to 1000 episodes (~3M timesteps) to allow agents to master 2nd+ deliveries.
+# HYPERPARAMETER_GRID = {
+#     "lr": [1e-4, 2e-4, 3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
+#     "gamma": [0.98, 0.99],               # High-performing discount factors
+#     "entropy_coeff": [0.01, 0.03],       # High-performing entropy range for exploration
+#     "train_batch_size": [4000, 8000],    # Optimal batch sizes for trajectory collection
+#     "sgd_minibatch_size": [256],         # PPO minibatch size
+#     "update_epochs": [12],               # Top-performing update epochs (12 epochs)
+#     "num_episodes": [1000],              # Extended training duration (~3.0M timesteps for 2nd+ deliveries)
+#     "seed": [42]                         # Random seed
+# }
+
+
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 2e-4, 3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
-    "gamma": [0.98, 0.99],               # High-performing discount factors
-    "entropy_coeff": [0.01, 0.03],       # High-performing entropy range for exploration
-    "train_batch_size": [4000, 8000],    # Optimal batch sizes for trajectory collection
+    "lr": [3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
+    "gamma": [0.98],               # High-performing discount factors
+    "entropy_coeff": [0.02, 0.03, 0.04],       # High-performing entropy range for exploration
+    "train_batch_size": [4000],    # Optimal batch sizes for trajectory collection
     "sgd_minibatch_size": [256],         # PPO minibatch size
     "update_epochs": [12],               # Top-performing update epochs (12 epochs)
-    "num_episodes": [1000],              # Extended training duration (~3.0M timesteps for 2nd+ deliveries)
+    "num_episodes": [2000],              # Extended training duration (~3.0M timesteps for 2nd+ deliveries)
     "seed": [42]                         # Random seed
 }
-
-
-
 
 class ParallelEnvToMultiAgent(MultiAgentEnv):
     """Wrapper to convert PettingZoo ParallelEnv to RLlib MultiAgentEnv."""

@@ -1,7 +1,8 @@
 import math
 from typing import Dict, Tuple, Optional, List, Any
 from dataclasses import dataclass
-from ..core.items import ItemType, ItemState, is_ready
+from ..core.items import ItemType, ItemState, is_ready, is_plate
+from ..core.recipes import OrderQueue
 
 @dataclass
 class RewardValues:
@@ -31,7 +32,7 @@ class RewardValues:
     # Chopping / Processing
     chop_cut: float = 1.0
     chop_completed: float = 8.0
-    process: float = 1.0  # legacy alias for chop_cut
+    process: float = 1.0  # alias for chop_cut
 
     # Assembly / Combining
     combine: float = 0.0
@@ -60,7 +61,8 @@ class RewardValues:
     delivery_multiplier_3rd: float = 1.0    # Backwards compatibility alias
     delivery_multiplier_4th_plus: float = 1.0 # Backwards compatibility alias
 
-    # Proximity & Attempts (disabled)
+    # Proximity & Delivery Guidance (Potential-based shaping when holding deliverable dish)
+    delivery_guidance_weight: float = 1.0  # Reward per unit of distance closed towards delivery
     delivery_proximity_reward: float = 0.0
     delivery_attempt_reward: float = 0.0
     delivery_distance_max: int = 5
@@ -93,14 +95,10 @@ class RewardShaper:
 
     def _get_pending_recipes(self, game_state: Dict) -> List[str]:
         """Get list of remaining uncompleted recipe names in FIFO order."""
-        recipe_order = game_state.get("recipe_order", [])
-        if not recipe_order:
-            return []
-        pending = list(recipe_order)
-        for delivered in game_state.get("delivered_recipes", []):
-            if delivered in pending:
-                pending.remove(delivered)
-        return pending
+        return OrderQueue.get_pending(
+            game_state.get("recipe_order", []),
+            game_state.get("delivered_recipes", [])
+        )
 
     def _get_next_pending_recipe(self, game_state: Dict):
         """Get the next pending recipe and its required ingredients."""
@@ -115,24 +113,7 @@ class RewardShaper:
         
         return None, None, []
 
-    def _calculate_ready_to_combine_reward(
-        self,
-        agent_id: str,
-        carrying_item: Optional[Dict],
-        ground_item: Optional[Dict],
-        game_state: Dict
-    ) -> float:
-        """Deprecated proximity helper: returns 0.0 to prevent exploitation loops."""
-        return 0.0
 
-    def _calculate_delivery_proximity_reward(
-        self,
-        agent_id: str,
-        carrying_item: Optional[Dict],
-        game_state: Dict
-    ) -> float:
-        """Deprecated proximity helper: returns 0.0 to prevent exploitation loops."""
-        return 0.0
 
     def _calculate_distance_to_delivery(self, agent_pos: Tuple[int, int], game_state: Dict) -> float:
         """Calculate minimum distance from agent to any delivery station."""
@@ -146,6 +127,57 @@ class RewardShaper:
             distance = abs(ax - dx) + abs(ay - dy)
             min_distance = min(min_distance, distance)
         return min_distance
+
+    def calculate_step_shaping(
+        self,
+        agent_id: str,
+        game_state: Dict,
+        old_pos: Tuple[int, int],
+        new_pos: Tuple[int, int]
+    ) -> float:
+        """
+        Calculates exploit-free potential-based directional shaping for movements.
+        
+        If the agent is carrying a plate containing a valid, pending recipe:
+        Awards +weight * (dist_old - dist_new), guiding the agent directly to the
+        nearest delivery station. Net reward across round-trips is strictly zero,
+        preventing exploitation loops (Ng et al., 1999).
+        """
+        weight = getattr(self.rewards, "delivery_guidance_weight", 0.0)
+        if weight <= 0.0 or old_pos == new_pos:
+            return 0.0
+
+        # Check what agent is carrying
+        holding_instance = game_state.get("agent_holding_instance", {}).get(agent_id)
+        if holding_instance is None:
+            return 0.0
+
+        item = game_state.get("item_instances", {}).get(holding_instance)
+        if not item or not is_plate(item):
+            return 0.0
+
+        ingredients = item.get("ingredients", [])
+        if not ingredients:
+            return 0.0
+
+        # Check if plate matches any currently pending recipe in HUD queue
+        is_valid, recipe_name, _ = self.recipe_manager.validate_delivery(ingredients)
+        if not is_valid:
+            return 0.0
+
+        pending_recipes = self._get_pending_recipes(game_state)
+        if recipe_name not in pending_recipes:
+            return 0.0
+
+        # Calculate distance change to delivery station
+        dist_old = self._calculate_distance_to_delivery(old_pos, game_state)
+        dist_new = self._calculate_distance_to_delivery(new_pos, game_state)
+
+        if math.isinf(dist_old) or math.isinf(dist_new):
+            return 0.0
+
+        dist_diff = dist_old - dist_new
+        return weight * dist_diff
 
     def _get_delivery_stations(self, game_state: Dict) -> list:
         """Get all delivery station positions."""
@@ -195,7 +227,7 @@ class RewardShaper:
 
     def _calculate_partial_plate_reward(self, plate: Dict, game_state: Dict) -> float:
         """Calculate reward for partially complete plate."""
-        if not plate or plate.get("type") != ItemType.DISH:
+        if not plate or not is_plate(plate):
             return 0.0
         
         plate_ingredients = plate.get("ingredients", [])
@@ -264,8 +296,8 @@ class RewardShaper:
                 if ingredient_name not in all_pending_reqs:
                     progress_reward += self.rewards.unneeded_pickup_penalty
         
-        # Action: Place raw ingredient on chopping board
-        elif action_type in ('place_on_chop', 'place_raw_on_chop'):
+        # Action: Place raw ingredient on chopping board or custom station
+        elif action_type in ('place_on_chop', 'place_raw_on_chop', 'place_on_station'):
             item = carrying_item or ground_item
             if item:
                 ingredient_name = item.get("name", "").lower()
@@ -282,15 +314,15 @@ class RewardShaper:
         
         # Action: Combine ingredient with plate
         elif action_type == 'combine':
-            plate = carrying_item if carrying_item and carrying_item.get("type") == ItemType.DISH else ground_item
-            ing = ground_item if carrying_item and carrying_item.get("type") == ItemType.DISH else carrying_item
+            plate = carrying_item if is_plate(carrying_item) else ground_item
+            ing = ground_item if is_plate(carrying_item) else carrying_item
             
             if ing and is_ready(ing):
                 ing_name = ing.get("name", "").lower()
                 if ing_name in req_lower:
                     progress_reward += self.rewards.progress_combine_ready
                     
-            if plate and plate.get("type") == ItemType.DISH:
+            if plate and is_plate(plate):
                 plate_ingredients = plate.get("ingredients", [])
                 matching_count = sum(1 for i in plate_ingredients if i.lower() in req_lower)
                 progress_reward += (self.rewards.progress_ingredient_added_base +
@@ -301,7 +333,7 @@ class RewardShaper:
         
         # Action: Pickup complete plate
         elif action_type == 'pickup_plate_complete' and carrying_item:
-            if carrying_item.get("type") == ItemType.DISH:
+            if is_plate(carrying_item):
                 plate_ingredients = carrying_item.get("ingredients", [])
                 if sorted([i.lower() for i in plate_ingredients]) == sorted(req_lower):
                     progress_reward += self.rewards.progress_pickup_complete_plate

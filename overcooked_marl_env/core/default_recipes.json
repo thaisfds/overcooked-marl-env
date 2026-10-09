@@ -1,0 +1,19 @@
+{
+  "recipes": [
+    {
+      "name": "SIMPLE_SALAD",
+      "ingredients": ["lettuce"],
+      "reward": 20.0
+    },
+    {
+      "name": "GARDEN_SALAD",
+      "ingredients": ["lettuce", "tomato"],
+      "reward": 60.0
+    },
+    {
+      "name": "FRESH_SALAD",
+      "ingredients": ["lettuce", "tomato", "cucumber"],
+      "reward": 120.0
+    }
+  ]
+}

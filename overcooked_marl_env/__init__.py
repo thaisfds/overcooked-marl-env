@@ -41,12 +41,14 @@ except ImportError:
     env = None
     parallel_env = None
 
+from .core.constants import MAX_EPISODE_STEPS
+
 # Registration for Gymnasium compatibility
 # Note: For PettingZoo environments use direct instantiation or the env() factory
 register(
     id="OvercookedMARL-v0",
     entry_point="overcooked_marl_env.env:OvercookedMARL",
-    max_episode_steps=1200,  # Aumentado de 500 → 1200 (consistente com MAX_EPISODE_STEPS)
+    max_episode_steps=MAX_EPISODE_STEPS,
 )
 
 __version__ = "0.1.0"

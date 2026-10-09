@@ -1,6 +1,36 @@
-"""
-Recipe system using Python classes for flexible recipe management.
-"""
+from typing import List, Optional, Tuple, Dict, Any
+
+class OrderQueue:
+    """
+    Centralized manager for recipe order queues.
+    Eliminates duplicated pending recipes calculation across the codebase.
+    """
+    @staticmethod
+    def get_pending(recipe_order: Optional[List[str]], delivered_recipes: Optional[List[str]]) -> List[str]:
+        """
+        Returns list of remaining uncompleted recipes in FIFO order.
+        
+        Args:
+            recipe_order: Full sequence of requested recipe names
+            delivered_recipes: Sequence of already delivered recipe names
+            
+        Returns:
+            List of pending recipes awaiting delivery
+        """
+        if not recipe_order:
+            return []
+        pending = list(recipe_order)
+        for delivered in (delivered_recipes or []):
+            if delivered in pending:
+                pending.remove(delivered)
+        return pending
+
+    @staticmethod
+    def get_next_pending(recipe_order: Optional[List[str]], delivered_recipes: Optional[List[str]]) -> Optional[str]:
+        """Returns the next pending recipe at the head of the queue, or None if all delivered."""
+        pending = OrderQueue.get_pending(recipe_order, delivered_recipes)
+        return pending[0] if pending else None
+
 
 class Recipe:
     """Base class for all recipes."""
@@ -15,7 +45,7 @@ class Recipe:
             reward: Points awarded for delivering this recipe
         """
         self.name = name
-        self.ingredients = sorted(ingredients)  # Sort for consistent matching
+        self.ingredients = sorted([i.lower() for i in ingredients])  # Sort for consistent matching
         self.reward = reward
     
     def matches(self, ingredient_list):
@@ -28,44 +58,10 @@ class Recipe:
         Returns:
             True if ingredients match exactly, False otherwise
         """
-        return sorted(ingredient_list) == self.ingredients
+        return sorted([i.lower() for i in ingredient_list]) == self.ingredients
     
     def __repr__(self):
         return f"Recipe({self.name}, {self.ingredients}, reward={self.reward})"
-
-
-class SimpleSaladRecipe(Recipe):
-    """Simple salad with just lettuce."""
-    
-    def __init__(self):
-        super().__init__(
-            name="SIMPLE_SALAD",
-            ingredients=["lettuce"],
-            reward=20.0
-        )
-
-
-class GardenSaladRecipe(Recipe):
-    """Garden salad with lettuce and tomato."""
-    
-    def __init__(self):
-        super().__init__(
-            name="GARDEN_SALAD",
-            ingredients=["lettuce", "tomato"],
-            reward=25.0
-        )
-
-
-class FreshSaladRecipe(Recipe):
-    """Fresh salad with lettuce, tomato and cucumber."""
-    
-    def __init__(self):
-        super().__init__(
-            name="FRESH_SALAD",
-            ingredients=["lettuce", "tomato", "cucumber"],
-            reward=30.0
-        )
-
 
 
 class RecipeManager:
@@ -83,12 +79,18 @@ class RecipeManager:
             self.register_recipe(recipe)
     
     def _register_default_recipes(self):
-        """Register all default recipes."""
-        self.recipes = [
-            SimpleSaladRecipe(),
-            GardenSaladRecipe(),
-            FreshSaladRecipe(),
-        ]
+        """Register all default recipes, strictly loaded from default_recipes.json."""
+        import os
+        import json
+        json_path = os.path.join(os.path.dirname(__file__), "default_recipes.json")
+        if not os.path.exists(json_path):
+            raise FileNotFoundError(f"Configuration file not found: {json_path}")
+
+        with open(json_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        recipes = data.get("recipes", data) if isinstance(data, dict) else data
+        if isinstance(recipes, list):
+            self.load_recipes_from_dict(recipes)
     
     @classmethod
     def register_custom_recipe_globally(cls, recipe):
@@ -148,13 +150,14 @@ class RecipeManager:
                 # 1. Parse and register custom ingredients first
                 if "ingredients" in data and isinstance(data["ingredients"], list):
                     for ing in data["ingredients"]:
-                        if isinstance(ing, dict) and "name" in ing and "color" in ing:
+                        if isinstance(ing, dict) and "name" in ing:
                             register_custom_ingredient(
                                 name=ing["name"],
-                                color=ing["color"],
+                                color=ing.get("color"),
                                 cuts_needed=ing.get("cuts_needed", 3),
                                 char=ing.get("char", None),
-                                state_chars=ing.get("state_chars", None)
+                                state_chars=ing.get("state_chars", None),
+                                stages=ing.get("stages", None)
                             )
                 
                 # 2. Parse and register recipes
@@ -267,21 +270,22 @@ class RecipeManager:
         return (False, None, 0.0)
 
 
-# Legacy support for backwards compatibility
-def get_available_recipes():
-    """Get list of all available recipe names."""
-    manager = RecipeManager()
-    return manager.get_all_recipe_names()
+# Utility and backwards compatibility functions
+def get_available_recipes() -> List[str]:
+    """Get list of all available recipe names from central configuration."""
+    return RecipeManager().get_all_recipe_names()
 
 
-def get_default_recipe():
-    """Get the default recipe name."""
-    return "SIMPLE_SALAD"
+def get_default_recipe() -> str:
+    """Get the default recipe name from central configuration."""
+    names = get_available_recipes()
+    return names[0] if names else "SIMPLE_SALAD"
 
 
-# Recipe definitions for backwards compatibility
-RECIPE_DEFINITIONS = {
-    "SIMPLE_SALAD": SimpleSaladRecipe(),
-    "GARDEN_SALAD": GardenSaladRecipe(),
-    "FRESH_SALAD": FreshSaladRecipe(),
-}
+def get_recipe_definitions() -> Dict[str, Recipe]:
+    """Get dictionary of recipes loaded strictly from central configuration."""
+    return {r.name: r for r in RecipeManager().recipes}
+
+
+# Backwards compatibility dictionary populated strictly from default_recipes.json
+RECIPE_DEFINITIONS = get_recipe_definitions()

@@ -53,7 +53,10 @@ class OvercookedMARL(ParallelEnv):
             self.recipe_manager.load_recipes_from_json(custom_recipes_path)
             self.item_manager.rebuild_ingredient_creators()
             
-        self.map_loader = MapLoader()
+        self.map_loader = MapLoader(
+            recipe_manager=self.recipe_manager,
+            item_manager=self.item_manager
+        )
         
         # Determine number of agents from map if not specified
         if num_fixed_agents is None:
@@ -121,8 +124,6 @@ class OvercookedMARL(ParallelEnv):
         }
 
         self.render_mode = render_mode
-        self.window = None  # Deprecated - kept for backwards compatibility
-        self.clock = None   # Deprecated - kept for backwards compatibility
 
     def reset(self, seed=None, options=None):
         """
@@ -208,9 +209,14 @@ class OvercookedMARL(ParallelEnv):
         #     if penalty > 0:
         #         rewards[agent_id] -= penalty
         
-        # Step 4: Update agent positions in state
+        # Step 4: Update agent positions in state and apply movement shaping
         for agent_id, pos in final_positions.items():
+            old_pos = current_positions.get(agent_id, pos)
             self.state["agent_pos"][agent_id] = pos
+            movement_shaping = self.interaction_handler.calculate_step_shaping(
+                agent_id, self.state, old_pos, pos
+            )
+            rewards[agent_id] += movement_shaping
         
         # Movement debugging (when verbose=True and actions taken)
         if self.verbose and actions:
@@ -345,9 +351,6 @@ class OvercookedMARL(ParallelEnv):
         Closes the environment and cleans up resources.
         """
         self.renderer.close()
-        # Keep for backwards compatibility
-        if self.window is not None:
-            self.window = None
 
     # =================================================================
     # PRIVATE HELPER METHODS
@@ -491,7 +494,6 @@ class OvercookedMARL(ParallelEnv):
         
         agent_start_pos = {k: v for k, v in agent_start_pos.items() if k in self.possible_agents}
         
-        carrying = {}
         for agent in self.possible_agents:
             if agent not in agent_start_pos:
                 if self.verbose:
@@ -506,15 +508,12 @@ class OvercookedMARL(ParallelEnv):
                         break
                 if agent not in agent_start_pos:
                     agent_start_pos[agent] = (0, 0)
-            
-            carrying[agent] = 0  # 0 = not carrying anything (for backwards compatibility)
         
         total_recipes_count = len(self.recipe_order) if hasattr(self, 'recipe_order') and len(self.recipe_order) > 0 else 3
         
         state = {
             "map_static": map_static_np,
             "agent_pos": agent_start_pos,
-            "carrying": carrying,
             "items_on_ground": items_on_ground,
             "dishes_pending": total_recipes_count,
             "time_steps": 0,

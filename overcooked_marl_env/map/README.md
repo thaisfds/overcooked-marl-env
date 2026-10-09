@@ -29,12 +29,14 @@ Parses `.txt` files containing `# Grid Map`, `# Dispensers`, and `# Recipes` sec
 Validates structural integrity and constraints:
 * `validate_map(map_data: dict) -> bool`
   Returns `True` if map is valid, or prints validation errors.
-* **Rules checked:** Perimeter surrounded by walls, exactly 2 agents, agents spawn on empty walkable tiles, existence of cutting boards (`C`), plate dispensers (`P`), delivery stations (`D`), and valid recipe names.
+* **Rules checked:** Required dictionary keys, 2D `uint8` numpy grid, dimensions within limits (3×3 to 50×50), at least 1 agent defined, in-bounds positions with no overlaps (warns if starting on non-empty tile), valid in-bounds dispenser coordinates and ingredient names, and recipe validation against standard or injected [`RecipeManager`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/core/recipes.py) (case-insensitive).
 
 ### 3. Facade Loader (`map_loader.py`)
 Coordinates parsing and validation:
 * `load_map(map_path: Optional[str] = None) -> MapData`
   Loads map, resolving default fallback maps if the file fails or doesn't exist.
+* Supports dependency injection of `RecipeManager` and `ItemManager`.
+* Automatically discovers and loads adjacent `recipes.json` configuration files if present in the same directory as the map.
 
 ---
 
@@ -52,9 +54,8 @@ python -m overcooked_marl_env.map.map_loader example/custom_map_template.txt
 ---
 
 ## Included Maps
-* **`default_map.txt` (7×7):** Small kitchen, ideal for debugging and quick RL training.
-* **`tutorial.txt` (15×11):** Large kitchen with multiple cutting boards and open walkways for complex coordination.
-* **`simple_map.txt` (7×7):** Simple layout containing essential preparation counters.
+* **`default_map.txt` (7×7):** Standard kitchen layout with 2 agents, cutting board, plate dispenser, delivery station, and 3 ingredient dispensers (tomato, lettuce, cucumber).
+* **`tutorial.txt` (15×11):** Physically divided multi-agent kitchen (up to 4 agents) with transfer counters, multiple cutting boards, and shared delivery stations.
 
 ---
 

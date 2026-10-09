@@ -26,6 +26,7 @@ from .items import (
     create_plate,
     advance_processing,
     is_ready,
+    is_plate,
     can_combine,
     can_process,
     add_ingredient_to_plate,
@@ -33,12 +34,18 @@ from .items import (
     get_item_char,
     get_item_color,
     TILES,
+    IngredientRegistry,
+    ingredient_registry,
+    register_custom_ingredient,
+    register_tile,
+    INGREDIENTS,
 )
 
 # Recipes module exports
 from .recipes import (
     Recipe,
     RecipeManager,
+    OrderQueue,
     RECIPE_DEFINITIONS,
     get_available_recipes,
     get_default_recipe,
@@ -81,6 +88,7 @@ __all__ = [
     'create_plate',
     'advance_processing',
     'is_ready',
+    'is_plate',
     'can_combine',
     'can_process',
     'add_ingredient_to_plate',
@@ -92,6 +100,7 @@ __all__ = [
     # Recipes
     'Recipe',
     'RecipeManager',
+    'OrderQueue',
     'RECIPE_DEFINITIONS',
     'get_available_recipes',
     'get_default_recipe',

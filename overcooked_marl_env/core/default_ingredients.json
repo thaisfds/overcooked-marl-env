@@ -1,0 +1,28 @@
+{
+  "ingredients": [
+    {
+      "name": "tomato",
+      "color": [255, 0, 0],
+      "cuts_needed": 3,
+      "char": "t"
+    },
+    {
+      "name": "lettuce",
+      "color": [107, 142, 35],
+      "cuts_needed": 3,
+      "char": "l"
+    },
+    {
+      "name": "cucumber",
+      "color": [0, 100, 0],
+      "cuts_needed": 3,
+      "char": "c"
+    },
+    {
+      "name": "onion",
+      "color": [238, 130, 238],
+      "cuts_needed": 3,
+      "char": "o"
+    }
+  ]
+}

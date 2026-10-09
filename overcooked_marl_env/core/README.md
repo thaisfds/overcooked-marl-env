@@ -1,16 +1,17 @@
 # Core System - Items, Recipes, and Constants
 
-The `core` module forms the domain model of the Overcooked MARL environment, defining item states, item types, recipe matches, game constants, and the lifecycle of cooking assets.
+The `core` module forms the domain model of the Overcooked MARL environment, defining item states, multi-stage processing pipelines, item types, recipe matches, order queue management, and game constants.
 
 ## Sub-package Contents
 
 ```
 core/
 ├── __init__.py                 # Module exports
-├── constants.py                # Action, observation, and reward constants
-├── items.py                    # Item creation, registration, and properties
-├── recipes.py                  # Recipes verification and config loaders
-└── item_instance_manager.py    # Item unique ID tracking and instance operations
+├── constants.py                # Action, observation, physical and reward constants
+├── items.py                    # IngredientRegistry, item creation, multi-stage processing, tiles
+├── recipes.py                  # Recipe definitions, OrderQueue (FIFO), RecipeManager
+├── default_ingredients.json    # Declarative configuration for base ingredients
+└── default_recipes.json        # Declarative configuration for default recipes
 ```
 
 ---
@@ -18,73 +19,85 @@ core/
 ## Detailed Components
 
 ### 1. Constants (`constants.py`)
-Centralizes key environment parameters:
-* **Observation Channels:** Defines `TOTAL_CHANNELS = 9` (6 base channels + 3 processing state channels).
+Centralizes key environment parameters following the Single Responsibility Principle:
+* **Observation Channels (Spatial Tensor):** Defines `TOTAL_CHANNELS = 9` (6 base channels + 3 processing state channels).
 * **Actions Mapping:** Defines action directions (`0: Up`, `1: Down`, `2: Left`, `3: Right`, `4: Interact`).
-* **Game Parameters:** Defines episode limits (`MAX_EPISODE_STEPS = 800`) and cuts required (`DEFAULT_CUTS_NEEDED = 3`).
-* **Rewards:** Delivery rewards (`+20.0`), sequential delivery multiplier (`1.5x`), and invalid interaction penalty (`-2.0`).
+* **Game Parameters:** Defines episode limits (`MAX_EPISODE_STEPS = 3000`), real-time execution (`STEPS_PER_SECOND = 8`), and default cuts required (`DEFAULT_CUTS_NEEDED = 3`).
+* **Milestone Rewards:** Managed dynamically in `RewardValues` ([`reward_shaper.py`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/mechanics/reward_shaper.py)) and recipe-specific values in [`default_recipes.json`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/core/default_recipes.json).
+
+---
 
 ### 2. Items & Ingredients (`items.py`)
-Rather than rigid subclassing, items are represented by dynamic metadata dictionaries containing properties like type, state, and list of contents.
+Items are represented as dynamic metadata dictionaries containing type, processing state, stage progression, and contents.
 
 #### Item Types and States
-* **ItemType:** `ItemType.INGREDIENT` ("ingredient"), `ItemType.DISH` ("dish"), and `ItemType.RECIPE` ("recipe").
-* **ItemState:** `RAW`, `CHOPPING_1`, `CHOPPING_2`, `CHOPPING_3`, `READY`, `EMPTY`, `BUILDING`, `COMPLETE`.
+* **`ItemType`:** `ItemType.INGREDIENT` ("ingredient"), `ItemType.DISH` ("dish"), and `ItemType.RECIPE` ("recipe").
+* **`ItemState`:** `RAW`, `CHOPPING_1`, `CHOPPING_2`, `CHOPPING_3`, `READY`, `EMPTY`, `BUILDING`, `COMPLETE`.
 
-#### Centralized Ingredient Registry (`INGREDIENTS`)
-The global registry tracks ingredient visualization (colors, characters) and processing:
+#### Centralized Declarative Ingredient Registry (`IngredientRegistry`)
+Base ingredients (`tomato`, `lettuce`, `cucumber`, `onion`) are loaded automatically from [`default_ingredients.json`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/core/default_ingredients.json):
 ```python
-INGREDIENTS = {
-    'tomato': {'color': (255, 0, 0), 'cuts_needed': 3, 'char': 't', 'state_chars': {...}},
-    'lettuce': {'color': (107, 142, 35), 'cuts_needed': 3, 'char': 'l', 'state_chars': {...}},
-    'cucumber': {'color': (0, 100, 0), 'cuts_needed': 3, 'char': 'c', 'state_chars': {...}}
-}
+from overcooked_marl_env.core import ingredient_registry, INGREDIENTS
+
+# Query ingredient
+tomato_data = ingredient_registry.get("tomato")
 ```
 
-#### Dynamic Extensions
-Register new ingredients programmatically:
-```python
-from overcooked_marl_env.core.items import register_custom_ingredient
+#### Multi-Stage Pipelines & Instant Ingredients
+* **Multi-Stage Processing (`stages`):**
+  Ingredients can define a pipeline of transformation stages across different stations:
+  ```python
+  from overcooked_marl_env.core import register_custom_ingredient
 
-register_custom_ingredient(
-    name="onion",
-    color=(235, 150, 235),
-    cuts_needed=3,
-    char="o"
-)
+  register_custom_ingredient(
+      name="patty_meat",
+      color=(139, 69, 19),
+      stages=[
+          {"station": "C", "action": "chop", "steps": 3},
+          {"station": "S", "action": "cook", "steps": 20}
+      ]
+  )
+  ```
+* **Instant Ingredients (`cuts_needed=0`):**
+  Ingredients that need no processing (e.g. bread bun, cheese) start immediately in `ItemState.READY`.
+* **Character-less Ingredients:**
+  Ingredients identify by `name`, eliminating ASCII letter collision bottlenecks.
+
+#### Dynamic Tile Registration
+New interactive stations or tiles can be registered dynamically in one line:
+```python
+from overcooked_marl_env.core import register_tile
+
+register_tile(char='S', code=10, name="Stove", color=(255, 100, 50))
 ```
 
-#### ItemManager
-Mapeia caracteres do grid do mapa para códigos numéricos:
-* ` ` (Empty Floor) → Code `0`
-* `#` (Counter) → Code `1`
-* `I` (Ingredient Dispenser) → Code `2`
-* `C` (Chopping Board) → Code `3`
-* `P` (Plate Dispenser) → Code `5`
-* `D` (Delivery Station) → Code `6`
-* `T` (Trash) → Code `7`
-* `|` / `_` (Walls) → Codes `8` / `9`
+---
 
-### 3. Recipes & Dynamic Loading (`recipes.py`)
-Determines if combinations of processed ingredients on a plate form a valid dish order.
+### 3. Recipes & Order Queue (`recipes.py`)
 
-#### Recipe Dataclass
-* `name`: Recipe name (e.g. `"GARDEN_SALAD"`).
-* `ingredients`: List of required items (e.g. `["lettuce", "tomato"]`).
-* `reward`: Delivery reward score.
-
-#### Loading Custom Recipes & Ingredients from JSON
-Load a complete JSON configuration of recipes and ingredients dynamically:
+#### Centralized Order Queue (`OrderQueue`)
+Eliminates duplicated queue calculation across observation builders, HUD renderers, and reward shapers:
 ```python
+from overcooked_marl_env.core import OrderQueue
+
+pending = OrderQueue.get_pending(recipe_order, delivered_recipes)
+next_order = OrderQueue.get_next_pending(recipe_order, delivered_recipes)
+```
+
+#### RecipeManager & Declarative Loading
+Default recipes (`SIMPLE_SALAD`, `GARDEN_SALAD`, `FRESH_SALAD`) are loaded from [`default_recipes.json`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/core/default_recipes.json):
+```python
+from overcooked_marl_env.core import RecipeManager
+
 recipe_manager = RecipeManager()
-recipe_manager.load_recipes_from_json("example/recipes.json")
+recipe_manager.load_recipes_from_json("custom_map_recipes.json")
 ```
 
 ---
 
 ## Verification & Testing
 
-Verify items and recipes logic:
+Verify items, recipes, order queue, and registry logic:
 ```bash
-python -m unittest overcooked_marl_env/tests/unit/test_item_instance_manager.py
+./venv/bin/python -m unittest discover -s overcooked_marl_env/tests
 ```

@@ -85,21 +85,7 @@ DEFAULT_CUTS_NEEDED = 3
 # Initial orientation for all agents (facing North)
 INITIAL_ORIENTATION = (0, -1)
 
-# =================================================================
-# REWARD CONSTANTS
-# =================================================================
 
-# Reward for delivering a recipe
-REWARD_RECIPE_DELIVERED = 20.0
-
-# Bonus multipliers for sequential delivery
-REWARD_SEQUENTIAL_BONUS_MULTIPLIER = 1.5
-
-# Penalty for invalid interaction
-PENALTY_INVALID_INTERACTION = -2.0
-
-# Small penalty for time step (optional, currently 0)
-PENALTY_TIME_STEP = 0.0
 
 # =================================================================
 # METADATA

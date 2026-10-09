@@ -53,8 +53,8 @@ class TestInteractionHandler(OvercookedTestCase):
         
         self.item_manager.create_ingredient_by_name.side_effect = create_ingredient_by_name
         
-        # Create legacy rewards config to match unit tests assertions
-        legacy_rewards = RewardValues(
+        # Create test rewards config to match unit tests assertions
+        test_rewards = RewardValues(
             pickup=2.0,
             place=2.0,
             place_on_chop=2.0,
@@ -83,7 +83,7 @@ class TestInteractionHandler(OvercookedTestCase):
             delivery_multiplier_4th_plus=1.0
         )
         # Create handler
-        self.handler = InteractionHandler(self.item_manager, self.recipe_manager, rewards=legacy_rewards)
+        self.handler = InteractionHandler(self.item_manager, self.recipe_manager, rewards=test_rewards)
         
         # Create basic game state
         self.game_state = self._create_game_state()
@@ -420,7 +420,7 @@ class TestInteractionHandler(OvercookedTestCase):
         )
         
         # Assert
-        self.assertEqual(local_reward, 2.0)  # legacy trash_penalty is 2.0
+        self.assertEqual(local_reward, 2.0)  # configured test trash_penalty is 2.0
         self.assertEqual(global_reward, 0.0)
         
         # Item should be completely deleted
@@ -460,7 +460,7 @@ class TestInteractionHandler(OvercookedTestCase):
             "agent_0", self.game_state, verbose=False
         )
         
-        # Assert - Reward clawback (-35.0) + trash_penalty (2.0 in legacy rewards config)
+        # Assert - Reward clawback (-35.0) + trash_penalty (2.0 in configured test rewards)
         self.assertEqual(local_reward, -35.0 + self.handler.rewards.trash_penalty)
         
         # Plate should be completely deleted

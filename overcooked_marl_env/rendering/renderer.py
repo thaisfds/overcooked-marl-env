@@ -22,6 +22,7 @@ from ..core.items import (
     INGREDIENTS
 )
 from ..core.constants import DIRECTION_NAMES, MAX_EPISODE_STEPS, STEPS_PER_SECOND
+from ..core.recipes import OrderQueue
 from .render_config import RENDER_CONFIG
 
 
@@ -253,22 +254,12 @@ class Renderer:
             self.font_large = pygame.font.Font(None, 36)
             self.font_small_bold = pygame.font.Font(None, 18)
         
-        # Fallback recipe ingredients mapping if recipe_manager is not present
-        FALLBACK_RECIPE_INGREDIENTS = {
-            "SIMPLE_SALAD": ["lettuce"],
-            "GARDEN_SALAD": ["lettuce", "tomato"],
-            "FRESH_SALAD": ["lettuce", "tomato", "cucumber"],
-            "ONION_SOUP": ["onion", "onion", "onion"],
-            "ONION_SALAD": ["lettuce", "onion"]
-        }
+        # Ensure recipe manager is available for dynamic recipe lookups
+        if not self.recipe_manager:
+            from ..core.recipes import RecipeManager
+            self.recipe_manager = RecipeManager()
         
-        # Colors for the ingredient visual badges
-        ING_COLORS = {
-            "tomato": ((220, 70, 60), "T"),
-            "lettuce": ((90, 180, 90), "L"),
-            "cucumber": ((40, 120, 80), "C"),
-            "onion": ((190, 150, 100), "O")
-        }
+        from ..core.items import ingredient_registry
         
         # Get pending orders from game state
         delivered = game_state.get("delivered_recipes", [])
@@ -301,15 +292,18 @@ class Renderer:
             
             # Recipe Ingredients (small circular badges) - fetch dynamically from recipe_manager
             ingredients = []
-            if self.recipe_manager:
-                recipe_obj = self.recipe_manager.get_recipe_by_name(recipe)
-                if recipe_obj:
-                    ingredients = recipe_obj.ingredients
-            if not ingredients:
-                ingredients = FALLBACK_RECIPE_INGREDIENTS.get(recipe, [])
+            recipe_obj = self.recipe_manager.get_recipe_by_name(recipe)
+            if recipe_obj:
+                ingredients = recipe_obj.ingredients
                 
             for ing_idx, ing in enumerate(ingredients):
-                color, char = ING_COLORS.get(ing, ((150, 150, 150), "?"))
+                ing_data = ingredient_registry.get(ing)
+                if ing_data:
+                    color = ing_data.get("color", (150, 150, 150))
+                    char = ing_data.get("char", ing[0].upper()).upper()
+                else:
+                    color = (150, 150, 150)
+                    char = ing[0].upper() if ing else "?"
                 badge_x = card_x + 8 + ing_idx * 22
                 badge_y = card_y + 24
                 pygame.draw.circle(self.window, color, (badge_x + 7, badge_y + 8), 8)
@@ -465,10 +459,7 @@ class Renderer:
                         time_step = game_state.get("time_steps", 0)
                         delivered = game_state.get("delivered_recipes", [])
                         recipe_order = game_state.get("recipe_order", [])
-                        pending = list(recipe_order)
-                        for d in delivered:
-                            if d in pending:
-                                pending.remove(d)
+                        pending = OrderQueue.get_pending(recipe_order, delivered)
                         del_str = ", ".join(delivered) if delivered else "None"
                         pend_str = ", ".join(pending) if pending else "None"
                         f.write(f"[Step {time_step:04d}] {agent_id} | Pos: {ax:02d},{ay:02d} | Hold: {inventory:10} | Focus: {closest_obj:20} | Score: {total_reward:+.1f} | Step Rwd: {step_reward:+.1f} | Delivered: [{del_str}] | Pending: [{pend_str}]\n")
@@ -508,23 +499,21 @@ class Renderer:
                     min_dist_d = dist
                     closest_d = (x, y)
                     
-        recipe_queue = list(game_state.get("recipe_order", []))
-        for delivered in game_state.get("delivered_recipes", []):
-            if delivered in recipe_queue:
-                recipe_queue.remove(delivered)
+        recipe_queue = OrderQueue.get_pending(
+            game_state.get("recipe_order", []),
+            game_state.get("delivered_recipes", [])
+        )
         
         needed_ingredients = []
         if len(recipe_queue) > 0:
             rec = recipe_queue[0]
+            recipe = None
             if self.recipe_manager:
                 recipe = self.recipe_manager.get_recipe_by_name(rec)
-                if recipe and hasattr(recipe, "ingredients") and recipe.ingredients:
-                    needed_ingredients = [ing.lower() for ing in recipe.ingredients]
-            if not needed_ingredients:
-                if "SALAD" in rec:
-                    needed_ingredients = ["tomato", "lettuce", "cucumber"]
-                elif "SOUP" in rec:
-                    needed_ingredients = ["onion"]
+            if not recipe:
+                recipe = RecipeManager().get_recipe_by_name(rec)
+            if recipe and hasattr(recipe, "ingredients") and recipe.ingredients:
+                needed_ingredients = [ing.lower() for ing in recipe.ingredients]
 
                 
         closest_ing = None
@@ -609,20 +598,7 @@ class Renderer:
         Returns:
             List of recipes still pending
         """
-        pending_orders = list(recipe_order)  # Make a copy
-        
-        # Count how many of each recipe was delivered
-        delivered_count = {}
-        for delivered_recipe in delivered_recipes:
-            delivered_count[delivered_recipe] = delivered_count.get(delivered_recipe, 0) + 1
-        
-        # Remove delivered recipes from pending (respecting count)
-        for recipe_name, count in delivered_count.items():
-            for _ in range(count):
-                if recipe_name in pending_orders:
-                    pending_orders.remove(recipe_name)  # Remove first occurrence
-        
-        return pending_orders
+        return OrderQueue.get_pending(recipe_order, delivered_recipes)
     
     def _print_game_info(self, game_state: Dict, recipe_order: list):
         """Print game state information."""
@@ -877,18 +853,27 @@ class Renderer:
             # Check if there's dispenser data for this position
             if (x, y) in game_state.get("dispensers", {}):
                 dispenser_data = game_state["dispensers"][(x, y)]
+                ingredient_name = str(dispenser_data).lower() if dispenser_data else ""
                 
-                # Get ingredient name (should be a string)
-                ingredient_name = dispenser_data if isinstance(dispenser_data, str) else "tomato"
-                
-                # Use centralized color - RAW ingredient color (60% brightness)
-                base_color = INGREDIENTS[ingredient_name]['color']
+                # Use centralized color from registry with safe fallback
+                ing_entry = self.item_manager.INGREDIENTS.get(ingredient_name)
+                base_color = ing_entry['color'] if ing_entry and 'color' in ing_entry else DEFAULT_COLOR_UNKNOWN
                 ingredient_color = tuple(int(c * 0.6) for c in base_color)  # Same as RAW
                 
                 indicator_radius = self.cell_size // RENDER_CONFIG['station_indicator_ratio']
                 
                 # Draw colored circle indicating ingredient type
                 self._draw_circle(center_x, center_y, indicator_radius, ingredient_color)
+        
+        else:
+            # Custom processing station / appliance (e.g. 'F' fryer, 'S' stove)
+            cell_char = self.item_manager.get_cell_char(cell_code)
+            if cell_char not in (' ', '#', '|', '_'):
+                station_font = getattr(self, 'font_small', None)
+                if station_font:
+                    char_surf = station_font.render(cell_char, True, RENDER_CONFIG['text_white'])
+                    char_rect = char_surf.get_rect(center=(center_x, center_y))
+                    self.window.blit(char_surf, char_rect)
         
         # Draw items on ground
         ground_instance_id = game_state["ground_instances"].get((x, y), None)

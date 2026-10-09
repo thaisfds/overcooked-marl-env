@@ -18,6 +18,7 @@ from .env_config import (
 )
 from ..core.constants import MAX_EPISODE_STEPS
 from ..core.items import TILES
+from ..core.recipes import OrderQueue
 
 
 @dataclass
@@ -93,7 +94,7 @@ class GameState:
         self.recipe_order = map_data.recipes.copy()
         self.expected_recipe_index = 0
         self.delivered_recipes: List[str] = []
-        self.dishes_pending = DEFAULT_DISHES_PENDING
+        self.dishes_pending = len(self.recipe_order) if self.recipe_order else DEFAULT_DISHES_PENDING
         
         # Episode tracking
         self.time_steps = 0
@@ -118,7 +119,7 @@ class GameState:
         self.recipe_order = map_data.recipes.copy()
         self.expected_recipe_index = 0
         self.delivered_recipes.clear()
-        self.dishes_pending = DEFAULT_DISHES_PENDING
+        self.dishes_pending = len(self.recipe_order) if self.recipe_order else DEFAULT_DISHES_PENDING
         
         self.time_steps = 0
         self.accumulated_rewards = {agent_id: 0.0 for agent_id in self.agents}
@@ -252,17 +253,17 @@ class GameState:
         Returns:
             str: Recipe name, or None if all recipes delivered
         """
-        if self.expected_recipe_index < len(self.recipe_order):
-            return self.recipe_order[self.expected_recipe_index]
-        return None
+        return OrderQueue.get_next_pending(self.recipe_order, self.delivered_recipes)
     
     def mark_recipe_delivered(self) -> None:
         """Mark the current recipe as delivered and advance to next."""
-        if self.expected_recipe_index < len(self.recipe_order):
-            recipe_name = self.recipe_order[self.expected_recipe_index]
-            self.delivered_recipes.append(recipe_name)
+        next_recipe = self.get_current_expected_recipe()
+        if next_recipe is not None:
+            self.delivered_recipes.append(next_recipe)
             self.expected_recipe_index += 1
             self.dishes_pending = max(0, self.dishes_pending - 1)
+        elif self.expected_recipe_index < len(self.recipe_order):
+            self.expected_recipe_index += 1
     
     def get_delivered_count(self) -> int:
         """Get the number of recipes delivered."""
@@ -270,11 +271,11 @@ class GameState:
     
     def get_pending_recipes(self) -> List[str]:
         """Get the list of pending recipes."""
-        return self.recipe_order[self.expected_recipe_index:]
+        return OrderQueue.get_pending(self.recipe_order, self.delivered_recipes)
     
     def are_all_recipes_delivered(self) -> bool:
         """Check if all recipes have been delivered."""
-        return self.expected_recipe_index >= len(self.recipe_order)
+        return len(self.get_pending_recipes()) == 0
     
     # =================================================================
     # EPISODE MANAGEMENT

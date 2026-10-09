@@ -22,9 +22,16 @@ Advanced Usage (direct imports):
 from .movement_system import MovementSystem
 from .collision_resolver import CollisionResolver
 from .interaction_handler import InteractionHandler
+from .reward_shaper import RewardShaper, RewardValues
+from .interactions.station_registry import StationRegistry
+from .interactions.base_station import StationHandler
 
 __all__ = [
     'MovementSystem',
     'CollisionResolver',
     'InteractionHandler',
+    'RewardShaper',
+    'RewardValues',
+    'StationRegistry',
+    'StationHandler',
 ]

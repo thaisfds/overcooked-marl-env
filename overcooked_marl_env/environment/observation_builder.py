@@ -11,8 +11,8 @@ Responsibilities:
 """
 
 import numpy as np
-from typing import Dict, Tuple, Any
-from ..core.items import ItemType, ItemState, INGREDIENTS
+from typing import Dict, Tuple, Any, List, Optional
+from ..core.items import ItemType, ItemState, INGREDIENTS, is_plate, is_ready
 from .env_config import (
     EMPTY_PROCESSING_VECTOR,
     DEFAULT_CUTS_NEEDED,
@@ -224,10 +224,10 @@ class ObservationBuilder:
         
         item_type = carrying_item.get("type")
         
-        if item_type == ItemType.INGREDIENT:
-            return self._ingredient_to_vector(carrying_item)
-        elif item_type == ItemType.DISH:
+        if is_plate(carrying_item):
             return self._dish_to_vector(carrying_item)
+        elif item_type == ItemType.INGREDIENT:
+            return self._ingredient_to_vector(carrying_item)
         
         return EMPTY_PROCESSING_VECTOR.copy()
     
@@ -242,13 +242,13 @@ class ObservationBuilder:
             [cuts_done, cuts_needed, is_ready]
         """
         state = item.get("state", ItemState.RAW)
-        cuts_done = item.get("cuts_done", 0)
+        cuts_done = item.get("cuts_completed", item.get("cuts_done", 0))
         cuts_needed = item.get("cuts_needed", DEFAULT_CUTS_NEEDED)
         
         # Check if ingredient is ready
-        is_ready = 1 if state == ItemState.READY else 0
+        is_ready_flag = 1 if (is_ready(item) or state == ItemState.READY) else 0
         
-        return [cuts_done, cuts_needed, is_ready]
+        return [cuts_done, cuts_needed, is_ready_flag]
     
     def _dish_to_vector(self, item: Dict[str, Any]) -> list:
         """
@@ -348,19 +348,22 @@ class ObservationBuilder:
             
             # Get state offset (0-4)
             state = item_dict.get("state", ItemState.RAW)
-            state_offsets = {
-                ItemState.RAW: 0,
-                ItemState.CHOPPING_1: 1,
-                ItemState.CHOPPING_2: 2,
-                ItemState.CHOPPING_3: 3,
-                ItemState.READY: 4,
-            }
-            state_offset = state_offsets.get(state, 0)
+            if is_ready(item_dict):
+                state_offset = 4
+            else:
+                state_offsets = {
+                    ItemState.RAW: 0,
+                    ItemState.CHOPPING_1: 1,
+                    ItemState.CHOPPING_2: 2,
+                    ItemState.CHOPPING_3: 3,
+                    ItemState.READY: 4,
+                }
+                state_offset = state_offsets.get(state, 0)
             
             # Code: 10 + índice + (estado_offset * 10)
             return 10 + ingredient_index + (state_offset * 10)
         
-        elif item_type == ItemType.DISH:
+        elif is_plate(item_dict):
             # Get number of ingredients
             ingredients = item_dict.get("ingredients", [])
             num_ingredients = len(ingredients)
@@ -399,6 +402,15 @@ class ObservationBuilder:
         expected_recipe_index = game_state.get("expected_recipe_index", 0)
         delivered_recipes = game_state.get("delivered_recipes", [])
         
+        # Determine the next pending recipe slot in sequence
+        next_pending_idx = None
+        for idx, r_name in enumerate(recipe_order[:MAX_RECIPES_IN_ORDER]):
+            occ_in_order = recipe_order[:idx + 1].count(r_name)
+            occ_delivered = delivered_recipes.count(r_name)
+            if occ_delivered < occ_in_order:
+                next_pending_idx = idx
+                break
+
         # Fill first row (y=0) with recipe information
         # Each column (x position) represents one order in sequence
         for i, recipe_name in enumerate(recipe_order[:MAX_RECIPES_IN_ORDER]):
@@ -415,7 +427,7 @@ class ObservationBuilder:
                 is_delivered = occurrences_delivered >= occurrences_in_order
                 
                 # Check if this is the next expected recipe
-                is_next = (i == expected_recipe_index)
+                is_next = (i == next_pending_idx) if next_pending_idx is not None else (i == expected_recipe_index)
                 
                 # Encode recipe slot
                 code = self._encode_recipe_slot(recipe_name, is_delivered, is_next, recipe_manager)

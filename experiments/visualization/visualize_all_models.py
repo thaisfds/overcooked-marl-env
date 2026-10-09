@@ -48,8 +48,10 @@ from ray.tune.registry import register_env
 
 try:
     from overcooked_marl_env import OvercookedMARL
+    from overcooked_marl_env.core.recipes import OrderQueue
 except ImportError:
     from env import OvercookedMARL
+    from core.recipes import OrderQueue
 
 
 class ParallelEnvToMultiAgent(MultiAgentEnv):
@@ -559,10 +561,7 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
                 state = getattr(raw_env, 'state', {})
                 delivered_list = list(state.get("delivered_recipes", []))
                 recipe_order = list(state.get("recipe_order", getattr(raw_env, 'recipe_order', [])))
-                pending_list = list(recipe_order)
-                for d in delivered_list:
-                    if d in pending_list:
-                        pending_list.remove(d)
+                pending_list = OrderQueue.get_pending(recipe_order, delivered_list)
 
                 if is_paused:
                     # Draw HUD in paused state
@@ -609,10 +608,7 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
                 # Re-extract delivered/pending post step
                 state = getattr(raw_env, 'state', {})
                 delivered_list = list(state.get("delivered_recipes", []))
-                pending_list = list(recipe_order)
-                for d in delivered_list:
-                    if d in pending_list:
-                        pending_list.remove(d)
+                pending_list = OrderQueue.get_pending(recipe_order, delivered_list)
 
                 del_str = ", ".join(delivered_list) if delivered_list else "None"
                 pend_str = ", ".join(pending_list) if pending_list else "None"

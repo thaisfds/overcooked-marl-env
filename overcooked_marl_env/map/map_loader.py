@@ -10,7 +10,7 @@ and provides a single entry point for all map-related operations.
 
 import os
 import numpy as np
-from typing import Optional
+from typing import Optional, Any
 from .map_parser import MapParser
 from .map_validator import MapValidator, MapValidationError
 from .map_config import MSG_PREFIX_LOADER, MSG_PREFIX_VALIDATION_ERROR
@@ -31,16 +31,25 @@ class MapLoader:
     to a complex subsystem.
     """
     
-    def __init__(self, strict_validation: bool = True):
+    def __init__(
+        self,
+        strict_validation: bool = True,
+        recipe_manager: Optional[Any] = None,
+        item_manager: Optional[Any] = None
+    ):
         """
         Initialize the map loader.
         
         Args:
             strict_validation: If True, raises exceptions on validation errors.
                              If False, logs warnings and tries to continue.
+            recipe_manager: Optional RecipeManager instance for custom recipe validation.
+            item_manager: Optional ItemManager instance for custom cell codes/tiles.
         """
-        self.parser = MapParser()
-        self.validator = MapValidator(strict=strict_validation)
+        self.recipe_manager = recipe_manager
+        self.item_manager = item_manager
+        self.parser = MapParser(item_manager=item_manager)
+        self.validator = MapValidator(strict=strict_validation, recipe_manager=recipe_manager)
         self._default_map_path: Optional[str] = None
     
     def load_map(
@@ -93,6 +102,20 @@ class MapLoader:
             # No fallback or fallback failed
             raise
     
+    def _auto_load_adjacent_recipes(self, map_path: Optional[str]) -> None:
+        """Auto-loads recipes.json if located in the same directory as map_path."""
+        if not map_path or not os.path.exists(map_path):
+            return
+        adjacent_recipes = os.path.join(os.path.dirname(os.path.abspath(map_path)), "recipes.json")
+        if os.path.exists(adjacent_recipes):
+            if self.recipe_manager is None:
+                from ..core.recipes import RecipeManager
+                self.recipe_manager = RecipeManager()
+                self.validator.recipe_manager = self.recipe_manager
+            self.recipe_manager.load_recipes_from_json(adjacent_recipes)
+            if self.item_manager:
+                self.item_manager.rebuild_ingredient_creators()
+
     def _load_and_validate(self, map_path: str) -> MapData:
         """
         Load and validate a map file.
@@ -107,6 +130,9 @@ class MapLoader:
             FileNotFoundError: If map file not found
             MapValidationError: If validation fails
         """
+        # Auto-load adjacent recipes if present
+        self._auto_load_adjacent_recipes(map_path)
+        
         # Parse the map file
         parsed_data = self.parser.parse_file(map_path)
         
@@ -209,6 +235,7 @@ class MapLoader:
             bool: True if map is valid
         """
         try:
+            self._auto_load_adjacent_recipes(map_path)
             parsed_data = self.parser.parse_file(map_path)
             is_valid = self.validator.validate_map(parsed_data)
             
@@ -233,6 +260,7 @@ class MapLoader:
             dict: Map information (size, agents, dispensers, recipes)
         """
         try:
+            self._auto_load_adjacent_recipes(map_path)
             parsed_data = self.parser.parse_file(map_path)
             
             return {

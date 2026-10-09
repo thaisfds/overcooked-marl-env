@@ -26,6 +26,7 @@ Advanced Usage (direct imports):
 
 from .game_state import GameState, MapData
 from .observation_builder import ObservationBuilder
+from .featurized_observation_builder import FeaturizedObservationBuilder
 
 # Config exports (re-exported from core.constants for convenience)
 from .env_config import (
@@ -49,6 +50,7 @@ __all__ = [
     'GameState',
     'MapData',
     'ObservationBuilder',
+    'FeaturizedObservationBuilder',
     
     # Configuration constants
     'INITIAL_ORIENTATION',
