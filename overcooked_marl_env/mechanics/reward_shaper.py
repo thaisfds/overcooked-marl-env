@@ -56,6 +56,9 @@ class RewardValues:
 
     # Dynamic Multipliers (Formula: 1.0 + step * (k - 1) for the k-th delivery)
     delivery_multiplier_step: float = 0.5   # Dynamic +50% multiplier per extra delivery (1st=1.0x, 2nd=1.5x, 3rd=2.0x, N-th=1+0.5*(N-1)x)
+    delivery_multiplier_2nd: float = 1.0    # Backwards compatibility alias
+    delivery_multiplier_3rd: float = 1.0    # Backwards compatibility alias
+    delivery_multiplier_4th_plus: float = 1.0 # Backwards compatibility alias
 
     # Proximity & Attempts (disabled)
     delivery_proximity_reward: float = 0.0
@@ -70,8 +73,8 @@ class RewardValues:
     trash_ready_penalty: float = -30.0
     trash_dish_penalty: float = -60.0
     unneeded_pickup_penalty: float = 0.0
-    useless_cycle_penalty: float = 0.0
-    useless_cycle: float = 0.0
+    useless_cycle_penalty: float = -5.0
+    useless_cycle: float = -5.0
     repetition_penalty: float = 0.0
     accumulation_penalty: float = 0.0
     accumulation_threshold: int = 5

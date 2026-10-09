@@ -98,7 +98,7 @@ class OvercookedMARL(ParallelEnv):
             observation_space_single = spaces.Box(
                 low=-np.inf,
                 high=np.inf,
-                shape=(96,),
+                shape=(150,),
                 dtype=np.float32
             )
         else:

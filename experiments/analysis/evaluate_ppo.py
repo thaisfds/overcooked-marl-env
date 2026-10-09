@@ -45,8 +45,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Multi-episode statistical evaluation for trained PPO models.")
     parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint directory (default: latest in ray_results)")
     parser.add_argument("--num-episodes", type=int, default=20, help="Number of evaluation episodes to run (default: 20)")
-    parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (default: default_map.txt)")
-    parser.add_argument("--num-agents", type=int, default=1, help="Number of agents (default: 1)")
+    parser.add_argument("--map", type=str, default=None, help="Map name (default: auto-detected from checkpoint)")
+    parser.add_argument("--num-agents", type=int, default=None, help="Number of agents (default: auto-detected from checkpoint)")
     parser.add_argument("--max-steps", type=int, default=800, help="Max steps per episode (default: 800)")
     parser.add_argument("--base-seed", type=int, default=42, help="Base random seed (default: 42)")
     parser.add_argument("--log-vision", action="store_true", default=False, help="Enable step-by-step vision analysis logging (default: False)")
@@ -55,12 +55,60 @@ def parse_args():
 def main():
     args = parse_args()
     checkpoint_path = args.checkpoint or find_latest_checkpoint()
+    cp_p = Path(checkpoint_path).resolve()
+
+    # Auto-detect map and num_agents from checkpoint metadata if not explicitly provided
+    map_name = args.map
+    num_agents = args.num_agents
+    if map_name is None or num_agents is None:
+        summary_json = Path(__file__).resolve().parent.parent / "logs" / "experiments_summary.json"
+        if summary_json.exists():
+            try:
+                with open(summary_json, "r", encoding="utf-8") as f:
+                    entries = json.load(f)
+                for e in entries:
+                    if e.get("checkpoint_path") and Path(e.get("checkpoint_path")).resolve() == cp_p:
+                        if map_name is None:
+                            map_name = e.get("map_name")
+                        if num_agents is None:
+                            num_agents = int(e.get("num_agents", 1))
+                        break
+            except Exception:
+                pass
+
+        if map_name is None or num_agents is None:
+            import re
+            for p in [cp_p.parent, cp_p.parents[1]]:
+                m_info_file = p / "model_info.json"
+                if m_info_file.exists():
+                    try:
+                        with open(m_info_file, "r") as f:
+                            m_info = json.load(f)
+                        if num_agents is None and "num_agents" in m_info:
+                            num_agents = int(m_info["num_agents"])
+                        if map_name is None and "map" in m_info:
+                            map_name = m_info["map"]
+                    except Exception:
+                        pass
+                m_match = re.search(r"map-([a-zA-Z0-9_\.]+)_agents-(\d+)", p.name)
+                if m_match:
+                    detected_map = m_match.group(1)
+                    if not detected_map.endswith(".txt"):
+                        detected_map += ".txt"
+                    if map_name is None:
+                        map_name = detected_map
+                    if num_agents is None:
+                        num_agents = int(m_match.group(2))
+
+        map_name = map_name or "default_map.txt"
+        num_agents = num_agents or 1
+
     print("\n" + "="*60)
     print("STARTING PPO MULTI-EPISODE EVALUATION")
     print(f"  Checkpoint:   {checkpoint_path}")
     print(f"  Episodes:     {args.num_episodes}")
-    print(f"  Map:          {args.map}")
-    print(f"  Agents:       {args.num_agents}")
+    print(f"  Map:          {map_name}")
+    print(f"  Agents:       {num_agents}")
     print(f"  Vision Log:   {'ENABLED' if args.log_vision else 'DISABLED'}")
     print("="*60 + "\n")
     
@@ -97,8 +145,8 @@ def main():
     def env_creator_fn():
         return OvercookedMARL(
             render_mode="human",
-            map_path=args.map,
-            num_fixed_agents=args.num_agents,
+            map_path=map_name,
+            num_fixed_agents=num_agents,
             verbose=False,
             featurized_obs=True
         )
@@ -226,8 +274,8 @@ def main():
         from experiments.utils.results_tracker import record_experiment_entry
         record_experiment_entry({
             "experiment_id": exp_name,
-            "map_name": args.map,
-            "num_agents": args.num_agents,
+            "map_name": map_name,
+            "num_agents": num_agents,
             "eval_reward_mean": stats['reward_mean'],
             "eval_reward_std": stats['reward_std'],
             "eval_deliveries_mean": stats['deliveries_mean'],

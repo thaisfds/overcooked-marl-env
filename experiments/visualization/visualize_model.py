@@ -44,11 +44,11 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
         
     @property
     def observation_space(self):
-        return self.env.observation_space
+        return {agent: self.env.observation_space(agent) for agent in self.agents}
 
     @property
     def action_space(self):
-        return self.env.action_space
+        return {agent: self.env.action_space(agent) for agent in self.agents}
 
     def reset(self, *, seed=None, options=None):
         return self.env.reset(seed=seed, options=options)
@@ -61,6 +61,15 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
     
     def close(self):
         return self.env.close()
+
+    def __getattr__(self, name):
+        if name.startswith('_') or name in ['env', 'agents', 'observation_space', 'action_space']:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        try:
+            env = object.__getattribute__(self, 'env')
+            return getattr(env, name)
+        except AttributeError:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
 def discover_latest_or_best_checkpoint(ray_results_dir="experiments/ray_results"):

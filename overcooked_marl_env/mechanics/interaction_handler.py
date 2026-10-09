@@ -608,9 +608,15 @@ class InteractionHandler:
                 )
             elif ground_item.get("type") == ItemType.DISH:
                 # Picking up plate - check if it's complete
-                progress_reward = self.reward_shaper._calculate_progress_reward(
-                    'pickup_plate_complete', ground_item, None, game_state
-                )
+                # ANTI-REWARD HACKING: Milestone bonus given ONLY ONCE per distinct ingredient assembly!
+                current_combo = tuple(sorted(ground_item.get("ingredients", [])))
+                last_awarded_combo = ground_item.get("pickup_awarded_combo", None)
+                if current_combo != last_awarded_combo and len(current_combo) > 0:
+                    progress_reward = self.reward_shaper._calculate_progress_reward(
+                        'pickup_plate_complete', ground_item, None, game_state
+                    )
+                    if progress_reward > 0:
+                        ground_item["pickup_awarded_combo"] = current_combo
             
             total_reward = self.rewards.pickup + progress_reward
             if total_reward > 0:

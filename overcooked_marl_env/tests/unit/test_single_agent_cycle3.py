@@ -23,32 +23,31 @@ class TestSingleAgentCycle3(unittest.TestCase):
         self.env.close()
 
     def test_featurized_observation_shape_and_dynamic_hud(self):
-        """Test observation vector is strictly (96,) and HUD advances upon delivery."""
+        """Test observation vector is strictly (150,) and HUD advances upon delivery."""
         agent_id = "agent_0"
-        self.assertEqual(self.obs[agent_id].shape, (96,))
+        self.assertEqual(self.obs[agent_id].shape, (150,))
 
-        # Initial HUD: rec_1 should be SIMPLE_SALAD, rec_2 GARDEN_SALAD
-        # Recipe onehot indices: [None, SIMPLE_SALAD, GARDEN_SALAD, FRESH_SALAD, ONION_SOUP, ONION_SALAD, OTHER]
-        # HUD starts at index 56
-        rec1_slice = self.obs[agent_id][56:63]
-        rec2_slice = self.obs[agent_id][63:70]
-        self.assertEqual(np.argmax(rec1_slice), 1)  # SIMPLE_SALAD
-        self.assertEqual(np.argmax(rec2_slice), 2)  # GARDEN_SALAD
+        # Initial HUD: rec_1 should be SIMPLE_SALAD (1 ingredient: lettuce), rec_2 GARDEN_SALAD (2 ingredients)
+        # HUD starts at index 80: rec_1 at 80:90, rec_2 at 90:100
+        rec1_total_req = self.obs[agent_id][80]
+        rec2_total_req = self.obs[agent_id][90]
+        self.assertAlmostEqual(rec1_total_req, 1.0 / 4.0, places=3)  # SIMPLE_SALAD: 1 ing
+        self.assertAlmostEqual(rec2_total_req, 2.0 / 4.0, places=3)  # GARDEN_SALAD: 2 ings
 
         # Simulate delivery of SIMPLE_SALAD
         self.env.state["delivered_recipes"].append("SIMPLE_SALAD")
         self.env.state["dishes_pending"] -= 1
 
         obs = self.env._get_obs()
-        rec1_updated = obs[agent_id][56:63]
-        rec2_updated = obs[agent_id][63:70]
+        rec1_updated_total = obs[agent_id][80]
+        rec2_updated_total = obs[agent_id][90]
 
-        # HUD must now reflect GARDEN_SALAD as first pending order and FRESH_SALAD as second
-        self.assertEqual(np.argmax(rec1_updated), 2)  # GARDEN_SALAD
-        self.assertEqual(np.argmax(rec2_updated), 3)  # FRESH_SALAD (the 3rd in default_map)
+        # HUD must now reflect GARDEN_SALAD (2 ings) as first pending order and FRESH_SALAD (3 ings) as second
+        self.assertAlmostEqual(rec1_updated_total, 2.0 / 4.0, places=3)  # GARDEN_SALAD
+        self.assertAlmostEqual(rec2_updated_total, 3.0 / 4.0, places=3)  # FRESH_SALAD
 
     def test_chopping_board_visual_dimension(self):
-        """Test dimension 13 in self_state shows cutting progress even when hands are empty."""
+        """Test dimension 30 in facing_state shows cutting progress of front item even when hands are empty."""
         agent_id = "agent_0"
         # Place agent facing cutting board at (3, 1) from (3, 2)
         self.env.state["agent_pos"][agent_id] = (3, 2)
@@ -62,13 +61,14 @@ class TestSingleAgentCycle3(unittest.TestCase):
         self.env.state["ground_instances"][(3, 1)] = t_id
 
         obs = self.env._get_obs()
-        self.assertAlmostEqual(obs[agent_id][13], 1.0 / 3.0, places=4)
+        # Front cuts progress is at index 30 in facing_state (24 + 6 = 30)
+        self.assertAlmostEqual(obs[agent_id][30], 1.0 / 3.0, places=4)
 
         # Update cuts to 3 (ready)
         tomato["cuts_completed"] = 3
         self.env.state["item_instances"][t_id] = tomato
         obs = self.env._get_obs()
-        self.assertAlmostEqual(obs[agent_id][13], 1.0, places=4)
+        self.assertAlmostEqual(obs[agent_id][30], 1.0, places=4)
 
     def test_milestone_delivery_and_episode_victory(self):
         """Test delivery rewards, order bonus, and episode victory bonus on completing all dishes."""
@@ -191,9 +191,8 @@ class TestSingleAgentCycle3(unittest.TestCase):
         self.assertIn("SIMPLE_SALAD", self.env.state["delivered_recipes"])
         self.assertEqual(self.env.state["dishes_pending"], initial_dishes - 1)
 
-        # 7. Verify next order is GARDEN_SALAD
-        rec1_onehot = obs[agent_id][56:63]
-        self.assertEqual(np.argmax(rec1_onehot), 2)  # GARDEN_SALAD is now active
+        # 7. Verify next order is GARDEN_SALAD (2 ingredients)
+        self.assertAlmostEqual(obs[agent_id][80], 2.0 / 4.0, places=3)
 
 
 if __name__ == "__main__":
