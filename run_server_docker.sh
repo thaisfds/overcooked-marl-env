@@ -28,12 +28,23 @@ echo "2. Building Docker image (overcooked_marl:latest)..."
 echo "=================================================="
 docker build -t overcooked_marl:latest .
 
+# Se nenhum argumento for passado, usar por padrão 2 agentes no tutorial.txt
+ARGS=("$@")
+if [ ${#ARGS[@]} -eq 0 ]; then
+  ARGS=(--map tutorial.txt --num-agents 2)
+fi
+
 echo "=================================================="
 echo "3. Running Docker Container with GPU access..."
+echo "   Arguments: ${ARGS[*]}"
 echo "=================================================="
 docker run --rm $DOCKER_TTY \
   --gpus all \
   --shm-size=8g \
+  -e WORKERS \
+  -e CONCURRENT \
+  -e EVAL_EPISODES \
   --name overcooked_container \
   -v "$PWD":/app \
-  overcooked_marl:latest
+  overcooked_marl:latest \
+  bash experiments/training/run_experiment_cycle.sh "${ARGS[@]}"
