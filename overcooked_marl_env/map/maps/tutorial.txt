@@ -2,11 +2,11 @@
 _______________
 |#           #|
 |C           C|
-|#   0    1  #|
+|#   0    2  #|
 |C           C|
 |#T#### ######|
 |             |
-|  2       3  |
+|  1       3  |
 |             |
 |#II##PDD##I##|
 _______________
@@ -17,4 +17,4 @@ tomato 3 9
 cucumber 11 9
 
 # Recipes
-SIMPLE_SALAD, GARDEN_SALAD, FRESH_SALAD, SIMPLE_SALAD, FRESH_SALAD, SIMPLE_SALAD, GARDEN_SALAD 
+SIMPLE_SALAD, GARDEN_SALAD, FRESH_SALAD, SIMPLE_SALAD, FRESH_SALAD, SIMPLE_SALAD, GARDEN_SALAD, FRESH_SALAD, FRESH_SALAD, GARDEN_SALAD  

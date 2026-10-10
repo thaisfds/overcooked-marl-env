@@ -53,7 +53,7 @@ torch, nn = try_import_torch()
 HYPERPARAMETER_GRID = {
     "lr": [1e-4, 3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
     "gamma": [0.98],               # High-performing discount factors
-    "entropy_coeff": [0.015, 0.02, 0.025, 0.03],       # High-performing empirical sweet spot (0.04 collapsed)
+    "entropy_coeff": [0.015, 0.02],# Top-performing empirical sweet spot for 100% completion
     "train_batch_size": [4000],    # Optimal batch sizes for trajectory collection
     "sgd_minibatch_size": [256],         # PPO minibatch size
     "update_epochs": [12],               # Top-performing update epochs (12 epochs)
@@ -120,7 +120,7 @@ def convert_to_serializable(obj):
 def parse_args():
     default_workers = max(2, min(12, os.cpu_count() - 2)) if hasattr(os, 'cpu_count') and os.cpu_count() else 4
     parser = argparse.ArgumentParser(description="Optimized, parameterized RLlib PPO training for Overcooked MARL.")
-    parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (e.g. default_map.txt, tutorial.txt)")
+    parser.add_argument("--map", type=str, default="tutorial.txt", help="Map name (default: tutorial.txt)")
     parser.add_argument("--num-agents", type=int, default=2, help="Number of agents to train with")
     parser.add_argument("--episodes", type=int, default=None, help="Override training episodes")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
@@ -417,6 +417,8 @@ def main():
                 'trial_id': trial.trial_id,
                 'config_name': config_name,
                 'checkpoint_path': checkpoint_path,
+                'map': args.map,
+                'num_agents': args.num_agents,
                 'avg_reward': float(avg_reward_last) if avg_reward_last is not None and not np.isnan(avg_reward_last) else None,
                 'learning_curves': learning_curves_data,
                 'training_config': {
