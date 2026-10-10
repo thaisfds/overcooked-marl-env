@@ -25,25 +25,67 @@ from ray.tune.registry import register_env
 from overcooked_marl_env import OvercookedMARL
 from experiments.training.train_ppo import ParallelEnvToMultiAgent
 
-def find_latest_checkpoint():
+from experiments.utils.results_tracker import detect_map_and_agents_from_checkpoint
+
+def find_best_or_latest_checkpoint():
     exp_dir = Path(__file__).resolve().parent.parent
     ray_results = exp_dir / "ray_results"
+    summary_json = exp_dir / "logs" / "experiments_summary.json"
+
+    # 1. Prioritize selecting the best performing checkpoint from latest_summary.md or experiments_summary.json
+    latest_md = exp_dir / "logs" / "latest_summary.md"
+    if latest_md.exists():
+        try:
+            import re
+            with open(latest_md, "r", encoding="utf-8") as f:
+                content = f.read()
+            m = re.search(r"\*\s*\*\*Checkpoint Path:\*\*\s*`([^`]+)`", content)
+            if m:
+                cand_path = Path(m.group(1)).resolve()
+                if cand_path.exists():
+                    print(f"🏆 Auto-selected best checkpoint from latest_summary.md: {cand_path.parent.name}")
+                    return str(cand_path)
+        except Exception:
+            pass
+
+    if summary_json.exists():
+
+        try:
+            with open(summary_json, "r", encoding="utf-8") as f:
+                entries = json.load(f)
+            if entries:
+                latest_exp_id = entries[-1].get("experiment_id")
+                latest_trials = [e for e in entries if e.get("experiment_id") == latest_exp_id and e.get("checkpoint_path")]
+                if latest_trials:
+                    def get_score(e):
+                        val = e.get("train_reward_mean")
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            return -float('inf')
+                    latest_trials.sort(key=get_score, reverse=True)
+                    best_cp = latest_trials[0].get("checkpoint_path")
+                    if best_cp and Path(best_cp).exists():
+                        print(f"🏆 Auto-selected best trial checkpoint from latest experiment '{latest_exp_id}': {Path(best_cp).parent.name}")
+                        return str(Path(best_cp).resolve())
+        except Exception:
+            pass
+
+    # 2. Fallback: scan experiments/ray_results directory
     if not ray_results.exists():
-        raise FileNotFoundError("ray_results directory not found")
-        
-    checkpoints = sorted(
-        glob.glob(str(ray_results / "**" / "checkpoint_*"), recursive=True),
-        key=lambda p: os.path.getmtime(p),
-        reverse=True
-    )
-    checkpoints = [c for c in checkpoints if os.path.isdir(c)]
+        raise FileNotFoundError("Directory experiments/ray_results not found. Pass --checkpoint <path> to evaluate a specific model.")
+
+    checkpoints = [c for c in ray_results.glob("**/checkpoint_*") if c.is_dir() and (c / "rllib_checkpoint.json").exists()]
     if not checkpoints:
-        raise FileNotFoundError("No checkpoints found in ray_results")
-    return checkpoints[0]
+        raise FileNotFoundError("No checkpoints found in experiments/ray_results. Pass --checkpoint <path> to evaluate a specific checkpoint.")
+
+    checkpoints.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(checkpoints[0].resolve())
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Multi-episode statistical evaluation for trained PPO models.")
-    parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint directory (default: latest in ray_results)")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to checkpoint directory (default: best in latest training)")
     parser.add_argument("--num-episodes", type=int, default=20, help="Number of evaluation episodes to run (default: 20)")
     parser.add_argument("--map", type=str, default=None, help="Map name (default: auto-detected from checkpoint)")
     parser.add_argument("--num-agents", type=int, default=None, help="Number of agents (default: auto-detected from checkpoint)")
@@ -54,71 +96,35 @@ def parse_args():
 
 def main():
     args = parse_args()
-    checkpoint_path = args.checkpoint or find_latest_checkpoint()
-    cp_p = Path(checkpoint_path).resolve()
+    cp_p = Path(args.checkpoint or find_best_or_latest_checkpoint()).resolve()
+    checkpoint_path = str(cp_p)
 
     # Auto-detect map and num_agents from checkpoint metadata if not explicitly provided
-    map_name = args.map
-    num_agents = args.num_agents
-    if map_name is None or num_agents is None:
-        summary_json = Path(__file__).resolve().parent.parent / "logs" / "experiments_summary.json"
-        if summary_json.exists():
-            try:
-                with open(summary_json, "r", encoding="utf-8") as f:
-                    entries = json.load(f)
-                for e in entries:
-                    if e.get("checkpoint_path") and Path(e.get("checkpoint_path")).resolve() == cp_p:
-                        if map_name is None:
-                            map_name = e.get("map_name")
-                        if num_agents is None:
-                            num_agents = int(e.get("num_agents", 1))
-                        break
-            except Exception:
-                pass
+    det_map, det_agents = detect_map_and_agents_from_checkpoint(cp_p)
+    map_name = args.map if args.map is not None else det_map
+    num_agents = args.num_agents if args.num_agents is not None else det_agents
 
-        if map_name is None or num_agents is None:
-            import re
-            for p in [cp_p.parent, cp_p.parents[1]]:
-                m_info_file = p / "model_info.json"
-                if m_info_file.exists():
-                    try:
-                        with open(m_info_file, "r") as f:
-                            m_info = json.load(f)
-                        if num_agents is None and "num_agents" in m_info:
-                            num_agents = int(m_info["num_agents"])
-                        if map_name is None and "map" in m_info:
-                            map_name = m_info["map"]
-                    except Exception:
-                        pass
-                m_match = re.search(r"map-([a-zA-Z0-9_\.]+)_agents-(\d+)", p.name)
-                if m_match:
-                    detected_map = m_match.group(1)
-                    if not detected_map.endswith(".txt"):
-                        detected_map += ".txt"
-                    if map_name is None:
-                        map_name = detected_map
-                    if num_agents is None:
-                        num_agents = int(m_match.group(2))
-
-        map_name = map_name or "default_map.txt"
-        num_agents = num_agents or 1
-
-    print("\n" + "="*60)
-    print("STARTING PPO MULTI-EPISODE EVALUATION")
-    print(f"  Checkpoint:   {checkpoint_path}")
-    print(f"  Episodes:     {args.num_episodes}")
-    print(f"  Map:          {map_name}")
-    print(f"  Agents:       {num_agents}")
-    print(f"  Vision Log:   {'ENABLED' if args.log_vision else 'DISABLED'}")
-    print("="*60 + "\n")
-    
-    # Determine experiment name from checkpoint path
+    # Determine experiment name and trial_id from checkpoint path
     exp_name = "evaluation"
-    parts = Path(checkpoint_path).parts
+    trial_id = "default"
+    parts = cp_p.parts
     if "ray_results" in parts:
         idx = parts.index("ray_results")
         if idx + 1 < len(parts):
             exp_name = parts[idx + 1]
+
+    for p in [cp_p, cp_p.parent, cp_p.parents[1]]:
+        m_info_file = p / "model_info.json"
+        if m_info_file.exists():
+            try:
+                with open(m_info_file, "r", encoding="utf-8") as f:
+                    m_data = json.load(f)
+                if "trial_id" in m_data:
+                    trial_id = m_data["trial_id"]
+                    break
+            except Exception:
+                pass
+
             
     exp_dir = Path(__file__).resolve().parent.parent
     log_dir = exp_dir / "logs"
@@ -182,10 +188,13 @@ def main():
             actions = {}
             for agent_id, agent_obs in obs.items():
                 if algo is not None:
-                    action = algo.compute_single_action(agent_obs, policy_id=f"policy_{agent_id}", explore=False)
+                    try:
+                        action = algo.compute_single_action(agent_obs, policy_id=f"policy_{agent_id}", explore=False)
+                    except Exception:
+                        action = algo.compute_single_action(agent_obs, policy_id="policy_agent_0", explore=False)
                 else:
                     policy_id = f"policy_{agent_id}"
-                    pol = policies.get(policy_id) or next(iter(policies.values()))
+                    pol = policies.get(policy_id) or policies.get("policy_agent_0") or next(iter(policies.values()))
                     res = pol.compute_single_action(agent_obs, explore=False)
                     action = res[0]
                     if isinstance(action, (tuple, list, np.ndarray)):
@@ -274,6 +283,7 @@ def main():
         from experiments.utils.results_tracker import record_experiment_entry
         record_experiment_entry({
             "experiment_id": exp_name,
+            "trial_id": trial_id,
             "map_name": map_name,
             "num_agents": num_agents,
             "eval_reward_mean": stats['reward_mean'],

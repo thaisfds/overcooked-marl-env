@@ -10,27 +10,39 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 def main():
-    base_dir = Path(__file__).resolve().parent.parent / "ray_results"
+    exp_dir = Path(__file__).resolve().parent.parent
+    base_dir = exp_dir / "ray_results"
     all_runs = []
+    seen_files = set()
     
+    if not base_dir.exists():
+        print(f"No ray_results directory found at {base_dir}")
+        return
+
     for model_info_file in base_dir.glob("**/model_info.json"):
-        try:
-            with open(model_info_file, 'r') as f:
-                data = json.load(f)
-            config_name = data.get('config_name', model_info_file.parent.name)
-            curves = data.get('learning_curves', [])
-            for pt in curves:
-                all_runs.append({
-                    'Config': config_name,
-                    'Iteration': pt['iteration'],
-                    'Mean Reward': pt['reward_mean']
-                })
-        except Exception as e:
-            print(f"Error reading {model_info_file}: {e}")
+
+            resolved_file = model_info_file.resolve()
+            if resolved_file in seen_files:
+                continue
+            seen_files.add(resolved_file)
+            try:
+                with open(model_info_file, 'r') as f:
+                    data = json.load(f)
+                config_name = data.get('config_name', model_info_file.parent.name)
+                curves = data.get('learning_curves', [])
+                for pt in curves:
+                    all_runs.append({
+                        'Config': config_name,
+                        'Iteration': pt['iteration'],
+                        'Mean Reward': pt['reward_mean']
+                    })
+            except Exception as e:
+                print(f"Error reading {model_info_file}: {e}")
 
     if not all_runs:
-        print(f"No model_info.json found in {base_dir}")
+        print(f"No model_info.json found in searched directories.")
         return
+
 
     df = pd.DataFrame(all_runs)
     plt.figure(figsize=(10, 5), dpi=120)

@@ -72,85 +72,102 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
 
+from experiments.utils.results_tracker import detect_map_and_agents_from_checkpoint
+
 def discover_latest_or_best_checkpoint(ray_results_dir="experiments/ray_results"):
     exp_dir = project_root / "experiments"
-    summary_json = exp_dir / "logs" / "experiments_summary.json"
+    summary_candidates = [
+        exp_dir / "logs" / "experiments_summary.json"
+    ]
     
     best_cp = None
     best_score = -float('inf')
-    num_agents = 1
-    map_name = "default_map.txt"
+    num_agents = None
+    map_name = None
     
     # 1. Prioritize reading persistent experiment history from logs/experiments_summary.json
-    if summary_json.exists():
-        try:
-            with open(summary_json, "r", encoding="utf-8") as f:
-                entries = json.load(f)
-                
-            for e in entries:
-                cp_str = e.get("checkpoint_path", "")
-                if not cp_str:
-                    continue
-                cp_path = Path(cp_str).resolve()
-                if not cp_path.exists():
-                    continue
+    for summary_json in summary_candidates:
+        if summary_json.exists():
+            try:
+                with open(summary_json, "r", encoding="utf-8") as f:
+                    entries = json.load(f)
                     
-                score = -float('inf')
-                eval_rw = e.get("eval_reward_mean")
-                train_rw = e.get("train_reward_mean")
-                if isinstance(eval_rw, (int, float)):
-                    score = float(eval_rw)
-                elif isinstance(train_rw, (int, float)):
-                    score = float(train_rw)
-                    
-                if score > best_score or best_cp is None:
-                    best_score = score
-                    best_cp = cp_path
-                    num_agents = int(e.get("num_agents", 1))
-                    map_name = e.get("map_name", "default_map.txt")
-        except Exception:
-            pass
+                for e in entries:
+                    cp_str = e.get("checkpoint_path", "")
+                    if not cp_str:
+                        continue
+                    cp_path = Path(cp_str).resolve()
+                    if not cp_path.exists():
+                        continue
+                        
+                    score = -float('inf')
+                    eval_rw = e.get("eval_reward_mean")
+                    train_rw = e.get("train_reward_mean")
+                    if isinstance(eval_rw, (int, float)):
+                        score = float(eval_rw)
+                    elif isinstance(train_rw, (int, float)):
+                        score = float(train_rw)
+                        
+                    if score > best_score or best_cp is None:
+                        best_score = score
+                        best_cp = cp_path
+                        num_agents = int(e.get("num_agents", 1)) if e.get("num_agents") else None
+                        map_name = e.get("map_name")
+            except Exception:
+                pass
 
     if best_cp:
-        print(f"🏆 Best checkpoint discovered from history ({summary_json.name}):")
+        det_map, det_agents = detect_map_and_agents_from_checkpoint(best_cp)
+        map_name = map_name or det_map
+        num_agents = num_agents or det_agents
+        print(f"🏆 Best checkpoint discovered from history:")
         print(f"   Checkpoint: {best_cp}")
         print(f"   Score:      {best_score:+.2f} | Map: {map_name} | Agents: {num_agents}")
         return best_cp, num_agents, map_name
 
-    # 2. Fallback: Scan ray_results directory for checkpoint folders
+    # 2. Fallback: Scan ray_results directories for checkpoint folders
     results_path = Path(ray_results_dir).resolve()
     if not results_path.exists():
         results_path = exp_dir / "ray_results"
-        
+
+    search_dirs = [results_path]
+
     checkpoints = []
-    for cp_path in results_path.glob("**/checkpoint_*"):
-        if cp_path.is_dir() and (cp_path / "rllib_checkpoint.json").exists():
-            avg_reward = -999999.0
-            n_agents = 1
-            m_name = "default_map.txt"
-            
-            for info_dir in [cp_path.parent, cp_path.parents[1]]:
-                info_file = info_dir / "model_info.json"
-                if info_file.exists():
-                    try:
-                        with open(info_file, "r") as f:
-                            meta = json.load(f)
-                            avg_reward = float(meta.get("avg_reward", -999999.0))
-                            n_agents = int(meta.get("num_agents", 1))
-                            m_name = meta.get("map", "default_map.txt")
-                            break
-                    except Exception:
-                        pass
-                        
-            iter_num = int(cp_path.name.split("_")[-1]) if cp_path.name.split("_")[-1].isdigit() else 0
-            mtime = cp_path.stat().st_mtime
-            checkpoints.append((cp_path.resolve(), avg_reward, iter_num, mtime, n_agents, m_name))
+    seen_paths = set()
+    for s_dir in search_dirs:
+        if not s_dir.exists():
+            continue
+        for cp_path in s_dir.glob("**/checkpoint_*"):
+            if cp_path.is_dir() and (cp_path / "rllib_checkpoint.json").exists():
+                r_cp = cp_path.resolve()
+                if r_cp in seen_paths:
+                    continue
+                seen_paths.add(r_cp)
+                
+                avg_reward = -999999.0
+                m_map, n_agents = detect_map_and_agents_from_checkpoint(r_cp)
+                
+                for info_dir in [r_cp.parent, r_cp.parents[1]]:
+                    info_file = info_dir / "model_info.json"
+                    if info_file.exists():
+                        try:
+                            with open(info_file, "r") as f:
+                                meta = json.load(f)
+                                avg_reward = float(meta.get("avg_reward", -999999.0))
+                                break
+                        except Exception:
+                            pass
+                            
+                iter_num = int(cp_path.name.split("_")[-1]) if cp_path.name.split("_")[-1].isdigit() else 0
+                mtime = cp_path.stat().st_mtime
+                checkpoints.append((r_cp, avg_reward, iter_num, mtime, n_agents, m_map))
                 
     checkpoints.sort(key=lambda x: (x[1], x[3]), reverse=True)
     if not checkpoints:
-        return None, 1, "default_map.txt"
+        return None, 2, "tutorial.txt"
     latest = checkpoints[0]
     return latest[0], latest[4], latest[5]
+
 
 
 def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_map.txt", num_episodes=1, max_steps=800, step_delay_ms=50, explore=True):
@@ -211,11 +228,14 @@ def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_m
                 actions = {}
                 for agent_id, obs in obs_dict.items():
                     try:
+                        policy_id = f"policy_{agent_id}"
                         if algorithm is not None:
-                            raw_action = algorithm.compute_single_action(obs, policy_id=f"policy_{agent_id}", explore=explore)
+                            try:
+                                raw_action = algorithm.compute_single_action(obs, policy_id=policy_id, explore=explore)
+                            except Exception:
+                                raw_action = algorithm.compute_single_action(obs, policy_id="policy_agent_0", explore=explore)
                         else:
-                            policy_id = f"policy_{agent_id}"
-                            pol = policies.get(policy_id) or next(iter(policies.values()))
+                            pol = policies.get(policy_id) or policies.get("policy_agent_0") or next(iter(policies.values()))
                             res = pol.compute_single_action(obs, explore=explore)
                             raw_action = res[0]
                         if isinstance(raw_action, (tuple, list, np.ndarray)):
@@ -226,7 +246,6 @@ def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_m
                         action = 0
                     actions[agent_id] = action
 
-                    
                 obs_dict, rewards, terminations, truncations, infos = env.step(actions)
                 episode_reward += sum(rewards.values())
                 
@@ -252,32 +271,23 @@ def main():
     parser = argparse.ArgumentParser(description="Render visual Pygame rollout of any specified RLlib PPO checkpoint.")
     parser.add_argument("checkpoint_path", type=str, nargs="?", default=None, help="Path to checkpoint folder (positional argument)")
     parser.add_argument("--checkpoint", "-c", type=str, default=None, help="Path to checkpoint folder (optional flag)")
-    parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (default: default_map.txt)")
-    parser.add_argument("--num-agents", type=int, default=1, help="Number of agents (default: 1)")
+    parser.add_argument("--map", type=str, default=None, help="Map name (default: auto-detected from checkpoint)")
+    parser.add_argument("--num-agents", type=int, default=None, help="Number of agents (default: auto-detected from checkpoint)")
     parser.add_argument("--delay", type=int, default=50, help="Step delay in ms (e.g. 50 = 20 FPS)")
     parser.add_argument("--deterministic", action="store_true", help="Disable exploration sampling (greedy actions)")
     args = parser.parse_args()
 
     target_cp = args.checkpoint_path or args.checkpoint
-    num_agents = args.num_agents
-    map_name = args.map
 
     if target_cp:
         cp_path = Path(target_cp).resolve()
-        # Try reading model_info metadata if available in parent directories
-        for info_dir in [cp_path, cp_path.parent, cp_path.parents[1]]:
-            info_file = info_dir / "model_info.json"
-            if info_file.exists():
-                try:
-                    with open(info_file, "r") as f:
-                        meta = json.load(f)
-                        num_agents = int(meta.get("num_agents", num_agents))
-                        map_name = meta.get("map", map_name)
-                        break
-                except Exception:
-                    pass
+        det_map, det_agents = detect_map_and_agents_from_checkpoint(cp_path)
+        map_name = args.map if args.map is not None else det_map
+        num_agents = args.num_agents if args.num_agents is not None else det_agents
     else:
-        cp_path, num_agents, map_name = discover_latest_or_best_checkpoint()
+        cp_path, det_agents, det_map = discover_latest_or_best_checkpoint()
+        map_name = args.map if args.map is not None else det_map
+        num_agents = args.num_agents if args.num_agents is not None else det_agents
 
     if cp_path and cp_path.exists():
         run_pygame_visual_rollout(
@@ -294,3 +304,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -120,8 +120,8 @@ def convert_to_serializable(obj):
 def parse_args():
     default_workers = max(2, min(12, os.cpu_count() - 2)) if hasattr(os, 'cpu_count') and os.cpu_count() else 4
     parser = argparse.ArgumentParser(description="Optimized, parameterized RLlib PPO training for Overcooked MARL.")
-    parser.add_argument("--map", type=str, default="tutorial.txt", help="Map name (default: tutorial.txt)")
-    parser.add_argument("--num-agents", type=int, default=2, help="Number of agents to train with")
+    parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (default: default_map.txt)")
+    parser.add_argument("--num-agents", type=int, default=1, help="Number of agents to train with (default: 1)")
     parser.add_argument("--episodes", type=int, default=None, help="Override training episodes")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--gamma", type=float, default=None, help="Override discount factor")
@@ -229,7 +229,11 @@ def main():
         PPOConfig()
         .environment(
             env=env_name,
-            env_config={"num_episodes": tune_episodes}  # Pass num_episodes in env_config safely
+            env_config={
+                "num_episodes": tune_episodes,
+                "map": args.map,
+                "num_agents": args.num_agents
+            }
         )
         .api_stack(
             enable_rl_module_and_learner=False,

@@ -40,9 +40,12 @@ def find_best_parameters():
         except Exception:
             pass
 
-    # Iterate over all PPO_* trial directories
-    for trial_dir in ray_results.rglob('PPO_*'):
-        if trial_dir.is_dir() and (trial_dir / 'progress.csv').exists():
+    if ray_results.exists():
+        for trial_dir in ray_results.rglob('PPO_*'):
+            if trial_dir.is_dir() and (trial_dir / 'progress.csv').exists():
+
+                seen_trials.add(trial_dir.resolve())
+
             try:
                 with open(trial_dir / 'progress.csv', 'r') as f:
                     reader = csv.reader(f)

@@ -53,6 +53,8 @@ except ImportError:
     from env import OvercookedMARL
     from core.recipes import OrderQueue
 
+from experiments.utils.results_tracker import detect_map_and_agents_from_checkpoint
+
 
 class ParallelEnvToMultiAgent(MultiAgentEnv):
     def __init__(self, parallel_env):
@@ -137,6 +139,7 @@ def parse_summary_markdown(summary_path: Path, ray_results_dir: Path):
                         cp_path = find_latest_checkpoint(trial_dir)
 
                 if cp_path and cp_path.exists():
+                    m_map, m_agents = detect_map_and_agents_from_checkpoint(cp_path)
                     models.append({
                         "rank": int(rank_str),
                         "trial_id": trial_id,
@@ -146,7 +149,9 @@ def parse_summary_markdown(summary_path: Path, ray_results_dir: Path):
                         "reward_str": reward_str.strip(),
                         "reward_val": float(reward_str.replace("+", "").strip()) if reward_str.replace("+", "").replace(".", "").replace("-", "").isdigit() else 0.0,
                         "cp_path": cp_path,
-                        "trial_dir": cp_path.parent
+                        "trial_dir": cp_path.parent,
+                        "map": m_map,
+                        "num_agents": m_agents
                     })
     except Exception as e:
         print(f"[WARN] Error parsing summary markdown ({summary_path.name}): {e}")
@@ -175,7 +180,18 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
                 break
 
     # 2. Fallback or scan all trial directories directly in ray_results
-    discovered_trials = list(ray_results_dir.glob("**/PPO_overcooked_marl_parallel_*"))
+    search_roots = [ray_results_dir]
+
+
+    discovered_trials = []
+    seen_trials = set()
+    for s_root in search_roots:
+        if s_root.exists():
+            for t_dir in s_root.glob("**/PPO_overcooked_marl_parallel_*"):
+                if t_dir.is_dir() and t_dir.resolve() not in seen_trials:
+                    seen_trials.add(t_dir.resolve())
+                    discovered_trials.append(t_dir)
+
     known_trial_ids = {m["trial_id"] for m in models}
 
     for trial_dir in sorted(discovered_trials):
@@ -222,6 +238,8 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
             except Exception:
                 pass
 
+        m_map, m_agents = detect_map_and_agents_from_checkpoint(cp_path)
+
         models.append({
             "rank": len(models) + 1,
             "trial_id": trial_id,
@@ -231,7 +249,9 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
             "reward_str": reward_str,
             "reward_val": reward_val,
             "cp_path": cp_path,
-            "trial_dir": trial_dir
+            "trial_dir": trial_dir,
+            "map": m_map,
+            "num_agents": m_agents
         })
 
     # Sort models based on user preference
@@ -243,6 +263,7 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
         models.sort(key=lambda x: x["trial_id"])
 
     return models
+
 
 
 def draw_hud_overlay(surface, model_info, model_idx, total_models, elapsed_sec, max_seconds, current_step, max_steps, current_reward, delivered_list, pending_list, is_paused):
@@ -275,7 +296,9 @@ def draw_hud_overlay(surface, model_info, model_idx, total_models, elapsed_sec, 
     surface.blit(t_surf, (10, 6))
 
     # Line 2: Hyperparams & Timer
-    hp_text = f"LR: {model_info['lr']} | Gamma: {model_info['gamma']} | Entropy: {model_info['entropy']}"
+    m_map_str = model_info.get("map", "default_map.txt")
+    m_ag_str = model_info.get("num_agents", 1)
+    hp_text = f"Map: {m_map_str} ({m_ag_str} ag) | LR: {model_info['lr']} | Gamma: {model_info['gamma']} | Entropy: {model_info['entropy']}"
     h_surf = font_sub.render(hp_text, True, (180, 220, 255))
     surface.blit(h_surf, (10, 26))
 
@@ -432,7 +455,7 @@ def generate_execution_summary_report(executed_logs, summary_md_path):
     print("=" * 95 + "\n")
 
 
-def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents=1, map_name="default_map.txt", explore=True, seed=42):
+def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents=None, map_name=None, explore=True, seed=42):
     """Runs Pygame visual rollout loop for each model for max_seconds."""
     if not models:
         print("[ERROR] No valid models to visualize!")
@@ -444,30 +467,52 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
     print(f"🎮 STARTING MULTI-MODEL VISUALIZER ({len(models)} MODELS FOUND)")
     print(f"  Duration per model : {max_seconds:.1f} seconds")
     print(f"  Step delay         : {step_delay_ms} ms (~{1000 // step_delay_ms} FPS)")
-    print(f"  Map                : {map_name} | Agents: {num_agents}")
+    if map_name or num_agents:
+        print(f"  Explicit Override  : Map={map_name} | Agents={num_agents}")
+    else:
+        print(f"  Dynamic Env Config : Auto-detecting per model")
     print(f"  Exploration        : {explore} | Evaluation Seed: {seed}")
     print("="*75)
-
-    def env_creator_fn():
-        return OvercookedMARL(
-            render_mode="human",
-            map_path=map_name,
-            num_fixed_agents=num_agents,
-            verbose=False,
-            featurized_obs=True
-        )
-
-    try:
-        register_env("overcooked_marl_parallel", lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
-    except Exception:
-        pass
 
     if not ray.is_initialized():
         ray.init(ignore_reinit_error=True, include_dashboard=False)
 
-    env = ParallelEnvToMultiAgent(env_creator_fn())
-    max_steps = int(max_seconds * (1000.0 / step_delay_ms))
+    active_env = None
+    active_map = None
+    active_agents = None
 
+    def get_or_create_env(target_map, target_agents):
+        nonlocal active_env, active_map, active_agents
+        if active_env is not None and active_map == target_map and active_agents == target_agents:
+            return active_env
+
+        if active_env is not None:
+            try:
+                active_env.close()
+            except Exception:
+                pass
+            active_env = None
+
+        def env_creator_fn():
+            return OvercookedMARL(
+                render_mode="human",
+                map_path=target_map,
+                num_fixed_agents=target_agents,
+                verbose=False,
+                featurized_obs=True
+            )
+
+        try:
+            register_env("overcooked_marl_parallel", lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
+        except Exception:
+            pass
+
+        active_env = ParallelEnvToMultiAgent(env_creator_fn())
+        active_map = target_map
+        active_agents = target_agents
+        return active_env
+
+    max_steps = int(max_seconds * (1000.0 / step_delay_ms))
     current_model_idx = 0
     total_models = len(models)
 
@@ -475,6 +520,10 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
         while 0 <= current_model_idx < total_models:
             model_info = models[current_model_idx]
             cp_path = model_info["cp_path"]
+
+            m_target_map = map_name if map_name is not None else model_info.get("map", "default_map.txt")
+            m_target_agents = num_agents if num_agents is not None else model_info.get("num_agents", 1)
+            env = get_or_create_env(m_target_map, m_target_agents)
 
             log_dir = project_root / "experiments" / "logs" / "vision_analysis" / "models_20s"
             log_dir.mkdir(parents=True, exist_ok=True)
@@ -493,7 +542,7 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
                 f.write(f"Checkpoint    : {cp_path}\n")
                 f.write(f"Hyperparams   : LR={model_info['lr']} | Gamma={model_info['gamma']} | Entropy={model_info['entropy']}\n")
                 f.write(f"Train Score   : {model_info['reward_str']}\n")
-                f.write(f"Evaluation    : Map={map_name} | Max Duration={max_seconds:.1f}s | Seed={seed}\n")
+                f.write(f"Evaluation    : Map={m_target_map} | Agents={m_target_agents} | Max Duration={max_seconds:.1f}s | Seed={seed}\n")
                 f.write("=" * 80 + "\n\n")
 
             os.environ["OVERCOOKED_VISION_LOG"] = str(log_filepath)
@@ -501,6 +550,7 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
             print(f"\n" + "-"*70)
             print(f"▶ [{current_model_idx + 1}/{total_models}] Loading Model Trial: {model_info['trial_id']}")
             print(f"  Checkpoint : {cp_path}")
+            print(f"  Map/Agents : {m_target_map} | {m_target_agents} agent(s)")
             print(f"  Hyperparams: LR={model_info['lr']} | Gamma={model_info['gamma']} | Entropy={model_info['entropy']}")
             print(f"  Train Score: {model_info['reward_str']}")
             print(f"  Log File   : {log_filepath.name}")
@@ -585,11 +635,14 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
                 actions = {}
                 for agent_id, obs in obs_dict.items():
                     try:
+                        policy_id = f"policy_{agent_id}"
                         if algorithm is not None:
-                            raw_action = algorithm.compute_single_action(obs, policy_id=f"policy_{agent_id}", explore=explore)
+                            try:
+                                raw_action = algorithm.compute_single_action(obs, policy_id=policy_id, explore=explore)
+                            except Exception:
+                                raw_action = algorithm.compute_single_action(obs, policy_id="policy_agent_0", explore=explore)
                         else:
-                            policy_id = f"policy_{agent_id}"
-                            pol = policies.get(policy_id) or next(iter(policies.values()))
+                            pol = policies.get(policy_id) or policies.get("policy_agent_0") or next(iter(policies.values()))
                             res = pol.compute_single_action(obs, explore=explore)
                             raw_action = res[0]
 
@@ -675,7 +728,11 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
                 current_model_idx += 1
 
     finally:
-        env.close()
+        if active_env is not None:
+            try:
+                active_env.close()
+            except Exception:
+                pass
         if ray.is_initialized():
             ray.shutdown()
         print("\n[FINISHED] Multi-Model visualization completed cleanly.")
@@ -693,8 +750,8 @@ def main():
     parser.add_argument("--summary", type=str, default=None, help="Path to summary markdown file (e.g. PPO_Marl_20261006_215831_summary.md)")
     parser.add_argument("--sort", type=str, choices=["rank", "reward", "trial"], default="rank", help="Sorting criteria for models (default: rank)")
     parser.add_argument("--top-n", type=int, default=None, help="Limit visualization to top N models")
-    parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (default: default_map.txt)")
-    parser.add_argument("--num-agents", type=int, default=1, help="Number of agents (default: 1)")
+    parser.add_argument("--map", type=str, default=None, help="Map name override (default: auto-detected per model)")
+    parser.add_argument("--num-agents", type=int, default=None, help="Number of agents override (default: auto-detected per model)")
     parser.add_argument("--deterministic", action="store_true", help="Disable exploration sampling")
     args = parser.parse_args()
 
@@ -702,6 +759,7 @@ def main():
     if not ray_results_dir.exists():
         print(f"[ERROR] Specified ray_results directory does not exist: {ray_results_dir}")
         sys.exit(1)
+
 
     summary_file = Path(args.summary).resolve() if args.summary else None
 
@@ -716,14 +774,14 @@ def main():
         sys.exit(1)
 
     # 2. Print discovered models table in console
-    print("\n" + "="*80)
+    print("\n" + "="*85)
     print(f"📋 DISCOVERED {len(models)} TRAINED MODELS FOR VISUALIZATION:")
-    print("="*80)
-    print(f"{'Index':<7} | {'Rank':<6} | {'Trial ID':<15} | {'LR':<8} | {'Gamma':<6} | {'Entropy':<7} | {'Train Reward':<12}")
-    print("-" * 80)
+    print("="*85)
+    print(f"{'Index':<6} | {'Rank':<6} | {'Trial ID':<15} | {'Map':<16} | {'Ag':<3} | {'LR':<8} | {'Gamma':<6} | {'Entropy':<7} | {'Train Reward':<12}")
+    print("-" * 85)
     for idx, m in enumerate(models):
-        print(f"{idx+1:<7} | #{m['rank']:<5} | {m['trial_id']:<15} | {m['lr']:<8} | {m['gamma']:<6} | {m['entropy']:<7} | {m['reward_str']:<12}")
-    print("="*80 + "\n")
+        print(f"{idx+1:<6} | #{m['rank']:<5} | {m['trial_id']:<15} | {m.get('map','N/A'):<16} | {m.get('num_agents','N/A'):<3} | {m['lr']:<8} | {m['gamma']:<6} | {m['entropy']:<7} | {m['reward_str']:<12}")
+    print("="*85 + "\n")
 
     # 3. Run visualizer loop
     run_models_visualizer(
@@ -734,6 +792,7 @@ def main():
         map_name=args.map,
         explore=not args.deterministic
     )
+
 
 
 if __name__ == "__main__":
