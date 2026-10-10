@@ -51,9 +51,9 @@ torch, nn = try_import_torch()
 
 
 HYPERPARAMETER_GRID = {
-    "lr": [3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
+    "lr": [1e-4, 3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
     "gamma": [0.98],               # High-performing discount factors
-    "entropy_coeff": [0.02, 0.03, 0.04],       # High-performing entropy range for exploration
+    "entropy_coeff": [0.015, 0.02, 0.025, 0.03],       # High-performing empirical sweet spot (0.04 collapsed)
     "train_batch_size": [4000],    # Optimal batch sizes for trajectory collection
     "sgd_minibatch_size": [256],         # PPO minibatch size
     "update_epochs": [12],               # Top-performing update epochs (12 epochs)
@@ -133,7 +133,7 @@ def parse_args():
     parser.add_argument("--gpus", type=float, default=1.0, help="Total GPUs to allocate across concurrent trials (default: 1.0)")
     parser.add_argument("--seed", type=int, default=None, help="Override random seed")
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="Checkpoint frequency in iterations (default: 10)")
-    parser.add_argument("--keep-checkpoints-num", type=int, default=5, help="Number of recent checkpoints to keep (default: 5)")
+    parser.add_argument("--keep-checkpoints-num", type=int, default=20, help="Number of recent checkpoints to keep (default: 20)")
     parser.add_argument("--resume", type=str, default="AUTO", choices=["AUTO", "LOCAL", "FALSE"], help="Auto-resume crashed trials (default: AUTO)")
     parser.add_argument("--concurrent", type=int, default=2, help="Number of concurrent trials to train in parallel (default: 2)")
     return parser.parse_args()

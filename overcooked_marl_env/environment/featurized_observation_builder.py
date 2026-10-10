@@ -248,12 +248,25 @@ class FeaturizedObservationBuilder:
                     if sorted(plate_ings) == sorted(rec1_req):
                         is_holding_target = 1.0
                     else:
-                        # Check if has any ingredient not in any pending recipe
-                        all_pending_reqs = set()
-                        for pr in pending_recipes:
-                            all_pending_reqs.update(self._get_recipe_ingredients(pr, recipe_mgr))
-                        if any(pi not in all_pending_reqs for pi in plate_ings):
-                            is_holding_invalid = 1.0
+                        # Check if plate completes ANY pending recipe in HUD queue
+                        is_valid_pending = False
+                        if recipe_mgr:
+                            is_val, r_name, _ = recipe_mgr.validate_delivery(plate_ings)
+                            if is_val and r_name in pending_recipes:
+                                is_holding_target = 0.8
+                                is_valid_pending = True
+                        if not is_valid_pending:
+                            # Check if has any ingredient not in any pending recipe,
+                            # OR if it forms a recipe that was already delivered and is no longer pending
+                            all_pending_reqs = set()
+                            for pr in pending_recipes:
+                                all_pending_reqs.update(self._get_recipe_ingredients(pr, recipe_mgr))
+                            if any(pi not in all_pending_reqs for pi in plate_ings):
+                                is_holding_invalid = 1.0
+                            elif recipe_mgr:
+                                is_val, r_name, _ = recipe_mgr.validate_delivery(plate_ings)
+                                if is_val and r_name not in pending_recipes:
+                                    is_holding_invalid = 1.0
             self_state[19] = is_holding_target
             self_state[20] = is_holding_invalid
             self_state[21] = dish_ratio
@@ -353,6 +366,16 @@ class FeaturizedObservationBuilder:
             if rec_1:
                 # If holding a dish, find what ingredients are still missing
                 held_ings = [i.lower() for i in holding_item.get("ingredients", [])] if is_plate(holding_item) else []
+                if not held_ings:
+                    # Check if there is a partial plate on a counter that belongs to rec1
+                    for c_pos in counters_with_dishes:
+                        c_iid = ground_instances.get(c_pos)
+                        c_plate = item_instances.get(c_iid)
+                        if c_plate and is_plate(c_plate):
+                            c_ings = [i.lower() for i in c_plate.get("ingredients", [])]
+                            if all(ci in rec1_req for ci in c_ings) and len(c_ings) < len(rec1_req):
+                                held_ings = c_ings
+                                break
                 missing = [ing for ing in rec1_req if ing not in held_ings]
                 needed_ings_rec1 = missing if missing else rec1_req
             for ing_idx, ing_name in enumerate(needed_ings_rec1[:4]):
@@ -396,22 +419,102 @@ class FeaturizedObservationBuilder:
 
             # Goal-Directed Appliance Beacon (2 dims: 22:24)
             beacon_target = None
-            if is_holding_target and delivery_stations:
+            if is_holding_target > 0.0 and delivery_stations:
+                # 1. Holding deliverable dish -> Beacon to delivery station
                 beacon_target = min(delivery_stations, key=lambda d: abs(d[0] - pos[0]) + abs(d[1] - pos[1]))
-            elif holding_item and not is_ready(holding_item) and processing_appliances:
-                # Holding raw ingredient: point to closest available processing appliance
+            elif holding_item and not is_ready(holding_item) and not is_plate(holding_item) and processing_appliances:
+                # 2. Holding raw ingredient -> Beacon to nearest cutting board / appliance
                 beacon_target = min(processing_appliances, key=lambda a: abs(a[0] - pos[0]) + abs(a[1] - pos[1]))
+            elif holding_item and is_ready(holding_item):
+                # 3. Holding ready ingredient -> Beacon to plate needing this ingredient, or plate dispenser
+                ing_name = holding_item.get("name", "").lower()
+                plate_targets = []
+                for c_pos in counters_with_dishes:
+                    c_iid = ground_instances.get(c_pos)
+                    c_plate = item_instances.get(c_iid)
+                    if c_plate and is_plate(c_plate):
+                        p_ings = [i.lower() for i in c_plate.get("ingredients", [])]
+                        if ing_name not in p_ings:
+                            for pr in pending_recipes:
+                                pr_req = self._get_recipe_ingredients(pr, recipe_mgr)
+                                if ing_name in pr_req and all(pi in pr_req for pi in p_ings):
+                                    plate_targets.append(c_pos)
+                                    break
+                if plate_targets:
+                    beacon_target = min(plate_targets, key=lambda p: abs(p[0] - pos[0]) + abs(p[1] - pos[1]))
+                elif plate_dispensers:
+                    beacon_target = min(plate_dispensers, key=lambda p: abs(p[0] - pos[0]) + abs(p[1] - pos[1]))
             elif is_plate(holding_item):
-                # Holding plate: point to closest appliance with ready food, or ready counter
+                # 4. Holding plate (incomplete) -> Beacon to ready ingredient on board or counter, or empty counter
+                plate_ings = [i.lower() for i in holding_item.get("ingredients", [])]
                 ready_sources = []
                 for app in processing_appliances:
                     gid = ground_instances.get((app[0], app[1]))
                     if gid is not None:
                         gitem = item_instances.get(gid)
                         if gitem is not None and is_ready(gitem):
-                            ready_sources.append(app)
+                            gname = gitem.get("name", "").lower()
+                            if gname not in plate_ings and (not rec1_req or gname in rec1_req):
+                                ready_sources.append((app[0], app[1]))
+                for c_pos in counters_with_ready_ing:
+                    gid = ground_instances.get(c_pos)
+                    if gid is not None:
+                        gitem = item_instances.get(gid)
+                        if gitem is not None and is_ready(gitem):
+                            gname = gitem.get("name", "").lower()
+                            if gname not in plate_ings and (not rec1_req or gname in rec1_req):
+                                ready_sources.append(c_pos)
                 if ready_sources:
-                    beacon_target = min(ready_sources, key=lambda a: abs(a[0] - pos[0]) + abs(a[1] - pos[1]))
+                    beacon_target = min(ready_sources, key=lambda s: abs(s[0] - pos[0]) + abs(s[1] - pos[1]))
+                elif empty_counters:
+                    beacon_target = min(empty_counters, key=lambda c: abs(c[0] - pos[0]) + abs(c[1] - pos[1]))
+            elif holding_item is None:
+                # 5. Hands empty -> Find what needs immediate action
+                # a) Is there a completed deliverable dish on a counter?
+                completed_counter_dishes = []
+                for c_pos in counters_with_dishes:
+                    c_iid = ground_instances.get(c_pos)
+                    c_plate = item_instances.get(c_iid)
+                    if c_plate and is_plate(c_plate):
+                        p_ings = [i.lower() for i in c_plate.get("ingredients", [])]
+                        if recipe_mgr:
+                            is_val, r_name, _ = recipe_mgr.validate_delivery(p_ings)
+                            if is_val and r_name in pending_recipes:
+                                completed_counter_dishes.append(c_pos)
+                if completed_counter_dishes:
+                    beacon_target = min(completed_counter_dishes, key=lambda c: abs(c[0] - pos[0]) + abs(c[1] - pos[1]))
+                else:
+                    # b) Is there a ready ingredient on chopping board or counter?
+                    ready_on_board = []
+                    for app in processing_appliances:
+                        gid = ground_instances.get((app[0], app[1]))
+                        if gid is not None:
+                            gitem = item_instances.get(gid)
+                            if gitem and is_ready(gitem):
+                                ready_on_board.append((app[0], app[1]))
+                    if ready_on_board:
+                        if plate_dispensers:
+                            beacon_target = min(plate_dispensers, key=lambda p: abs(p[0] - pos[0]) + abs(p[1] - pos[1]))
+                        else:
+                            beacon_target = min(ready_on_board, key=lambda b: abs(b[0] - pos[0]) + abs(b[1] - pos[1]))
+                    else:
+                        # c) Is there an item on board that needs cutting?
+                        uncut_on_board = []
+                        for app in processing_appliances:
+                            gid = ground_instances.get((app[0], app[1]))
+                            if gid is not None:
+                                gitem = item_instances.get(gid)
+                                if gitem and not is_ready(gitem):
+                                    uncut_on_board.append((app[0], app[1]))
+                        if uncut_on_board:
+                            beacon_target = min(uncut_on_board, key=lambda b: abs(b[0] - pos[0]) + abs(b[1] - pos[1]))
+                        elif needed_ings_rec1:
+                            # d) Go to dispenser of first missing ingredient
+                            first_needed = needed_ings_rec1[0]
+                            disp_list = dispensers_by_type.get(first_needed, [])
+                            if disp_list:
+                                beacon_target = min(disp_list, key=lambda d: abs(d[0] - pos[0]) + abs(d[1] - pos[1]))
+
             if beacon_target is not None:
                 appliance_and_flow_state[22] = (beacon_target[0] - pos[0]) / max(1, W - 1)
                 appliance_and_flow_state[23] = (beacon_target[1] - pos[1]) / max(1, H - 1)

@@ -164,3 +164,60 @@ Ao comparar a recompensa de **preparação intermediária** com o ganho de **ent
   5. [`overcooked_marl_env/env.py`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/env.py): No `step()`, após a resolução de movimento (Step 4), aplica `calculate_step_shaping` diretamente nas recompensas do agente.
   6. [`overcooked_marl_env/tests/unit/test_extensibility_architecture.py`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/tests/unit/test_extensibility_architecture.py): Adicionados testes unitários validando as novas recompensas de receitas e a conservação de potencial do `calculate_step_shaping`.
 
+---
+
+## 7. Diagnóstico Empírico das Telemetrias de 400 Steps (Fase 2) e Overhaul Arquitetural
+
+* **Data da Análise e Resolução:** 10/10/2026
+* **Arquivos Analisados:**
+  - `experiments/logs/vision_analysis/visualization_summary.md`
+  - `experiments/logs/vision_analysis/models_20s/model_0_trial_8ddbd_00000.log`
+  - `experiments/logs/vision_analysis/models_20s/model_1_trial_8ddbd_00001.log`
+  - `experiments/logs/vision_analysis/models_20s/model_2_trial_8ddbd_00002.log`
+  - `experiments/logs/latest_summary.md`
+
+### 7.1. Patologias Empíricas Identificadas
+1. **The Counter Farming Trap (Farming Intermediário de Pratos):**
+   - No trial `8ddbd_00000` (entropy 0.02), o agente acumulou +675 pts nos primeiros 400 steps, mas apenas **1 prato** (`SIMPLE_SALAD`) foi entregue.
+   - O agente montou 5 pratos com alface (+58 a +62 pts por montagem) e abandonou 4 deles em balcões livres `(5,2)`, `(5,4)` e `(2,2)` sem jamais levá-los à entrega, explorando a recompensa imediata de combinação sem concluir o ciclo.
+2. **Ponto Cego e Abandono Pós-Montagem para Receitas Complexas:**
+   - Para a 2ª receita (`GARDEN_SALAD` = Alface + Tomate), o agente picou tomate e completou o prato no balcão `(5,4)` (step 191). No step 198, pegou o prato pronto, mas no step 199 largou-o de volta na bancada sem qualquer penalidade.
+   - Mais tarde (step 255), ao tentar esvaziar a cozinha, pegou um prato antigo de alface abandonado e entregou-o, sofrendo penalidade de `-20.0` por receita não solicitada (`unrequested_delivery`), entrando em loop defensivo de congelamento.
+3. **Colapso com Alta Entropia:**
+   - Trial `8ddbd_00002` (`entropy_coeff = 0.04`) colapsou para +35.26 pts com 0 entregas, comprovando que `0.04` destrói trajetórias longas coordenadas.
+
+---
+
+### 7.2. Melhorias Implementadas no Código
+
+1. **Rebalanceamento de Recompensas e Anti-Exploitation:**
+   - [`RewardValues` em `reward_shaper.py`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/mechanics/reward_shaper.py):
+     - Reduzidas recompensas intermediárias exploráveis: `progress_pickup_needed: 3.0`, `place_on_chop: 3.0`, `chop_cut: 0.5`, `chop_completed: 5.0`, `progress_combine_ready: 8.0`.
+     - Incrementadas recompensas de finalização: `plate_complete_bonus: 20.0`, `progress_pickup_complete_plate: 10.0`.
+     - Adicionadas penalidades contra desperdício e farming: `abandon_dish_penalty: -10.0`, `unneeded_pickup_penalty: -2.0`, `counter_clutter_penalty: -1.0`, `unrequested_delivery_penalty: -10.0`.
+   - Prevenção de duplicação: `_check_ingredient_already_processed` agora ignora o próprio item recém-pego e impede que o agente retire ingredientes repetidos dos dispensers quando já existem instâncias suficientes na cozinha.
+
+2. **Potential-Based Shaping Bidirecional ($\Phi(s)$):**
+   - Agente segurando prato pronto com receita pendente: guiado em direção à estação de entrega ($\Delta \Phi = \text{dist}_{old} - \text{dist}_{new}$).
+   - Agente com as mãos vazias e prato pronto esquecido em bancada: guiado em direção ao balcão com o prato pronto para resgatá-lo e entregá-lo.
+
+3. **Mecânica de Bancadas e Estações:**
+   - [`CounterHandler`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/mechanics/interactions/counter_handler.py): Aplica `abandon_dish_penalty` (-10.0) se o agente depositar um prato pronto válido em uma bancada em vez de entregá-lo. Concede `progress_pickup_complete_plate` (+10.0) ao resgatá-lo.
+   - [`DeliveryHandler`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/mechanics/interactions/delivery_handler.py): Penalidade calibrada para `-10.0` uniforme tanto no retorno local quanto global para entregas não solicitadas.
+   - [`DispenserHandler`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/mechanics/interactions/dispenser_handler.py): Cálculo de recompensa de progresso desacoplado da instância em mãos para garantir consistência perfeita no lifecycle de preparo.
+
+4. **Hierarquia Observacional no Vetor 150D:**
+   - [`FeaturizedObservationBuilder`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/environment/featurized_observation_builder.py):
+     - **Bloco 1 (Self State):** `is_holding_target` estendido para qualquer receita pendente no HUD (1.0 para `rec_1`, 0.8 para `rec_2`/`rec_3`). `is_holding_invalid = 1.0` se segurar receita já entregue ou incorreta.
+     - **Bloco 5 (Attentive Dispensers):** Dispensers observam pratos parciais nos balcões e orientam o agente a buscar apenas os ingredientes faltantes.
+     - **Bloco 6 (Appliance Beacon):** Arquitetura hierárquica em 5 níveis (prato pronto $\to$ entrega; ingrediente cru $\to$ tábua; ingrediente pronto $\to$ prato no balcão/dispenser de prato; prato incompleto $\to$ ingrediente pronto; mãos vazias $\to$ prato pronto no balcão / ingrediente na tábua / dispenser necessário). Dimensões mantidas estritamente no vetor 150D.
+
+5. **Ajuste de Hiperparâmetros PPO:**
+   - [`train_ppo.py`](file:///home/thaiswsl/NewOvercookedEnv/experiments/training/train_ppo.py): Espaço de busca de `entropy_coeff` ajustado para `[0.02, 0.025, 0.03]`, eliminando a instabilidade observada com 0.04.
+
+---
+
+### 7.3. Validação com Testes Unitários
+* **Comando executado:** `venv/bin/python -m unittest discover -s overcooked_marl_env/tests`
+* **Resultado:** **196/196 testes aprovados com sucesso (0 falhas, 0 erros em 0.154s).**
+

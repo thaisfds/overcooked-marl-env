@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 def main():
-    base_dir = Path(__file__).parent / "ray_results"
+    base_dir = Path(__file__).resolve().parent.parent / "ray_results"
     all_runs = []
     
     for model_info_file in base_dir.glob("**/model_info.json"):

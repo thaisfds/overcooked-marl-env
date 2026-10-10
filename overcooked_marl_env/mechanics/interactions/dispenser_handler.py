@@ -129,13 +129,13 @@ class IngredientDispenserHandler(StationHandler):
         ingredient_name = dispenser_data if isinstance(dispenser_data, str) else str(dispenser_data)
         ingredient = self.item_manager.create_ingredient_by_name(ingredient_name)
 
-        item_instance = self.create_item_instance(ingredient, game_state)
-        game_state["agent_holding_instance"][agent_id] = item_instance
-
-        # Calculate progress reward
+        # Calculate progress reward before registering instance in hands
         progress_reward = self.reward_shaper._calculate_progress_reward(
             'pickup_ingredient', ingredient, None, game_state
         )
+
+        item_instance = self.create_item_instance(ingredient, game_state)
+        game_state["agent_holding_instance"][agent_id] = item_instance
         total_reward = self.rewards.pickup + progress_reward
         if total_reward > 0:
             ingredient["shaping_reward_accumulated"] = (

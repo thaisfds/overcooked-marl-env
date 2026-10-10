@@ -7,6 +7,7 @@ from typing import Dict, Tuple, Optional
 from ...core.items import (
     ItemType, is_ready, is_plate, add_ingredient_to_plate, get_ingredient_display_name
 )
+from ...core.recipes import OrderQueue
 from .base_station import StationHandler
 
 
@@ -132,6 +133,19 @@ class CounterHandler(StationHandler):
                 reward += self.rewards.useless_cycle_penalty
                 if verbose:
                     print(f"  WARNING: Useless pickup/place cycle detected! Penalty: {self.rewards.useless_cycle_penalty}")
+
+            # Penalize abandoning a completed dish that matches a pending recipe
+            if is_carrying_dish and carrying_item.get("ingredients"):
+                is_valid, recipe_name, _ = self.recipe_manager.validate_delivery(carrying_item.get("ingredients", []))
+                pending_recipes = OrderQueue.get_pending(
+                    game_state.get("recipe_order", []),
+                    game_state.get("delivered_recipes", [])
+                )
+                if is_valid and recipe_name in pending_recipes:
+                    abandon_pen = getattr(self.rewards, "abandon_dish_penalty", -10.0)
+                    reward += abandon_pen
+                    if verbose:
+                        print(f"  WARNING: Abandoned completed dish '{recipe_name}' on counter! Penalty: {abandon_pen}")
 
             if total_counter_items > 3:
                 excess_items = total_counter_items - 3

@@ -56,9 +56,9 @@ class DeliveryHandler(StationHandler):
 
         # Must match a recipe currently requested in pending HUD orders
         if recipe_name not in pending_orders:
-            unrequested_penalty = -abs(recipe_reward)
+            unrequested_penalty = getattr(self.rewards, "unrequested_delivery_penalty", -10.0)
             if verbose:
-                print(f"  Recipe {recipe_name} is not in pending HUD orders! Wiping dish points (penalty: {unrequested_penalty:.1f})")
+                print(f"  Recipe {recipe_name} is not in pending HUD orders! (penalty: {unrequested_penalty:.1f})")
 
             # Delete unrequested plate to clear hands, but do NOT count as successful delivery
             self.delete_item_instance(carrying_instance_id, game_state)
