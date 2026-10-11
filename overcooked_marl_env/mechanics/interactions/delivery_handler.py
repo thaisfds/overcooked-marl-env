@@ -99,8 +99,26 @@ class DeliveryHandler(StationHandler):
             if verbose:
                 print(f"  ALL DISHES DELIVERED! Episode Victory Bonus: +{episode_complete_bonus}")
 
-        total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus
-        global_reward_bonus = recipe_reward + order_bonus + delivery_bonus + episode_complete_bonus
+        # Multi-agent cooperative contribution check
+        contributors = set(carrying_item.get("contributors", [])) | {agent_id}
+        num_agents = len(game_state.get("agent_pos", {}))
+
+        if num_agents > 1:
+            if len(contributors) > 1:
+                cooperative_bonus = getattr(self.rewards, "cooperative_delivery_bonus", 50.0)
+                total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus + cooperative_bonus
+                global_reward_bonus = recipe_reward + order_bonus + delivery_bonus + episode_complete_bonus + cooperative_bonus
+                if verbose:
+                    print(f"  COOPERATIVE DELIVERY! Contributors: {list(contributors)} (+{cooperative_bonus} bonus shared with team)")
+            else:
+                solo_bonus = getattr(self.rewards, "solo_delivery_bonus", 0.0)
+                total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus + solo_bonus
+                global_reward_bonus = 0.0
+                if verbose:
+                    print(f"  SOLO DELIVERY by {agent_id}! Team global reward bonus is 0 (non-contributing agents get no free delivery credit)")
+        else:
+            total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus
+            global_reward_bonus = recipe_reward + order_bonus + delivery_bonus + episode_complete_bonus
 
         if verbose:
             if is_correct_order:

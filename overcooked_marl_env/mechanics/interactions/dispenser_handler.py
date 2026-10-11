@@ -27,6 +27,7 @@ class PlateDispenserHandler(StationHandler):
         # Scenario 1: Pick up empty plate
         if not carrying_item:
             plate = create_plate()
+            plate["contributors"] = [agent_id]
             plate_instance = self.create_item_instance(plate, game_state)
             game_state["agent_holding_instance"][agent_id] = plate_instance
 
@@ -52,6 +53,8 @@ class PlateDispenserHandler(StationHandler):
         elif carrying_item and is_ready(carrying_item):
             plate = create_plate()
             plate = add_ingredient_to_plate(plate, carrying_item["name"], carrying_item)
+            if agent_id not in plate.get("contributors", []):
+                plate.setdefault("contributors", []).append(agent_id)
             plate_instance = self.create_item_instance(plate, game_state)
 
             # Delete the ingredient
@@ -128,6 +131,7 @@ class IngredientDispenserHandler(StationHandler):
 
         ingredient_name = dispenser_data if isinstance(dispenser_data, str) else str(dispenser_data)
         ingredient = self.item_manager.create_ingredient_by_name(ingredient_name)
+        ingredient["contributors"] = [agent_id]
 
         # Calculate progress reward before registering instance in hands
         progress_reward = self.reward_shaper._calculate_progress_reward(

@@ -230,7 +230,9 @@ def create_ingredient(name, cuts_needed=DEFAULT_CUTS_NEEDED, stages=None):
         "current_stage_idx": 0,
         "combinable": is_instant,
         "base_color": base_color,
-        "shaping_reward_accumulated": 0.0
+        "shaping_reward_accumulated": 0.0,
+        "contributors": [],
+        "last_placed_by": None
     }
 
 
@@ -251,7 +253,9 @@ def create_plate(ingredients=None):
         "state": ItemState.EMPTY if not ing_list else ItemState.BUILDING,
         "ingredients": ing_list,
         "color": (240, 240, 240),  # Light gray for plate
-        "shaping_reward_accumulated": 0.0
+        "shaping_reward_accumulated": 0.0,
+        "contributors": [],
+        "last_placed_by": None
     }
 
 
@@ -463,9 +467,15 @@ def add_ingredient_to_plate(plate, ingredient_name, ingredient_item=None):
     
     if "shaping_reward_accumulated" not in plate:
         plate["shaping_reward_accumulated"] = 0.0
+
+    if "contributors" not in plate:
+        plate["contributors"] = []
         
     if ingredient_item and isinstance(ingredient_item, dict):
         plate["shaping_reward_accumulated"] += ingredient_item.get("shaping_reward_accumulated", 0.0)
+        for c in ingredient_item.get("contributors", []):
+            if c not in plate["contributors"]:
+                plate["contributors"].append(c)
     
     # Update state
     if plate["state"] == ItemState.EMPTY:

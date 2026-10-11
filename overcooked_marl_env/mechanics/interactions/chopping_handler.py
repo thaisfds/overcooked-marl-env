@@ -34,6 +34,10 @@ class ChoppingBoardHandler(StationHandler):
 
         # Scenario 1: Place ingredient on chopping board / station
         if carrying_item and can_process(carrying_item, station=self.station_char) and not ground_item:
+            if agent_id not in carrying_item.get("contributors", []):
+                carrying_item.setdefault("contributors", []).append(agent_id)
+            carrying_item["last_placed_by"] = agent_id
+
             game_state["ground_instances"][(ix, iy)] = carrying_instance_id
             del game_state["agent_holding_instance"][agent_id]
 
@@ -65,6 +69,8 @@ class ChoppingBoardHandler(StationHandler):
                 game_state["action_history"][agent_id].pop(0)
 
             updated_item = advance_processing(ground_item, station=self.station_char)
+            if agent_id not in updated_item.get("contributors", []):
+                updated_item.setdefault("contributors", []).append(agent_id)
 
             # Check for repetition penalty
             repetition_penalty = 0.0
@@ -107,6 +113,10 @@ class ChoppingBoardHandler(StationHandler):
 
         # Scenario 3: Pick up processed ingredient from chopping board / station
         elif not carrying_item and ground_item and (is_ready(ground_item) or not can_process(ground_item, station=self.station_char)):
+            if agent_id not in ground_item.get("contributors", []):
+                ground_item.setdefault("contributors", []).append(agent_id)
+            ground_item["last_placed_by"] = None
+
             progress_reward = 0.0
             if is_ready(ground_item):
                 progress_reward = self.reward_shaper._calculate_progress_reward(
@@ -136,6 +146,8 @@ class ChoppingBoardHandler(StationHandler):
                 return self.rewards.invalid, 0.0
 
             updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"], ground_item)
+            if agent_id not in updated_plate.get("contributors", []):
+                updated_plate.setdefault("contributors", []).append(agent_id)
 
             # Delete ingredient from chopping board
             self.delete_item_instance(ground_instance_id, game_state)

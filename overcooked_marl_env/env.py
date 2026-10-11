@@ -154,6 +154,7 @@ class OvercookedMARL(ParallelEnv):
         # Ensure rewards and position histories are reset to zero
         self.state["accumulated_rewards"] = {agent: 0.0 for agent in self.possible_agents}
         self.state["last_step_rewards"] = {agent: 0.0 for agent in self.possible_agents}
+        self.state["inactivity_counters"] = {agent: 0 for agent in self.possible_agents}
         self.position_history = {agent: [] for agent in self.possible_agents}
         
         observations = self._get_obs()
@@ -244,6 +245,21 @@ class OvercookedMARL(ParallelEnv):
         # Distribute the Accumulated Global Reward
         if global_reward > 0:
             for agent_id in self.agents: rewards[agent_id] += global_reward
+
+        # Inactivity Penalty Tracking (Penalize agents that idle or wander empty-handed)
+        inactivity_penalty = getattr(self.interaction_handler.rewards, 'inactivity_penalty', -0.05)
+        inactivity_threshold = getattr(self.interaction_handler.rewards, 'inactivity_threshold', 40)
+        inactivity_counters = self.state.setdefault("inactivity_counters", {agent: 0 for agent in self.possible_agents})
+
+        for agent_id in self.agents:
+            is_holding = self.state["agent_holding_instance"].get(agent_id) is not None
+            action = actions.get(agent_id, None)
+            if is_holding or action == 4:
+                inactivity_counters[agent_id] = 0
+            else:
+                inactivity_counters[agent_id] += 1
+                if inactivity_counters[agent_id] > inactivity_threshold:
+                    rewards[agent_id] += inactivity_penalty
                 
         # State Update and Episode Conclusion
         
@@ -527,7 +543,8 @@ class OvercookedMARL(ParallelEnv):
             "next_item_id": 0,           # Counter to generate unique item IDs
             "agent_orientation": {agent: (0, -1) for agent in self.possible_agents},  # All agents start facing North
             "accumulated_rewards": {agent: 0.0 for agent in self.possible_agents},
-            "last_step_rewards": {agent: 0.0 for agent in self.possible_agents}
+            "last_step_rewards": {agent: 0.0 for agent in self.possible_agents},
+            "inactivity_counters": {agent: 0 for agent in self.possible_agents}
         }
         return state
 

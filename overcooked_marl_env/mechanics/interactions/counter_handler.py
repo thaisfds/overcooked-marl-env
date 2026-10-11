@@ -63,6 +63,8 @@ class CounterHandler(StationHandler):
                 return self.rewards.invalid, 0.0
 
             updated_plate = add_ingredient_to_plate(ground_item, carrying_item["name"], carrying_item)
+            if agent_id not in updated_plate.get("contributors", []):
+                updated_plate.setdefault("contributors", []).append(agent_id)
 
             self.delete_item_instance(carrying_instance_id, game_state)
             del game_state["agent_holding_instance"][agent_id]
@@ -94,6 +96,8 @@ class CounterHandler(StationHandler):
                 return self.rewards.invalid, 0.0
 
             updated_plate = add_ingredient_to_plate(carrying_item, ground_item["name"], ground_item)
+            if agent_id not in updated_plate.get("contributors", []):
+                updated_plate.setdefault("contributors", []).append(agent_id)
 
             self.delete_item_instance(ground_instance_id, game_state)
             del game_state["ground_instances"][(ix, iy)]
@@ -119,6 +123,11 @@ class CounterHandler(StationHandler):
 
         # Scenario 3: Place item on counter (if empty)
         elif carrying_item and not ground_item:
+            # Tag item with last_placed_by and contributor
+            carrying_item["last_placed_by"] = agent_id
+            if agent_id not in carrying_item.get("contributors", []):
+                carrying_item.setdefault("contributors", []).append(agent_id)
+
             game_state["ground_instances"][(ix, iy)] = carrying_instance_id
             del game_state["agent_holding_instance"][agent_id]
 
@@ -129,7 +138,9 @@ class CounterHandler(StationHandler):
             )
 
             reward = self.rewards.place
-            if is_useless_cycle:
+            if not is_useless_cycle:
+                reward += getattr(self.rewards, "handoff_place", 1.0)
+            else:
                 reward += self.rewards.useless_cycle_penalty
                 if verbose:
                     print(f"  WARNING: Useless pickup/place cycle detected! Penalty: {self.rewards.useless_cycle_penalty}")
@@ -166,6 +177,38 @@ class CounterHandler(StationHandler):
             del game_state["ground_instances"][(ix, iy)]
 
             progress_reward = 0.0
+            handoff_local_reward = 0.0
+            handoff_global_reward = 0.0
+
+            # Cooperative handoff detection:
+            # If item was placed by another agent, award cooperative handoff bonus!
+            last_placed_by = ground_item.get("last_placed_by")
+            if last_placed_by is not None and last_placed_by != agent_id:
+                # Stage identification to avoid back-and-forth handoff farming
+                if is_plate(ground_item):
+                    current_stage = ("plate", tuple(sorted(ground_item.get("ingredients", []))))
+                else:
+                    current_stage = (
+                        ground_item.get("name"),
+                        ground_item.get("state"),
+                        ground_item.get("cuts_completed", ground_item.get("cuts_done", 0))
+                    )
+
+                awarded_stages = ground_item.setdefault("handoff_stages_awarded", set())
+                if current_stage not in awarded_stages:
+                    awarded_stages.add(current_stage)
+                    coop_val = getattr(self.rewards, "cooperative_handoff", 5.0)
+                    # Split reward: local bonus for the picker, global bonus so the placer benefits too!
+                    handoff_local_reward = coop_val / 2.0
+                    handoff_global_reward = coop_val / 2.0
+                    if verbose:
+                        print(f"  COOPERATIVE HANDOFF! {agent_id} picked up item placed by {last_placed_by} (+{handoff_local_reward:.1f} local, +{handoff_global_reward:.1f} global)")
+
+            # Record this agent as contributor and clear last_placed_by
+            if agent_id not in ground_item.get("contributors", []):
+                ground_item.setdefault("contributors", []).append(agent_id)
+            ground_item["last_placed_by"] = None
+
             if is_ready(ground_item):
                 progress_reward = self.reward_shaper._calculate_progress_reward(
                     'pickup_ready', ground_item, None, game_state
@@ -180,7 +223,7 @@ class CounterHandler(StationHandler):
                     if progress_reward > 0:
                         ground_item["pickup_awarded_combo"] = current_combo
 
-            total_reward = self.rewards.pickup + progress_reward
+            total_reward = self.rewards.pickup + progress_reward + handoff_local_reward
             if total_reward > 0:
                 ground_item["shaping_reward_accumulated"] = (
                     ground_item.get("shaping_reward_accumulated", 0.0) + total_reward
@@ -189,9 +232,10 @@ class CounterHandler(StationHandler):
 
             if verbose:
                 print(f"  Picked up {get_ingredient_display_name(ground_item)} from counter (+{self.rewards.pickup}" +
-                      (f" +{progress_reward:.1f} progress" if progress_reward > 0 else "") + ")")
+                      (f" +{progress_reward:.1f} progress" if progress_reward > 0 else "") +
+                      (f" +{handoff_local_reward:.1f} handoff" if handoff_local_reward > 0 else "") + ")")
 
-            return total_reward, 0.0
+            return total_reward, handoff_global_reward
 
         # Invalid counter interaction
         if verbose:

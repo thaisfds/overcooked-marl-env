@@ -67,6 +67,14 @@ class RewardValues:
     delivery_attempt_reward: float = 0.0
     delivery_distance_max: int = 5
 
+    # Multi-Agent Cooperative Handoff & Fair Credit Assignment
+    cooperative_handoff: float = 5.0          # Reward when an agent picks up an item placed on counter by teammate
+    handoff_place: float = 1.0                # Small positive nudge when placing needed item on counter
+    cooperative_delivery_bonus: float = 50.0  # Extra team bonus when both agents contributed to a delivered recipe
+    solo_delivery_bonus: float = 0.0          # Bonus for delivering agent on solo deliveries
+    inactivity_penalty: float = -0.05         # Penalty per step when empty-handed and idle > threshold steps
+    inactivity_threshold: int = 40            # Steps before inactivity penalty kicks in
+
     # Penalties (Anti-Reward Hacking & Efficiency)
     invalid: float = -0.01
     invalid_delivery_penalty: float = -2.0
