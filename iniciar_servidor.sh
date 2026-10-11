@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Script de automação tmux para o servidor:
-# 1. Inicia o daemon do Docker (rootless) em um painel
+# 1. Inicia o daemon do Docker (rootless) no painel esquerdo via send-keys (para carregar aliases)
 # 2. Divide a tela verticalmente (lado a lado)
 # 3. Executa o treinamento (run_server_docker.sh) com os argumentos passados
 # 4. Conecta à sessão tmux
@@ -16,11 +16,17 @@ echo "=================================================="
 echo "Iniciando sessão tmux: $SESSION_NAME"
 echo "=================================================="
 
-# 1. Cria a sessão em background rodando o daemon do docker no painel esquerdo
-tmux new-session -d -s "$SESSION_NAME" -c "$PWD" 'docker-rootless-daemon-run; bash'
+# 1. Cria a sessão com terminal interativo padrão (carrega ~/.bashrc e todos os aliases)
+tmux new-session -d -s "$SESSION_NAME" -c "$PWD"
 
-# 2. Divide verticalmente (-h: lado a lado) e aguarda 3s antes de rodar o treino
-tmux split-window -h -t "$SESSION_NAME" -c "$PWD" "sleep 3 && bash run_server_docker.sh \"\$@\"; bash"
+# 2. Envia o comando para rodar o daemon do docker no painel esquerdo (.0)
+tmux send-keys -t "$SESSION_NAME.0" 'docker-rootless-daemon-run' C-m
 
-# 3. Anexa o usuário diretamente à sessão
+# 3. Divide a tela verticalmente (-h: lado a lado)
+tmux split-window -h -t "$SESSION_NAME" -c "$PWD"
+
+# 4. Envia o comando de treinamento no painel direito (.1) aguardando 6s para o daemon subir
+tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && bash run_server_docker.sh \"\$@\"" C-m
+
+# 5. Anexa o usuário diretamente à sessão para acompanhar
 tmux attach-session -t "$SESSION_NAME"

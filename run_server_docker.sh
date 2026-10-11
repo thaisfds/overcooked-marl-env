@@ -65,6 +65,19 @@ git pull
 echo "=================================================="
 echo "2. Building Docker image (overcooked_marl:latest)..."
 echo "=================================================="
+
+# Aguardar até o docker daemon responder (útil para Docker Rootless)
+if ! docker info >/dev/null 2>&1; then
+  echo "Aguardando Docker daemon inicializar o socket..."
+  for i in {1..20}; do
+    if docker info >/dev/null 2>&1; then
+      echo "Docker daemon conectado com sucesso!"
+      break
+    fi
+    sleep 1
+  done
+fi
+
 docker build -t overcooked_marl:latest .
 
 # Se nenhum argumento for passado, usar por padrão 2 agentes no tutorial.txt
