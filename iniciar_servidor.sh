@@ -25,9 +25,9 @@ tmux send-keys -t "$SESSION_NAME.0" 'docker-rootless-daemon-run' C-m
 # 3. Divide a tela verticalmente (-h: lado a lado)
 tmux split-window -h -t "$SESSION_NAME" -c "$PWD"
 
-# 4. Monta os argumentos para o treinamento (padrão: tutorial.txt com warm-start do Melhor Modelo 04)
+# 4. Monta os argumentos para o treinamento
 if [ $# -eq 0 ]; then
-  TRAIN_ARGS="--map tutorial.txt --num-agents 2 --restore-checkpoint auto"
+  TRAIN_ARGS="--map tutorial.txt --num-agents 2"
 else
   TRAIN_ARGS="$*"
 fi

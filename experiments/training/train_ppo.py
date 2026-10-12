@@ -161,31 +161,58 @@ def parse_args():
     return parser.parse_args()
 
 def resolve_restore_checkpoint(arg_val: Optional[str]) -> Optional[str]:
-    """Resolves checkpoint path directly or searches ray_results for Model 04 / top model."""
+    """Resolves checkpoint path: directly via path, or dynamically finds the best checkpoint by reward if 'auto'/'best'."""
     if not arg_val:
         return None
     val_str = str(arg_val).strip()
-    p = Path(val_str)
-    if p.exists() and (p / "rllib_checkpoint.json").exists():
-        return str(p.resolve())
     
-    search_roots = [
-        PROJECT_ROOT / "experiments" / "ray_results",
-        Path("/app/experiments/ray_results")
-    ]
-    # 1. Target specifically trial 34733_00004 (Model 04)
-    for r_dir in search_roots:
-        if r_dir.exists():
-            candidates = list(r_dir.glob("**/*34733_00004*/**/checkpoint_*"))
-            valid = [c for c in candidates if (c / "rllib_checkpoint.json").exists()]
-            if valid:
-                return str(sorted(valid, key=lambda x: str(x), reverse=True)[0].resolve())
-    # 2. General fallback: pick highest numbered checkpoint in ray_results
-    for r_dir in search_roots:
-        if r_dir.exists():
-            all_cps = [c for c in r_dir.glob("**/checkpoint_*") if (c / "rllib_checkpoint.json").exists()]
-            if all_cps:
-                return str(sorted(all_cps, key=lambda x: str(x), reverse=True)[0].resolve())
+    # 1. Caminho explícito passado pelo usuário (arquivo, pasta de checkpoint ou pasta da trial)
+    p = Path(val_str)
+    if p.exists():
+        if (p / "rllib_checkpoint.json").exists():
+            return str(p.resolve())
+        # Se for a pasta da trial, seleciona o checkpoint mais avançado dentro dela
+        sub_cps = [c for c in p.glob("**/checkpoint_*") if (c / "rllib_checkpoint.json").exists()]
+        if sub_cps:
+            return str(sorted(sub_cps, key=lambda x: str(x), reverse=True)[0].resolve())
+    
+    # 2. Resolução dinâmica para 'auto', 'best' ou 'latest' (sem nenhum ID hardcodado)
+    if val_str.lower() in ("auto", "best", "latest"):
+        search_roots = [
+            PROJECT_ROOT / "experiments" / "ray_results",
+            Path("/app/experiments/ray_results")
+        ]
+        
+        # Procura dinamicamente nos metadados de resultados (model_info.json) pelo modelo com maior avg_reward
+        all_trials_scored = []
+        for r_dir in search_roots:
+            if not r_dir.exists():
+                continue
+            for info_file in r_dir.glob("**/model_info.json"):
+                try:
+                    with open(info_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    cp = data.get("checkpoint_path")
+                    score = data.get("avg_reward")
+                    if cp and Path(cp).exists() and (Path(cp) / "rllib_checkpoint.json").exists():
+                        all_trials_scored.append((float(score) if score is not None else -float("inf"), Path(cp)))
+                except Exception:
+                    pass
+                    
+        if all_trials_scored:
+            all_trials_scored.sort(key=lambda t: t[0], reverse=True)
+            best_cp = all_trials_scored[0][1]
+            return str(best_cp.resolve())
+            
+        # Fallback dinâmico: checkpoint mais recente por data de modificação
+        all_cps = []
+        for r_dir in search_roots:
+            if r_dir.exists():
+                all_cps.extend([c for c in r_dir.glob("**/checkpoint_*") if (c / "rllib_checkpoint.json").exists()])
+        if all_cps:
+            all_cps.sort(key=lambda c: c.stat().st_mtime, reverse=True)
+            return str(all_cps[0].resolve())
+            
     return None
 
 class TrainingProgressCallback(tune.Callback):
