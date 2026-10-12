@@ -25,8 +25,15 @@ tmux send-keys -t "$SESSION_NAME.0" 'docker-rootless-daemon-run' C-m
 # 3. Divide a tela verticalmente (-h: lado a lado)
 tmux split-window -h -t "$SESSION_NAME" -c "$PWD"
 
-# 4. Envia o comando de treinamento no painel direito (.1) aguardando 6s para o daemon subir
-tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && bash run_server_docker.sh \"\$@\"" C-m
+# 4. Monta os argumentos para o treinamento (padrão: tutorial.txt com warm-start do Melhor Modelo 04)
+if [ $# -eq 0 ]; then
+  TRAIN_ARGS="--map tutorial.txt --num-agents 2 --restore-checkpoint auto"
+else
+  TRAIN_ARGS="$*"
+fi
+
+# Envia o comando no painel direito (.1) aguardando 6s para o daemon subir
+tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && bash run_server_docker.sh $TRAIN_ARGS" C-m
 
 # 5. Anexa o usuário diretamente à sessão para acompanhar
 tmux attach-session -t "$SESSION_NAME"

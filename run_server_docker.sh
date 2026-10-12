@@ -80,10 +80,10 @@ fi
 
 docker build -t overcooked_marl:latest .
 
-# Se nenhum argumento for passado, usar por padrão 2 agentes no tutorial.txt
+# Se nenhum argumento for passado, usar por padrão 2 agentes no tutorial.txt com fine-tuning warm-start
 ARGS=("$@")
 if [ ${#ARGS[@]} -eq 0 ]; then
-  ARGS=(--map tutorial.txt --num-agents 2)
+  ARGS=(--map tutorial.txt --num-agents 2 --restore-checkpoint auto)
 fi
 
 echo "=================================================="
