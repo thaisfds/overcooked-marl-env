@@ -81,6 +81,7 @@ class DeliveryHandler(StationHandler):
         # Calculate rewards
         base_reward = recipe_reward
         order_bonus = (recipe_reward * self.rewards.order_bonus_mult) if is_correct_order else 0.0
+        out_of_order_pen = 0.0 if is_correct_order else getattr(self.rewards, "out_of_order_penalty", 0.0)
 
         # Sequence complete bonus
         sequence_bonus = self.rewards.sequence_complete_bonus
@@ -106,19 +107,19 @@ class DeliveryHandler(StationHandler):
         if num_agents > 1:
             if len(contributors) > 1:
                 cooperative_bonus = getattr(self.rewards, "cooperative_delivery_bonus", 50.0)
-                total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus + cooperative_bonus
-                global_reward_bonus = recipe_reward + order_bonus + delivery_bonus + episode_complete_bonus + cooperative_bonus
+                total_reward = base_reward + order_bonus + out_of_order_pen + sequence_bonus + delivery_bonus + episode_complete_bonus + cooperative_bonus
+                global_reward_bonus = recipe_reward + order_bonus + out_of_order_pen + delivery_bonus + episode_complete_bonus + cooperative_bonus
                 if verbose:
                     print(f"  COOPERATIVE DELIVERY! Contributors: {list(contributors)} (+{cooperative_bonus} bonus shared with team)")
             else:
                 solo_bonus = getattr(self.rewards, "solo_delivery_bonus", 0.0)
-                total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus + solo_bonus
+                total_reward = base_reward + order_bonus + out_of_order_pen + sequence_bonus + delivery_bonus + episode_complete_bonus + solo_bonus
                 global_reward_bonus = 0.0
                 if verbose:
                     print(f"  SOLO DELIVERY by {agent_id}! Team global reward bonus is 0 (non-contributing agents get no free delivery credit)")
         else:
-            total_reward = base_reward + order_bonus + sequence_bonus + delivery_bonus + episode_complete_bonus
-            global_reward_bonus = recipe_reward + order_bonus + delivery_bonus + episode_complete_bonus
+            total_reward = base_reward + order_bonus + out_of_order_pen + sequence_bonus + delivery_bonus + episode_complete_bonus
+            global_reward_bonus = recipe_reward + order_bonus + out_of_order_pen + delivery_bonus + episode_complete_bonus
 
         if verbose:
             if is_correct_order:
@@ -126,8 +127,8 @@ class DeliveryHandler(StationHandler):
                 print(f"  Reward: {base_reward} + Order Bonus: {order_bonus} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f})" +
                       (f" + Victory Bonus: {episode_complete_bonus}" if episode_complete_bonus > 0 else ""))
             else:
-                print(f"  Recipe {recipe_name} delivered out of order (Delivery #{num_deliveries})")
-                print(f"  Reward: {base_reward} + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f}) (no order bonus)" +
+                print(f"  Recipe {recipe_name} delivered out of order! (Delivery #{num_deliveries}) Penalty: {out_of_order_pen}")
+                print(f"  Reward: {base_reward} (penalty: {out_of_order_pen}) + Sequence Bonus: {sequence_bonus} + Delivery Bonus: {delivery_bonus:.1f} (x{delivery_multiplier:.1f}) (no order bonus)" +
                       (f" + Victory Bonus: {episode_complete_bonus}" if episode_complete_bonus > 0 else ""))
 
         return total_reward, global_reward_bonus

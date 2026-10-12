@@ -14,7 +14,7 @@ import argparse
 import time
 import json
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 from collections import defaultdict
 
@@ -22,6 +22,8 @@ import numpy as np
 import ray
 from ray import tune
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
+from ray.rllib.policy.policy import Policy
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.utils.framework import try_import_torch
 from ray.tune.registry import register_env
@@ -32,6 +34,38 @@ except ImportError:
     from env import OvercookedMARL
 
 torch, nn = try_import_torch()
+
+_WARM_START_WEIGHTS_CACHE = {}
+
+def get_pretrained_weights(checkpoint_path: str):
+    """Loads and caches policy weights from checkpoint."""
+    global _WARM_START_WEIGHTS_CACHE
+    if checkpoint_path not in _WARM_START_WEIGHTS_CACHE:
+        cp_policies = Policy.from_checkpoint(checkpoint_path)
+        _WARM_START_WEIGHTS_CACHE[checkpoint_path] = {
+            p_id: p.get_weights() for p_id, p in cp_policies.items()
+        }
+    return _WARM_START_WEIGHTS_CACHE[checkpoint_path]
+
+class WarmStartFromCheckpointCallback(DefaultCallbacks):
+    """Restores pre-trained policy weights from Model 04 into algorithm at initialization."""
+    def on_algorithm_init(self, *, algorithm, **kwargs):
+        cfg = algorithm.config
+        env_cfg = cfg.get("env_config", {})
+        cp_path = env_cfg.get("restore_checkpoint_path")
+        if cp_path and os.path.exists(cp_path):
+            try:
+                pretrained = get_pretrained_weights(cp_path)
+                available_policies = set(algorithm.get_weights().keys())
+                target_weights = {p_id: w for p_id, w in pretrained.items() if p_id in available_policies}
+                algorithm.set_weights(target_weights)
+                print("\n" + "="*70)
+                print("🔥 [WARM-START] Injected pretrained weights into policies:")
+                print(f"   Source Checkpoint: {cp_path}")
+                print(f"   Target Policies:   {list(target_weights.keys())}")
+                print("="*70 + "\n")
+            except Exception as e:
+                print(f"⚠️ [WARM-START ERROR] Failed to set weights from {cp_path}: {e}")
 
 # ======================================================================
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (OPTIMIZED TOP-PERFORMING GRID)
@@ -123,7 +157,36 @@ def parse_args():
     parser.add_argument("--keep-checkpoints-num", type=int, default=20, help="Number of recent checkpoints to keep (default: 20)")
     parser.add_argument("--resume", type=str, default="AUTO", choices=["AUTO", "LOCAL", "FALSE"], help="Auto-resume crashed trials (default: AUTO)")
     parser.add_argument("--concurrent", type=int, default=2, help="Number of concurrent trials to train in parallel (default: 2)")
+    parser.add_argument("--restore-checkpoint", type=str, default=None, help="Path to checkpoint or 'auto' to warm-start policies from Model 04")
     return parser.parse_args()
+
+def resolve_restore_checkpoint(arg_val: Optional[str]) -> Optional[str]:
+    """Resolves checkpoint path directly or searches ray_results for Model 04 / top model."""
+    if not arg_val:
+        return None
+    val_str = str(arg_val).strip()
+    p = Path(val_str)
+    if p.exists() and (p / "rllib_checkpoint.json").exists():
+        return str(p.resolve())
+    
+    search_roots = [
+        PROJECT_ROOT / "experiments" / "ray_results",
+        Path("/app/experiments/ray_results")
+    ]
+    # 1. Target specifically trial 34733_00004 (Model 04)
+    for r_dir in search_roots:
+        if r_dir.exists():
+            candidates = list(r_dir.glob("**/*34733_00004*/**/checkpoint_*"))
+            valid = [c for c in candidates if (c / "rllib_checkpoint.json").exists()]
+            if valid:
+                return str(sorted(valid, key=lambda x: str(x), reverse=True)[0].resolve())
+    # 2. General fallback: pick highest numbered checkpoint in ray_results
+    for r_dir in search_roots:
+        if r_dir.exists():
+            all_cps = [c for c in r_dir.glob("**/checkpoint_*") if (c / "rllib_checkpoint.json").exists()]
+            if all_cps:
+                return str(sorted(all_cps, key=lambda x: str(x), reverse=True)[0].resolve())
+    return None
 
 class TrainingProgressCallback(tune.Callback):
     """Callback to compute training progress percentage and update trial results for Ray Tune reporting."""
@@ -143,7 +206,21 @@ class TrainingProgressCallback(tune.Callback):
 def main():
     args = parse_args()
     
-    # Apply CLI overrides to parameter grid
+    # Apply CLI overrides or Warm-Start fine-tuning defaults
+    restore_checkpoint_path = resolve_restore_checkpoint(args.restore_checkpoint)
+    if args.restore_checkpoint is not None and not restore_checkpoint_path:
+        print(f"⚠️ Warning: Could not find checkpoint for '{args.restore_checkpoint}'. Starting from scratch.")
+    elif restore_checkpoint_path:
+        print(f"\n🎯 [WARM-START] Checkpoint detected: {restore_checkpoint_path}")
+        if args.lr is None:
+            HYPERPARAMETER_GRID['lr'] = [3e-4]
+        if args.gamma is None:
+            HYPERPARAMETER_GRID['gamma'] = [0.98]
+        if args.entropy_coeff is None:
+            HYPERPARAMETER_GRID['entropy_coeff'] = [0.020, 0.030]
+        if args.episodes is None:
+            HYPERPARAMETER_GRID['num_episodes'] = [1500]
+
     if args.episodes is not None:
         HYPERPARAMETER_GRID['num_episodes'] = [args.episodes]
     if args.lr is not None:
@@ -162,11 +239,12 @@ def main():
         HYPERPARAMETER_GRID['seed'] = [args.seed]
         
     print("\n" + "="*50)
-    print("STARTING OPTIMIZED MULTI-AGENT PPO TRAINING")
+    print("STARTING OPTIMIZED MULTI-AGENT PPO TRAINING" + (" (WARM-START FINE-TUNING)" if restore_checkpoint_path else ""))
     print(f"  Map:          {args.map}")
     print(f"  Agents:       {args.num_agents}")
     print(f"  Workers:      {args.workers}")
     print(f"  GPUs:         {args.gpus}")
+    print(f"  Warm-Start:   {restore_checkpoint_path or 'None (scratch)'}")
     print(f"  Grid Options: {HYPERPARAMETER_GRID}")
     print("="*50 + "\n")
     
@@ -219,12 +297,16 @@ def main():
             env_config={
                 "num_episodes": tune_episodes,
                 "map": args.map,
-                "num_agents": args.num_agents
+                "num_agents": args.num_agents,
+                "restore_checkpoint_path": restore_checkpoint_path
             }
         )
         .api_stack(
             enable_rl_module_and_learner=False,
             enable_env_runner_and_connector_v2=False
+        )
+        .callbacks(
+            WarmStartFromCheckpointCallback if restore_checkpoint_path else None
         )
         .training(
             lr=tune_lr,

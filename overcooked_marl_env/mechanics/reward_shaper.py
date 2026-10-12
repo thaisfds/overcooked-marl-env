@@ -51,7 +51,8 @@ class RewardValues:
     # Deliveries (Direct Sparse Primary Objective)
     delivery_base: float = 0.0
     order_bonus: float = 0.0
-    order_bonus_mult: float = 0.5
+    order_bonus_mult: float = 1.0          # Reinforced: 100% of recipe reward when delivered strictly in FIFO HUD top order
+    out_of_order_penalty: float = 0.0      # Out of order receives 0 order bonus (no extra penalty, correct order gives 2x advantage)
     sequence_complete_bonus: float = 50.0
     episode_complete_bonus: float = 5000.0  # Huge 5000pt victory bonus when 0 pending dishes remain!
 
@@ -412,10 +413,10 @@ class RewardShaper:
                 if sorted([i.lower() for i in plate_ingredients]) == sorted(req_lower):
                     progress_reward += self.rewards.plate_complete_bonus
                 else:
-                    # Check if plate completes ANY pending recipe in HUD queue
+                    # Check if plate completes ANY pending recipe in HUD queue (discounted to maintain top HUD priority)
                     is_val, r_name, _ = self.recipe_manager.validate_delivery(plate_ingredients)
                     if is_val and r_name in pending_recipes:
-                        progress_reward += self.rewards.plate_complete_bonus * 0.8
+                        progress_reward += self.rewards.plate_complete_bonus * 0.4
         
         # Action: Pickup complete plate
         elif action_type == 'pickup_plate_complete' and carrying_item:
@@ -426,7 +427,7 @@ class RewardShaper:
                 else:
                     is_val, r_name, _ = self.recipe_manager.validate_delivery(plate_ingredients)
                     if is_val and r_name in pending_recipes:
-                        progress_reward += self.rewards.progress_pickup_complete_plate
+                        progress_reward += self.rewards.progress_pickup_complete_plate * 0.4
         
         # Apply MAPPO Reward Shaping Annealing (gentle decay as recipes are delivered)
         num_delivered = len(game_state.get("delivered_recipes", []))

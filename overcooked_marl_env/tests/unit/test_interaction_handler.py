@@ -80,7 +80,8 @@ class TestInteractionHandler(OvercookedTestCase):
             accumulation_penalty=0.0,
             delivery_multiplier_2nd=1.0,
             delivery_multiplier_3rd=1.0,
-            delivery_multiplier_4th_plus=1.0
+            delivery_multiplier_4th_plus=1.0,
+            handoff_place=0.0
         )
         # Create handler
         self.handler = InteractionHandler(self.item_manager, self.recipe_manager, rewards=test_rewards)
