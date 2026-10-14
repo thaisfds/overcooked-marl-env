@@ -29,11 +29,17 @@ fi
 WORKERS=${WORKERS:-4}
 CONCURRENT=${CONCURRENT:-4}
 EVAL_EPISODES=${EVAL_EPISODES:-20}
+SKIP_EVAL=${SKIP_EVAL:-0}
+GENERATE_CHARTS=${GENERATE_CHARTS:-false}
 
 echo "Using Python executable: $PYTHON_CMD"
 echo "Workers count: $WORKERS"
 echo "Concurrent trials: $CONCURRENT"
-echo "Evaluation episodes: $EVAL_EPISODES"
+if [ "$SKIP_EVAL" = "1" ] || [ "$EVAL_EPISODES" = "0" ]; then
+    echo "Evaluation: SKIPPED (SKIP_EVAL=$SKIP_EVAL, EVAL_EPISODES=$EVAL_EPISODES)"
+else
+    echo "Evaluation episodes: $EVAL_EPISODES"
+fi
 if [ $# -gt 0 ]; then
     echo "Custom arguments: $@"
 fi
@@ -42,24 +48,42 @@ fi
 $PYTHON_CMD experiments/training/train_ppo.py --workers $WORKERS --concurrent $CONCURRENT "$@"
 
 echo "=================================================="
-echo "TRAINING COMPLETED - STARTING EVALUATION OF BEST MODEL"
+echo "TRAINING COMPLETED"
 echo "=================================================="
 
 # 2. Evaluate best model found in the training session (auto-detects map, agents, and best checkpoint)
-$PYTHON_CMD experiments/analysis/evaluate_ppo.py --num-episodes $EVAL_EPISODES
+if [ "$SKIP_EVAL" != "1" ] && [ "$EVAL_EPISODES" != "0" ]; then
+    echo "STARTING EVALUATION OF BEST MODEL ($EVAL_EPISODES episodes)..."
+    EVAL_FLAGS=("--num-episodes" "$EVAL_EPISODES")
+    if [ "$LOG_VISION" = "1" ]; then
+        EVAL_FLAGS+=("--log-vision")
+    fi
+    $PYTHON_CMD experiments/analysis/evaluate_ppo.py "${EVAL_FLAGS[@]}" || echo "[WARNING] Evaluation completed with warnings."
+else
+    echo "Skipping post-training evaluation as requested."
+fi
+
+# 3. Optional: Only generate scientific report figures if explicitly requested via GENERATE_CHARTS=true
+if [ "$GENERATE_CHARTS" = "true" ] || [ "$GENERATE_CHARTS" = "1" ]; then
+    echo "Generating scientific report figures..."
+    $PYTHON_CMD experiments/analysis/generate_report_charts.py 2>/dev/null || true
+fi
+
+# 4. Print persistent results summary table
+$PYTHON_CMD -c "from experiments.utils.results_tracker import generate_markdown_summary_table; print('\n' + generate_markdown_summary_table())" 2>/dev/null || true
+
+# 5. Extract evaluated best checkpoint for direct copy-paste Pygame visualization command
+BEST_CP=$($PYTHON_CMD -c "import json, pathlib; p = pathlib.Path('experiments/logs/evaluation_results.json'); print(json.loads(p.read_text()).get('checkpoint_path', '') if p.exists() else '')" 2>/dev/null || true)
 
 echo "=================================================="
 echo "EXPERIMENT CYCLE COMPLETED SUCCESSFULLY"
 echo "=================================================="
-
-# 3. Plot learning curves (saved to experiments/visualization/learning_curves.png)
-$PYTHON_CMD experiments/visualization/plot_curves.py 2>/dev/null || true
-
-# 4. Print persistent results summary table
-$PYTHON_CMD -c "from experiments.utils.results_tracker import generate_markdown_summary_table; print('\n' + generate_markdown_summary_table())"
-
-echo "=================================================="
-echo "To visualize the rollout in Pygame, run:"
-echo "  $PYTHON_CMD experiments/visualization/visualize_model.py"
+if [ -n "$BEST_CP" ]; then
+    echo "Para reproduzir visualmente o melhor modelo no Pygame:"
+    echo "  $PYTHON_CMD experiments/visualization/visualize_model.py $BEST_CP"
+else
+    echo "Para reproduzir visualmente no Pygame:"
+    echo "  $PYTHON_CMD experiments/visualization/visualize_model.py"
+fi
 echo "  $PYTHON_CMD experiments/visualization/visualize_all_models.py"
 echo "=================================================="

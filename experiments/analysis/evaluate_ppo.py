@@ -5,6 +5,7 @@ import argparse
 import json
 import glob
 from pathlib import Path
+from collections import Counter
 import numpy as np
 
 # Add project root to sys.path
@@ -236,6 +237,30 @@ def main():
     deliveries_list = [ep["delivered_count"] for ep in episode_results]
     steps_list = [ep["steps"] for ep in episode_results]
     
+    # Per-agent performance metrics
+    all_agents = sorted(list(episode_results[0]["agent_rewards"].keys())) if episode_results else []
+    agent_stats = {}
+    for ag in all_agents:
+        ag_rewards = [ep["agent_rewards"].get(ag, 0.0) for ep in episode_results]
+        agent_stats[ag] = {
+            "mean": float(np.mean(ag_rewards)),
+            "std": float(np.std(ag_rewards)),
+            "min": float(np.min(ag_rewards)),
+            "max": float(np.max(ag_rewards))
+        }
+
+    # Recipe breakdown
+    all_delivered = [r for ep in episode_results for r in ep["delivered_recipes"]]
+    recipe_counts = dict(Counter(all_delivered))
+    total_deliveries = int(np.sum(deliveries_list))
+    max_deliveries_single_ep = int(np.max(deliveries_list)) if deliveries_list else 0
+
+    # Success rates
+    episodes_with_delivery = sum(1 for ep in episode_results if ep["delivered_count"] > 0)
+    episodes_multi_delivery = sum(1 for ep in episode_results if ep["delivered_count"] > 1)
+    delivery_success_rate = (episodes_with_delivery / args.num_episodes * 100.0) if args.num_episodes > 0 else 0.0
+    multi_delivery_rate = (episodes_multi_delivery / args.num_episodes * 100.0) if args.num_episodes > 0 else 0.0
+
     stats = {
         "num_episodes": args.num_episodes,
         "reward_mean": float(np.mean(rewards_list)),
@@ -243,9 +268,16 @@ def main():
         "reward_min": float(np.min(rewards_list)),
         "reward_max": float(np.max(rewards_list)),
         "deliveries_mean": float(np.mean(deliveries_list)),
-        "deliveries_total": int(np.sum(deliveries_list)),
+        "deliveries_total": total_deliveries,
+        "deliveries_max_single_ep": max_deliveries_single_ep,
+        "delivery_success_rate": float(delivery_success_rate),
+        "multi_delivery_rate": float(multi_delivery_rate),
+        "recipe_breakdown": recipe_counts,
+        "agent_rewards": agent_stats,
         "steps_mean": float(np.mean(steps_list)),
         "checkpoint_path": checkpoint_path,
+        "map_name": map_name,
+        "num_agents": num_agents,
         "episodes": episode_results
     }
     
@@ -269,14 +301,38 @@ def main():
         with open(log_dir / f"{exp_name}_evaluation.json", "w") as f:
             json.dump(stats, f, indent=2)
             
+    # Format per-agent and recipe text for reports
+    agent_md_lines = []
+    for ag, a_stat in agent_stats.items():
+        agent_md_lines.append(f"* **{ag}:** {a_stat['mean']:+.2f} (± {a_stat['std']:.2f}) [Mín: {a_stat['min']:+.2f} | Máx: {a_stat['max']:+.2f}]")
+    agent_md_text = "\n".join(agent_md_lines) if agent_md_lines else "* N/A"
+
+    recipe_md_lines = []
+    for r_name, r_cnt in sorted(recipe_counts.items(), key=lambda x: x[1], reverse=True):
+        pct = (r_cnt / total_deliveries * 100.0) if total_deliveries > 0 else 0.0
+        recipe_md_lines.append(f"* **{r_name}:** {r_cnt} ({pct:.1f}%)")
+    recipe_md_text = "\n".join(recipe_md_lines) if recipe_md_lines else "* Nenhuma receita entregue"
+
+    eval_md_block = f"""
+
+## Avaliação Pós-Treino ({args.num_episodes} episódios)
+* **Recompensa Média Global:** {stats['reward_mean']:+.2f} (± {stats['reward_std']:.2f}) [Mín: {stats['reward_min']:+.2f} | Máx: {stats['reward_max']:+.2f}]
+* **Média de Entregas/Ep:** {stats['deliveries_mean']:.2f} (Total: {total_deliveries} | Máx em 1 ep: {max_deliveries_single_ep})
+* **Taxa de Sucesso (≥1 entrega):** {delivery_success_rate:.1f}% ({episodes_with_delivery}/{args.num_episodes} episódios)
+* **Taxa de Entregas Múltiplas (≥2):** {multi_delivery_rate:.1f}% ({episodes_multi_delivery}/{args.num_episodes} episódios)
+* **Duração Média:** {stats['steps_mean']:.1f} passos/episódio
+
+### Desempenho por Agente:
+{agent_md_text}
+
+### Receitas Entregues:
+{recipe_md_text}
+"""
     # Update summary report in log_dir if present
     for report_file in [log_dir / f"{exp_name}_summary.md", log_dir / "latest_summary.md"]:
         if report_file.exists():
             with open(report_file, "a") as f:
-                f.write(f"\n\n## Avaliação Pós-Treino ({args.num_episodes} episódios)\n")
-                f.write(f"* **Recompensa Média:** {stats['reward_mean']:+.2f} (± {stats['reward_std']:.2f})\n")
-                f.write(f"* **Mín / Máx Recompensa:** {stats['reward_min']:+.2f} / {stats['reward_max']:+.2f}\n")
-                f.write(f"* **Média de Entregas/Ep:** {stats['deliveries_mean']:.2f} (Total: {stats['deliveries_total']})\n")
+                f.write(eval_md_block)
 
     # Update persistent results tracker with evaluation metrics
     try:
@@ -296,18 +352,38 @@ def main():
     except Exception as tracker_err:
         print(f"[WARNING] Could not update results tracker: {tracker_err}")
         
-    print("\n" + "="*60, flush=True)
-    print("STATISTICAL EVALUATION SUMMARY", flush=True)
-    print("="*60, flush=True)
-    print(f"  Episodes Evaluated:   {args.num_episodes}", flush=True)
-    print(f"  Mean Raw Reward:      {stats['reward_mean']:+.2f} (± {stats['reward_std']:.2f})", flush=True)
-    print(f"  Min / Max Reward:     {stats['reward_min']:+.2f} / {stats['reward_max']:+.2f}", flush=True)
-    print(f"  Mean Deliveries/Ep:   {stats['deliveries_mean']:.2f} (Total: {stats['deliveries_total']})", flush=True)
-    print(f"  Mean Steps/Episode:   {stats['steps_mean']:.1f}", flush=True)
+    print("\n" + "="*70, flush=True)
+    print("           RELATÓRIO ESTATÍSTICO DE AVALIAÇÃO MULTIAGENTE", flush=True)
+    print("="*70, flush=True)
+    print(f"  Modelo / Checkpoint: {checkpoint_path}", flush=True)
+    print(f"  Mapa: {map_name} | Agentes: {num_agents} | Episódios: {args.num_episodes}", flush=True)
+    print("-"*70, flush=True)
+    print("  DESEMPENHO GLOBAL:", flush=True)
+    print(f"  • Recompensa Média:   {stats['reward_mean']:+.2f} (± {stats['reward_std']:.2f}) [Mín: {stats['reward_min']:+.2f} | Máx: {stats['reward_max']:+.2f}]", flush=True)
+    print(f"  • Entregas por Ep:    {stats['deliveries_mean']:.2f} (Total: {total_deliveries} pratos | Máx/Ep: {max_deliveries_single_ep})", flush=True)
+    print(f"  • Taxa de Sucesso:    {delivery_success_rate:.1f}% dos episódios com ≥1 entrega", flush=True)
+    print(f"  • Entregas Múltiplas: {multi_delivery_rate:.1f}% dos episódios com ≥2 entregas", flush=True)
+    print(f"  • Passos Médios/Ep:   {stats['steps_mean']:.1f}", flush=True)
+    print("-"*70, flush=True)
+    print("  RECOMPENSA INDIVIDUAL POR AGENTE:", flush=True)
+    for ag, a_stat in agent_stats.items():
+        print(f"  • {ag:<10}: {a_stat['mean']:+7.2f} (± {a_stat['std']:.2f}) [Mín: {a_stat['min']:+7.2f} | Máx: {a_stat['max']:+7.2f}]", flush=True)
+    print("-"*70, flush=True)
+    print("  DISTRIBUIÇÃO DE RECEITAS ENTREGUES:", flush=True)
+    if recipe_counts:
+        for r_name, r_cnt in sorted(recipe_counts.items(), key=lambda x: x[1], reverse=True):
+            pct = (r_cnt / total_deliveries * 100.0) if total_deliveries > 0 else 0.0
+            print(f"  • {r_name:<16}: {r_cnt:3d} pratos ({pct:5.1f}%)", flush=True)
+    else:
+        print("  • Nenhuma receita entregue no período avaliado.", flush=True)
     if vision_log_path:
-        print(f"  Vision Log saved to:  {vision_log_path}", flush=True)
-    print(f"  Summary saved to:     {summary_json_path}", flush=True)
-    print("="*60 + "\n", flush=True)
+        print("-"*70, flush=True)
+        print(f"  Vision Log salvo em:  {vision_log_path}", flush=True)
+    print(f"  JSON de Métricas em:  {summary_json_path}", flush=True)
+    print("="*70, flush=True)
+    print("  Para reproduzir visualmente no Pygame:", flush=True)
+    print(f"  venv/bin/python experiments/visualization/visualize_model.py {checkpoint_path}", flush=True)
+    print("="*70 + "\n", flush=True)
 
 if __name__ == "__main__":
     main()

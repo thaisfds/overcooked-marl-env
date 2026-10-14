@@ -72,14 +72,14 @@ class WarmStartFromCheckpointCallback(DefaultCallbacks):
 # ======================================================================
 
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 3e-4],            # Optimized learning rate range (1e-4 was rank #1 & #2)
-    "gamma": [0.98, 0.99],         # High-performing discount factors (0.98 e 0.99)
-    "entropy_coeff": [0.015, 0.02],# Top-performing empirical sweet spot for 100% completion
-    "train_batch_size": [4000],    # Optimal batch sizes for trajectory collection
-    "sgd_minibatch_size": [256],         # PPO minibatch size
-    "update_epochs": [12],               # Top-performing update epochs (12 epochs)
-    "num_episodes": [2000],              # Extended training duration (~3.0M timesteps for 2nd+ deliveries)
-    "seed": [42]                         # Random seed
+    "lr": [1e-4, 3e-4, 5e-4],            # Faixa ótima baseada nos modelos campeões (#1, #2, #13)
+    "gamma": [0.98, 0.99, 0.995],        # 0.98 (ágil), 0.99 (padrão) e 0.995 (longo prazo p/ receitas complexas)
+    "entropy_coeff": [0.015, 0.020, 0.030], # Sweet spot empírico para exploração sem colapso
+    "train_batch_size": [4000],          # Tamanho de coleta ótimo
+    "sgd_minibatch_size": [256],         # Minibatch PPO
+    "update_epochs": [12],               # Épocas de atualização por iteração
+    "num_episodes": [2000],              # ~3.0M a 4.0M timesteps por trial
+    "seed": [42]
 }
 
 class ParallelEnvToMultiAgent(MultiAgentEnv):
@@ -154,7 +154,7 @@ def parse_args():
     parser.add_argument("--gpus", type=float, default=1.0, help="Total GPUs to allocate across concurrent trials (default: 1.0)")
     parser.add_argument("--seed", type=int, default=None, help="Override random seed")
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="Checkpoint frequency in iterations (default: 10)")
-    parser.add_argument("--keep-checkpoints-num", type=int, default=20, help="Number of recent checkpoints to keep (default: 20)")
+    parser.add_argument("--keep-checkpoints-num", type=int, default=20, help="Number of best checkpoints to keep based on reward (default: 20)")
     parser.add_argument("--resume", type=str, default="AUTO", choices=["AUTO", "LOCAL", "FALSE"], help="Auto-resume crashed trials (default: AUTO)")
     parser.add_argument("--concurrent", type=int, default=2, help="Number of concurrent trials to train in parallel (default: 2)")
     parser.add_argument("--restore-checkpoint", type=str, default=None, help="Path to checkpoint or 'auto' to warm-start policies from Model 04")
@@ -342,7 +342,7 @@ def main():
             entropy_coeff=tune_entropy,
             grad_clip=1.0,
             model={
-                "fcnet_hiddens": [128, 128],
+                "fcnet_hiddens": [256, 256],
                 "fcnet_activation": "relu",
             }
         )
@@ -406,6 +406,7 @@ def main():
             config=config_dict,
             checkpoint_freq=args.checkpoint_freq,
             checkpoint_at_end=True,
+            checkpoint_score_attr="env_runners/episode_reward_mean",
             keep_checkpoints_num=args.keep_checkpoints_num,
             max_concurrent_trials=args.concurrent,
             resume=resume_val,
@@ -460,15 +461,45 @@ def main():
                 except Exception:
                     pass
                     
+            # 1. Prioritize finding the best checkpoint by reward from Ray Tune analysis
             checkpoint_path = None
-            if hasattr(trial, 'checkpoint') and trial.checkpoint:
-                try:
-                    if hasattr(trial.checkpoint, 'path'):
-                        checkpoint_path = trial.checkpoint.path
-                    elif hasattr(trial.checkpoint, 'to_directory'):
-                        checkpoint_path = trial.checkpoint.to_directory()
-                except Exception:
-                    pass
+            try:
+                best_cp_obj = analysis.get_best_checkpoint(
+                    trial,
+                    metric="env_runners/episode_reward_mean",
+                    mode="max"
+                )
+                if best_cp_obj:
+                    if hasattr(best_cp_obj, 'path'):
+                        checkpoint_path = best_cp_obj.path
+                    elif hasattr(best_cp_obj, 'to_directory'):
+                        checkpoint_path = best_cp_obj.to_directory()
+            except Exception:
+                pass
+
+            # 2. If get_best_checkpoint did not resolve to an existing folder, inspect peak of learning curve
+            if not checkpoint_path or not os.path.exists(checkpoint_path):
+                if learning_curves_data:
+                    valid_pts = [pt for pt in learning_curves_data if pt.get('reward_mean') is not None]
+                    if valid_pts:
+                        best_pt = max(valid_pts, key=lambda x: x['reward_mean'])
+                        best_iter = best_pt['iteration']
+                        cand_cp_name = f"checkpoint_{best_iter:06d}"
+                        for d in [target_dir / cand_cp_name, trial_dir / cand_cp_name]:
+                            if d.exists() and (d / "rllib_checkpoint.json").exists():
+                                checkpoint_path = str(d.resolve())
+                                break
+
+            # 3. Fallback: trial.checkpoint (latest checkpoint produced)
+            if not checkpoint_path or not os.path.exists(checkpoint_path):
+                if hasattr(trial, 'checkpoint') and trial.checkpoint:
+                    try:
+                        if hasattr(trial.checkpoint, 'path'):
+                            checkpoint_path = trial.checkpoint.path
+                        elif hasattr(trial.checkpoint, 'to_directory'):
+                            checkpoint_path = trial.checkpoint.to_directory()
+                    except Exception:
+                        pass
                     
             if checkpoint_path:
                 if "/tmp/" in checkpoint_path or not os.path.exists(checkpoint_path):
@@ -477,6 +508,7 @@ def main():
                     if persistent_checkpoint_path.exists():
                         checkpoint_path = str(persistent_checkpoint_path.resolve())
                     
+            # 4. Final fallback: sort available checkpoints
             if not checkpoint_path or not os.path.exists(checkpoint_path):
                 checkpoints = sorted(
                     [d for d in target_dir.iterdir() if d.is_dir() and d.name.startswith('checkpoint_')],
@@ -501,6 +533,14 @@ def main():
                     avg_reward_last = env_runners.get('episode_reward_mean', env_runners.get('episode_return_mean', None))
                 elif 'episode_reward_mean' in trial.last_result:
                     avg_reward_last = trial.last_result['episode_reward_mean']
+
+            peak_reward = None
+            if learning_curves_data:
+                valid_rewards = [pt['reward_mean'] for pt in learning_curves_data if pt.get('reward_mean') is not None]
+                if valid_rewards:
+                    peak_reward = float(np.max(valid_rewards))
+
+            best_reward_val = peak_reward if peak_reward is not None else avg_reward_last
                     
             p_lr = trial_config.get('lr', 3e-4)
             p_gamma = trial_config.get('gamma', 0.90)
@@ -519,7 +559,9 @@ def main():
                 'checkpoint_path': checkpoint_path,
                 'map': args.map,
                 'num_agents': args.num_agents,
-                'avg_reward': float(avg_reward_last) if avg_reward_last is not None and not np.isnan(avg_reward_last) else None,
+                'avg_reward': float(best_reward_val) if best_reward_val is not None and not np.isnan(best_reward_val) else None,
+                'peak_reward': float(peak_reward) if peak_reward is not None and not np.isnan(peak_reward) else None,
+                'last_reward': float(avg_reward_last) if avg_reward_last is not None and not np.isnan(avg_reward_last) else None,
                 'learning_curves': learning_curves_data,
                 'training_config': {
                     'learning_rate': float(p_lr),
@@ -552,7 +594,7 @@ def main():
                     "entropy_coeff": float(p_entropy),
                     "batch_size": int(p_batch),
                     "num_episodes": int(p_episodes),
-                    "train_reward_mean": float(avg_reward_last) if avg_reward_last is not None and not np.isnan(avg_reward_last) else "N/A",
+                    "train_reward_mean": float(best_reward_val) if best_reward_val is not None and not np.isnan(best_reward_val) else "N/A",
                     "status": "COMPLETED",
                     "checkpoint_path": checkpoint_path or ""
                 })
