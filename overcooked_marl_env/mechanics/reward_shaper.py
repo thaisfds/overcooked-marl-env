@@ -256,7 +256,7 @@ class RewardShaper:
         return False
 
     def _calculate_partial_plate_reward(self, plate: Dict, game_state: Dict) -> float:
-        """Calculate reward for partially complete plate."""
+        """Calculate reward for partially complete plate across pending recipes."""
         if not plate or not is_plate(plate):
             return 0.0
         
@@ -264,19 +264,31 @@ class RewardShaper:
         if not plate_ingredients:
             return 0.0
         
-        recipe_name, recipe, required_ingredients = self._get_next_pending_recipe(game_state)
-        if not recipe or not required_ingredients:
-            return 0.0
-        
-        required_set = set(ing.lower() for ing in required_ingredients)
         plate_set = set(ing.lower() for ing in plate_ingredients)
-        
-        matching_count = len(required_set.intersection(plate_set))
-        total_required = len(required_ingredients)
-        
-        if 0 < matching_count < total_required:
-            completion_ratio = matching_count / total_required
-            return self.rewards.progress_partial_plate * completion_ratio
+        best_ratio = 0.0
+
+        # Check next pending recipe (top priority)
+        recipe_name, recipe, required_ingredients = self._get_next_pending_recipe(game_state)
+        if recipe and required_ingredients:
+            required_set = set(ing.lower() for ing in required_ingredients)
+            matching_count = len(required_set.intersection(plate_set))
+            total_required = len(required_ingredients)
+            if 0 < matching_count < total_required:
+                best_ratio = matching_count / total_required
+
+        # Fallback: check across all other pending recipes in queue
+        if best_ratio == 0.0:
+            for p_name in self._get_pending_recipes(game_state):
+                p_rec = self.recipe_manager.get_recipe_by_name(p_name)
+                if p_rec and p_rec.ingredients:
+                    p_req_set = set(ing.lower() for ing in p_rec.ingredients)
+                    m_count = len(p_req_set.intersection(plate_set))
+                    t_req = len(p_rec.ingredients)
+                    if 0 < m_count < t_req:
+                        best_ratio = max(best_ratio, (m_count / t_req) * 0.75)
+
+        if best_ratio > 0.0:
+            return self.rewards.progress_partial_plate * best_ratio
         
         return 0.0
 
@@ -354,6 +366,11 @@ class RewardShaper:
         progress_reward = 0.0
         req_lower = [ing.lower() for ing in required_ingredients]
         pending_recipes = self._get_pending_recipes(game_state)
+        all_pending_reqs = []
+        for p_name in pending_recipes:
+            p_rec = self.recipe_manager.get_recipe_by_name(p_name)
+            if p_rec:
+                all_pending_reqs.extend([ing.lower() for ing in p_rec.ingredients])
         
         # Action: Pickup ingredient from dispenser
         if action_type == 'pickup_ingredient' and carrying_item:
@@ -368,15 +385,13 @@ class RewardShaper:
                     progress_reward += self.rewards.unneeded_pickup_penalty
                 else:
                     progress_reward += self.rewards.progress_pickup_needed
-            else:
-                # Check if it belongs to ANY pending recipe
-                all_pending_reqs = []
-                for p_name in pending_recipes:
-                    p_rec = self.recipe_manager.get_recipe_by_name(p_name)
-                    if p_rec:
-                        all_pending_reqs.extend([ing.lower() for ing in p_rec.ingredients])
-                if ingredient_name not in all_pending_reqs:
+            elif ingredient_name in all_pending_reqs:
+                if self._check_ingredient_already_processed(ingredient_name, game_state, exclude_instance_id=exclude_id):
                     progress_reward += self.rewards.unneeded_pickup_penalty
+                else:
+                    progress_reward += self.rewards.progress_pickup_needed * 0.75
+            else:
+                progress_reward += self.rewards.unneeded_pickup_penalty
         
         # Action: Place raw ingredient on chopping board or custom station
         elif action_type in ('place_on_chop', 'place_raw_on_chop', 'place_on_station'):
@@ -385,6 +400,8 @@ class RewardShaper:
                 ingredient_name = item.get("name", "").lower()
                 if ingredient_name in req_lower:
                     progress_reward += self.rewards.progress_place_on_chop
+                elif ingredient_name in all_pending_reqs:
+                    progress_reward += self.rewards.progress_place_on_chop * 0.75
         
         # Action: Pickup ready ingredient from chopping board / counter
         elif action_type in ('pickup_ready', 'pickup_ready_ingredient'):
@@ -393,6 +410,8 @@ class RewardShaper:
                 ingredient_name = item.get("name", "").lower()
                 if ingredient_name in req_lower:
                     progress_reward += self.rewards.progress_pickup_ready
+                elif ingredient_name in all_pending_reqs:
+                    progress_reward += self.rewards.progress_pickup_ready * 0.75
         
         # Action: Combine ingredient with plate
         elif action_type == 'combine':
@@ -403,20 +422,34 @@ class RewardShaper:
                 ing_name = ing.get("name", "").lower()
                 if ing_name in req_lower:
                     progress_reward += self.rewards.progress_combine_ready
+                elif ing_name in all_pending_reqs:
+                    progress_reward += self.rewards.progress_combine_ready * 0.75
                     
             if plate and is_plate(plate):
                 plate_ingredients = plate.get("ingredients", [])
-                matching_count = sum(1 for i in plate_ingredients if i.lower() in req_lower)
+                matching_count_top = sum(1 for i in plate_ingredients if i.lower() in req_lower)
+                matching_count_any = max(
+                    (sum(1 for i in plate_ingredients if i.lower() in [r_ing.lower() for r_ing in p_rec.ingredients])
+                     for p_name in pending_recipes
+                     if (p_rec := self.recipe_manager.get_recipe_by_name(p_name))),
+                    default=0
+                )
+                matching_count = max(matching_count_top, matching_count_any)
                 progress_reward += (self.rewards.progress_ingredient_added_base +
                                     matching_count * self.rewards.progress_ingredient_added_increment)
+                
+                # Composite dish milestone bonus (2+ ingredients combined on plate)
+                if len(plate_ingredients) >= 2:
+                    progress_reward += 10.0
+                
                 # Check if plate is fully assembled for current recipe
                 if sorted([i.lower() for i in plate_ingredients]) == sorted(req_lower):
                     progress_reward += self.rewards.plate_complete_bonus
                 else:
-                    # Check if plate completes ANY pending recipe in HUD queue (discounted to maintain top HUD priority)
+                    # Check if plate completes ANY pending recipe in HUD queue
                     is_val, r_name, _ = self.recipe_manager.validate_delivery(plate_ingredients)
                     if is_val and r_name in pending_recipes:
-                        progress_reward += self.rewards.plate_complete_bonus * 0.4
+                        progress_reward += self.rewards.plate_complete_bonus * 0.75
         
         # Action: Pickup complete plate
         elif action_type == 'pickup_plate_complete' and carrying_item:
@@ -427,7 +460,7 @@ class RewardShaper:
                 else:
                     is_val, r_name, _ = self.recipe_manager.validate_delivery(plate_ingredients)
                     if is_val and r_name in pending_recipes:
-                        progress_reward += self.rewards.progress_pickup_complete_plate * 0.4
+                        progress_reward += self.rewards.progress_pickup_complete_plate * 0.75
         
         # Apply MAPPO Reward Shaping Annealing (gentle decay as recipes are delivered)
         num_delivered = len(game_state.get("delivered_recipes", []))

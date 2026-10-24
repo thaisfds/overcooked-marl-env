@@ -744,6 +744,7 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
 
 def main():
     parser = argparse.ArgumentParser(description="Multi-Model 20-Second Rollout Visualizer for Overcooked MARL.")
+    parser.add_argument("path", type=str, nargs="?", default=None, help="Directory containing trials, specific experiment folder, or summary markdown file (positional argument)")
     parser.add_argument("--seconds", type=float, default=20.0, help="Duration to visualize each model in seconds (default: 20.0)")
     parser.add_argument("--delay", type=int, default=50, help="Step delay in ms (default: 50 ms, ~20 FPS)")
     parser.add_argument("--ray-results", type=str, default="experiments/ray_results", help="Directory containing Ray experiment results")
@@ -755,13 +756,32 @@ def main():
     parser.add_argument("--deterministic", action="store_true", help="Disable exploration sampling")
     args = parser.parse_args()
 
-    ray_results_dir = (project_root / args.ray_results).resolve()
-    if not ray_results_dir.exists():
-        print(f"[ERROR] Specified ray_results directory does not exist: {ray_results_dir}")
-        sys.exit(1)
-
-
+    # Determine ray_results_dir and summary_file from positional path or explicit flags
     summary_file = Path(args.summary).resolve() if args.summary else None
+
+    if args.path:
+        p = Path(args.path).resolve()
+        if p.is_file() and p.suffix == ".md":
+            summary_file = p
+            ray_results_dir = (project_root / args.ray_results).resolve()
+        elif p.is_dir():
+            ray_results_dir = p
+            if not summary_file:
+                # Detect timestamp from path (e.g. 20261024_121315) to auto-select matching summary report if available
+                m_ts = re.search(r'(\d{8}_\d{6})', str(p))
+                if m_ts:
+                    ts = m_ts.group(1)
+                    match_summary = project_root / "experiments" / "logs" / f"PPO_Marl_{ts}_summary.md"
+                    if match_summary.exists():
+                        summary_file = match_summary
+        else:
+            ray_results_dir = p
+    else:
+        ray_results_dir = (project_root / args.ray_results).resolve()
+
+    if not ray_results_dir.exists():
+        print(f"[ERROR] Specified directory does not exist: {ray_results_dir}")
+        sys.exit(1)
 
     # 1. Discover models
     models = discover_all_models(ray_results_dir, summary_file=summary_file, sort_by=args.sort)

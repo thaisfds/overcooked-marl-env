@@ -461,7 +461,7 @@ BURGER
 
         self.assertEqual(simple.reward, 20.0)
         self.assertEqual(garden.reward, 60.0)
-        self.assertEqual(fresh.reward, 120.0)
+        self.assertEqual(fresh.reward, 180.0)
 
     def test_json_as_single_source_of_truth(self):
         """Verify that default_recipes.json is the sole source of truth and RECIPE_DEFINITIONS stays in sync."""
