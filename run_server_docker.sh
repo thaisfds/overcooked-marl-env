@@ -96,7 +96,7 @@ echo "   Arguments: ${ARGS[*]}"
 echo "=================================================="
 docker run --rm $DOCKER_TTY \
   --gpus all \
-  --shm-size=8g \
+  --shm-size=16g \
   -e WORKERS \
   -e CONCURRENT \
   -e EVAL_EPISODES \

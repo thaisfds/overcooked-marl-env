@@ -225,20 +225,18 @@ def main():
                 "fcnet_activation": "relu",
             }
         )
-        .exploration(
-            exploration_config={
-                "type": "EpsilonGreedy",
-                "initial_epsilon": 1.0,
-                "final_epsilon": 0.05,
-                "epsilon_timesteps": 100000,
-            }
-        )
         .resources(
             num_gpus=(args.gpus / max(1, args.concurrent)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
         )
         .env_runners(
             num_env_runners=max(1, args.workers // max(1, args.concurrent)),
             rollout_fragment_length="auto",
+            exploration_config={
+                "type": "EpsilonGreedy",
+                "initial_epsilon": 1.0,
+                "final_epsilon": 0.05,
+                "epsilon_timesteps": 100000,
+            },
         )
         .multi_agent(
             policies=policies,
