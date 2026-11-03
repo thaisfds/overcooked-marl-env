@@ -51,7 +51,7 @@ from typing import Dict, Any, Optional
 import numpy as np
 import ray
 from ray import tune
-from ray.rllib.algorithms.dqn import DQNConfig
+from ray.rllib.algorithms.dqn import DQNConfig, DQN
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.utils.framework import try_import_torch
 from ray.tune.registry import register_env
@@ -122,6 +122,22 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
             return getattr(object.__getattribute__(self, 'env'), name)
         except AttributeError:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+class SafeDQN(DQN):
+    """Subclass of DQN patching Ray 2.40+ ABCMeta containment bug in replay_buffer_config."""
+    def setup(self, config):
+        if "replay_buffer_config" in config and "type" in config["replay_buffer_config"]:
+            t = config["replay_buffer_config"]["type"]
+            if not isinstance(t, str):
+                config["replay_buffer_config"]["type"] = getattr(t, "__name__", str(t))
+        super().setup(config)
+
+    def _create_local_replay_buffer_if_necessary(self, config):
+        if "replay_buffer_config" in config and "type" in config["replay_buffer_config"]:
+            t = config["replay_buffer_config"]["type"]
+            if not isinstance(t, str):
+                config["replay_buffer_config"]["type"] = getattr(t, "__name__", str(t))
+        return super()._create_local_replay_buffer_if_necessary(config)
 
 def parse_args():
     default_workers = max(2, min(8, os.cpu_count() - 2)) if hasattr(os, 'cpu_count') and os.cpu_count() else 4
@@ -273,7 +289,7 @@ def main():
     start_time = time.time()
     try:
         analysis = tune.run(
-            "DQN",
+            SafeDQN,
             name=params_dir_name,
             stop=stop_fn,
             config=config_dict,
