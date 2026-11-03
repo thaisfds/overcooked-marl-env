@@ -78,7 +78,11 @@ if ! docker info >/dev/null 2>&1; then
   done
 fi
 
-docker build -t overcooked_marl:latest .
+if ! docker build -t overcooked_marl:latest .; then
+  echo "⚠️ Falha no build usando cache. Limpando cache corrompido do builder e reconstruindo..."
+  docker builder prune -a -f || true
+  docker build --no-cache -t overcooked_marl:latest .
+fi
 
 # Se nenhum argumento for passado, usar por padrão 2 agentes no tutorial.txt
 ARGS=("$@")
