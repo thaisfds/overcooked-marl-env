@@ -246,6 +246,13 @@ def main():
     )
 
     config_dict = dqn_config.to_dict()
+    # Ray 2.40+ bugfix: algorithm.py line 4475 checks `if "EpisodeReplayBuffer" in config["replay_buffer_config"]["type"]`
+    # which raises TypeError: argument of type 'ABCMeta' is not iterable when type is a class.
+    # We ensure type is a string name so containment checks and from_config both work seamlessly.
+    if "replay_buffer_config" in config_dict and "type" in config_dict["replay_buffer_config"]:
+        rb_type = config_dict["replay_buffer_config"]["type"]
+        if not isinstance(rb_type, str):
+            config_dict["replay_buffer_config"]["type"] = getattr(rb_type, "__name__", str(rb_type))
 
     def stop_fn(trial_id, result):
         config = result.get("config", {})
