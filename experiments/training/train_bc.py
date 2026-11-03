@@ -161,6 +161,7 @@ def main():
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
+        agent_loss_history = []
         model.train()
         for epoch in range(1, args.epochs + 1):
             total_loss = 0.0
@@ -179,9 +180,11 @@ def main():
                 correct += (preds == batch_act).sum().item()
                 total += len(batch_act)
 
+            avg_loss = total_loss / total if total > 0 else 0.0
+            acc = (correct / total) * 100.0 if total > 0 else 0.0
+            agent_loss_history.append({"iteration": epoch, "loss": avg_loss, "accuracy": acc})
+
             if epoch % 10 == 0 or epoch == args.epochs:
-                acc = (correct / total) * 100.0
-                avg_loss = total_loss / total
                 print(f"   [Época {epoch:02d}/{args.epochs:02d}] Loss: {avg_loss:.4f} | Acurácia de Imitação: {acc:.1f}%")
 
         model_path = out_dir / f"bc_model_{agent_id}.pt"
@@ -199,10 +202,54 @@ def main():
             "weights": trained_weights
         }, f, indent=2)
 
+    # Standard model_info.json compatible with visualization tools
+    model_info = {
+        "trial_id": f"BC_{timestamp}",
+        "algorithm": "BC",
+        "config_name": f"BC_epochs{args.epochs}_lr{args.lr}_batch{args.batch_size}",
+        "checkpoint_path": str(out_dir.resolve()),
+        "map": args.map,
+        "num_agents": args.num_agents,
+        "avg_reward": None,
+        "peak_reward": None,
+        "last_reward": None,
+        "imitation_accuracy": acc if 'acc' in locals() else None,
+        "learning_curves": [{"iteration": pt["iteration"], "reward_mean": -pt["loss"]} for pt in agent_loss_history],
+        "training_config": {
+            "algorithm": "BC",
+            "learning_rate": float(args.lr),
+            "batch_size": int(args.batch_size),
+            "epochs": int(args.epochs),
+            "demo_steps": int(args.demo_steps),
+            "weights": trained_weights
+        }
+    }
+    with open(out_dir / "model_info.json", "w", encoding="utf-8") as f:
+        json.dump(model_info, f, indent=2)
+
+    try:
+        from experiments.utils.results_tracker import record_experiment_entry
+        record_experiment_entry({
+            "timestamp": timestamp,
+            "experiment_id": f"BC_Marl_{timestamp}",
+            "trial_id": f"BC_{timestamp}",
+            "map_name": args.map,
+            "num_agents": args.num_agents,
+            "learning_rate": float(args.lr),
+            "batch_size": int(args.batch_size),
+            "num_episodes": int(args.epochs),
+            "train_reward_mean": "N/A (Imitation)",
+            "status": "COMPLETED",
+            "checkpoint_path": str(out_dir.resolve())
+        })
+    except Exception as e:
+        print(f"[WARN] Could not update results tracker: {e}")
+
     print("\n" + "="*70)
     print("✅ TREINAMENTO POR IMITAÇÃO (BC) CONCLUÍDO COM SUCESSO!")
     print(f"Pesos salvos em: {out_dir}")
-    print(f"Você pode usar estes modelos para Warm-Start no PPO/DQN via flag --restore-checkpoint")
+    print(f"Metadados model_info.json gerados com sucesso.")
+    print("Você pode usar estes modelos para Warm-Start no PPO/DQN via flag --restore-checkpoint")
     print("="*70 + "\n")
 
 if __name__ == "__main__":

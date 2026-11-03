@@ -63,6 +63,13 @@ except ImportError:
 
 torch, nn = try_import_torch()
 
+from experiments.utils.training_postprocessor import (
+    TrainingProgressCallback,
+    create_cli_progress_reporter,
+    postprocess_experiment_trials,
+    resolve_restore_checkpoint
+)
+
 # ======================================================================
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (DQN / RAINBOW)
 # ======================================================================
@@ -129,6 +136,8 @@ def parse_args():
     parser.add_argument("--concurrent", type=int, default=2, help="Max concurrent trials in Grid Search")
     parser.add_argument("--checkpoint-freq", type=int, default=10, help="Checkpoint frequency in iterations")
     parser.add_argument("--keep-checkpoints-num", type=int, default=15, help="Number of checkpoints to keep")
+    parser.add_argument("--batch-size", type=int, default=None, help="Override train batch size")
+    parser.add_argument("--restore-checkpoint", type=str, default=None, help="Path to checkpoint or 'auto' to warm-start policies")
     return parser.parse_args()
 
 def main():
@@ -256,19 +265,38 @@ def main():
     params_str = f"map-{args.map.replace('.txt', '')}_agents-{args.num_agents}_workers{args.workers}"
     params_dir_name = f"DQN_Marl_{params_str}"
 
-    tune.run(
-        "DQN",
-        name=params_dir_name,
-        stop=stop_fn,
-        config=config_dict,
-        checkpoint_freq=args.checkpoint_freq,
-        checkpoint_at_end=True,
-        keep_checkpoints_num=args.keep_checkpoints_num,
-        max_concurrent_trials=args.concurrent,
-        verbose=1,
-        storage_path=str(ray_results_base.resolve())
-    )
-    print("\n✅ Treinamento DQN finalizado com sucesso!")
+    start_time = time.time()
+    try:
+        analysis = tune.run(
+            "DQN",
+            name=params_dir_name,
+            stop=stop_fn,
+            config=config_dict,
+            checkpoint_freq=args.checkpoint_freq,
+            checkpoint_at_end=True,
+            checkpoint_score_attr="env_runners/episode_reward_mean",
+            keep_checkpoints_num=args.keep_checkpoints_num,
+            max_concurrent_trials=args.concurrent,
+            verbose=1,
+            progress_reporter=create_cli_progress_reporter(),
+            callbacks=[TrainingProgressCallback()],
+            storage_path=str(ray_results_base.resolve())
+        )
+        postprocess_experiment_trials(
+            analysis=analysis,
+            algorithm_name="DQN",
+            args=args,
+            ray_results_base=ray_results_base,
+            params_dir_name=params_dir_name,
+            timestamp_dir_name=timestamp_dir_name,
+            timestamp=timestamp,
+            start_time=start_time
+        )
+        print("\n✅ Treinamento DQN finalizado com sucesso!")
+    except Exception as e:
+        print(f"Erro durante sessão de treino DQN: {e}")
+    finally:
+        ray.shutdown()
 
 if __name__ == "__main__":
     main()
