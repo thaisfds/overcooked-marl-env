@@ -25,15 +25,21 @@ tmux send-keys -t "$SESSION_NAME.0" 'docker-rootless-daemon-run' C-m
 # 3. Divide a tela verticalmente (-h: lado a lado)
 tmux split-window -h -t "$SESSION_NAME" -c "$PWD"
 
-# 4. Monta os argumentos para o treinamento
+# 4. Monta os argumentos e repassa variáveis de ambiente para o treinamento
 if [ $# -eq 0 ]; then
   TRAIN_ARGS="--map tutorial.txt --num-agents 2"
 else
   TRAIN_ARGS="$*"
 fi
 
+ENV_PREFIX=""
+[ -n "$WORKERS" ] && ENV_PREFIX="WORKERS=$WORKERS $ENV_PREFIX"
+[ -n "$CONCURRENT" ] && ENV_PREFIX="CONCURRENT=$CONCURRENT $ENV_PREFIX"
+[ -n "$ALGO" ] && ENV_PREFIX="ALGO=$ALGO $ENV_PREFIX"
+[ -n "$EVAL_EPISODES" ] && ENV_PREFIX="EVAL_EPISODES=$EVAL_EPISODES $ENV_PREFIX"
+
 # Envia o comando no painel direito (.1) aguardando 6s para o daemon subir
-tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && bash run_server_docker.sh $TRAIN_ARGS" C-m
+tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && ${ENV_PREFIX}bash run_server_docker.sh $TRAIN_ARGS" C-m
 
 # 5. Anexa o usuário diretamente à sessão para acompanhar
 tmux attach-session -t "$SESSION_NAME"

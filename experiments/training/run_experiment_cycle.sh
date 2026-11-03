@@ -31,21 +31,61 @@ CONCURRENT=${CONCURRENT:-4}
 EVAL_EPISODES=${EVAL_EPISODES:-20}
 SKIP_EVAL=${SKIP_EVAL:-0}
 GENERATE_CHARTS=${GENERATE_CHARTS:-false}
+ALGO=${ALGO:-ppo}
 
+# Parse --algo from CLI arguments if provided
+TRAIN_ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --algo)
+            ALGO="$2"
+            shift 2
+            ;;
+        *)
+            TRAIN_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+ALGO_LOWER="$(echo "$ALGO" | tr '[:upper:]' '[:lower:]')"
+case "$ALGO_LOWER" in
+    dqn)
+        TRAIN_SCRIPT="experiments/training/train_dqn.py"
+        ;;
+    impala)
+        TRAIN_SCRIPT="experiments/training/train_impala.py"
+        ;;
+    appo)
+        TRAIN_SCRIPT="experiments/training/train_appo.py"
+        ;;
+    bc)
+        TRAIN_SCRIPT="experiments/training/train_bc.py"
+        ;;
+    ppo|*)
+        TRAIN_SCRIPT="experiments/training/train_ppo.py"
+        ;;
+esac
+
+echo "Algorithm selected: $ALGO (using $TRAIN_SCRIPT)"
 echo "Using Python executable: $PYTHON_CMD"
 echo "Workers count: $WORKERS"
 echo "Concurrent trials: $CONCURRENT"
-if [ "$SKIP_EVAL" = "1" ] || [ "$EVAL_EPISODES" = "0" ]; then
-    echo "Evaluation: SKIPPED (SKIP_EVAL=$SKIP_EVAL, EVAL_EPISODES=$EVAL_EPISODES)"
+if [ "$SKIP_EVAL" = "1" ] || [ "$EVAL_EPISODES" = "0" ] || [ "$ALGO_LOWER" = "bc" ]; then
+    echo "Evaluation: SKIPPED (SKIP_EVAL=$SKIP_EVAL, EVAL_EPISODES=$EVAL_EPISODES, ALGO=$ALGO)"
 else
     echo "Evaluation episodes: $EVAL_EPISODES"
 fi
-if [ $# -gt 0 ]; then
-    echo "Custom arguments: $@"
+if [ ${#TRAIN_ARGS[@]} -gt 0 ]; then
+    echo "Custom arguments: ${TRAIN_ARGS[*]}"
 fi
 
 # 1. Train model (passes through all custom CLI arguments e.g. --map, --num-agents, --episodes, etc.)
-$PYTHON_CMD experiments/training/train_ppo.py --workers $WORKERS --concurrent $CONCURRENT "$@"
+if [ "$ALGO_LOWER" = "bc" ]; then
+    $PYTHON_CMD $TRAIN_SCRIPT "${TRAIN_ARGS[@]}"
+else
+    $PYTHON_CMD $TRAIN_SCRIPT --workers $WORKERS --concurrent $CONCURRENT "${TRAIN_ARGS[@]}"
+fi
 
 echo "=================================================="
 echo "TRAINING COMPLETED"

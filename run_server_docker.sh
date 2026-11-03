@@ -96,6 +96,7 @@ docker run --rm $DOCKER_TTY \
   -e WORKERS \
   -e CONCURRENT \
   -e EVAL_EPISODES \
+  -e ALGO \
   --name overcooked_container \
   -v "$PWD":/app \
   overcooked_marl:latest \
