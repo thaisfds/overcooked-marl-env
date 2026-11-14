@@ -19,8 +19,12 @@ echo "=================================================="
 # 1. Cria a sessão com terminal interativo padrão (carrega ~/.bashrc e todos os aliases)
 tmux new-session -d -s "$SESSION_NAME" -c "$PWD"
 
-# 2. Envia o comando para rodar o daemon do docker no painel esquerdo (.0)
-tmux send-keys -t "$SESSION_NAME.0" 'docker-rootless-daemon-run' C-m
+# 2. Envia o comando para rodar o daemon do docker no painel esquerdo (.0) se necessário
+if command -v docker-rootless-daemon-run >/dev/null 2>&1; then
+  tmux send-keys -t "$SESSION_NAME.0" 'docker-rootless-daemon-run' C-m
+else
+  tmux send-keys -t "$SESSION_NAME.0" 'echo "ℹ️ Docker daemon já gerenciado pelo host (rootless daemon não necessário aqui)."' C-m
+fi
 
 # 3. Divide a tela verticalmente (-h: lado a lado)
 tmux split-window -h -t "$SESSION_NAME" -c "$PWD"

@@ -110,8 +110,21 @@ if [ ${#ARGS[@]} -eq 0 ]; then
   ARGS=(--map tutorial.txt --num-agents 4)
 fi
 
+# Detectar suporte a GPU no Docker da máquina host
+GPU_FLAGS=()
+if command -v nvidia-smi >/dev/null 2>&1; then
+  if docker run --rm --gpus all overcooked_marl:latest true 2>/dev/null; then
+    GPU_FLAGS=(--gpus all)
+    echo "🎮 GPU NVIDIA detectada e habilitada no Docker (--gpus all)."
+  else
+    echo "⚠️ nvidia-smi encontrado, mas o Docker não tem NVIDIA Container Toolkit configurado. Executando em CPU."
+  fi
+else
+  echo "ℹ️ GPU NVIDIA não detectada na máquina host. Executando container em modo CPU."
+fi
+
 echo "=================================================="
-echo "3. Running Docker Container with GPU access..."
+echo "3. Running Docker Container..."
 echo "   Script:    $ENTRY_SCRIPT"
 echo "   Arguments: ${ARGS[*]}"
 if [ -n "$ALGOS" ]; then
@@ -119,7 +132,7 @@ if [ -n "$ALGOS" ]; then
 fi
 echo "=================================================="
 docker run --rm $DOCKER_TTY \
-  --gpus all \
+  "${GPU_FLAGS[@]}" \
   --shm-size=16g \
   -e WORKERS \
   -e CONCURRENT \
