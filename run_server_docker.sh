@@ -123,6 +123,14 @@ else
   echo "ℹ️ GPU NVIDIA não detectada na máquina host. Executando container em modo CPU."
 fi
 
+TOTAL_RAM_GB=$(awk '/MemTotal/ { printf "%.0f", $2 / 1024 / 1024 }' /proc/meminfo 2>/dev/null || echo 16)
+SHM_SIZE="16g"
+if [ "$TOTAL_RAM_GB" -le 16 ]; then
+  SHM_SIZE="4g"
+elif [ "$TOTAL_RAM_GB" -le 32 ]; then
+  SHM_SIZE="8g"
+fi
+
 echo "=================================================="
 echo "3. Running Docker Container..."
 echo "   Script:    $ENTRY_SCRIPT"
@@ -130,10 +138,11 @@ echo "   Arguments: ${ARGS[*]}"
 if [ -n "$ALGOS" ]; then
   echo "   ALGOS:     $ALGOS"
 fi
+echo "   SHM Size:  $SHM_SIZE"
 echo "=================================================="
 docker run --rm $DOCKER_TTY \
   "${GPU_FLAGS[@]}" \
-  --shm-size=16g \
+  --shm-size="$SHM_SIZE" \
   -e WORKERS \
   -e CONCURRENT \
   -e EVAL_EPISODES \

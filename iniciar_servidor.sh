@@ -45,7 +45,7 @@ ENV_PREFIX=""
 [ -n "$EVAL_EPISODES" ] && ENV_PREFIX="EVAL_EPISODES=$EVAL_EPISODES $ENV_PREFIX"
 
 # Envia o comando no painel direito (.1) aguardando 6s para o daemon subir
-tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && ${ENV_PREFIX}bash run_server_docker.sh $TRAIN_ARGS" C-m
+tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && ${ENV_PREFIX}bash run_server_docker.sh $TRAIN_ARGS; echo ''; echo '🏁 Processo finalizado com status: '\$?; echo 'Pressione Enter para fechar este painel.'; read" C-m
 
 # 5. Anexa o usuário diretamente à sessão para acompanhar
 tmux attach-session -t "$SESSION_NAME"

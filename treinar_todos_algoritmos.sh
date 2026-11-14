@@ -78,12 +78,23 @@ else
     SELECTED_ALGOS=("${DEFAULT_ALGOS[@]}")
 fi
 
-# 5. Otimização de recursos de CPU da máquina local
+# 5. Otimização de recursos de CPU e Memória (evita crash por esgotamento de RAM / OOM)
+TOTAL_RAM_GB=$(awk '/MemTotal/ { printf "%.0f", $2 / 1024 / 1024 }' /proc/meminfo 2>/dev/null || echo 16)
 CPU_COUNT=$($PYTHON_CMD -c "import os; print(os.cpu_count() or 4)" 2>/dev/null || echo 4)
-DEFAULT_WORKERS=$(awk -v c="$CPU_COUNT" 'BEGIN { w = int(c * 0.7); if (w < 4) w = 4; if (w > 16) w = 16; print w }')
+
+if [ "$TOTAL_RAM_GB" -le 16 ]; then
+    DEFAULT_CONCURRENT=2
+    DEFAULT_WORKERS=6
+elif [ "$TOTAL_RAM_GB" -le 32 ]; then
+    DEFAULT_CONCURRENT=2
+    DEFAULT_WORKERS=10
+else
+    DEFAULT_CONCURRENT=4
+    DEFAULT_WORKERS=$(awk -v c="$CPU_COUNT" 'BEGIN { w = int(c * 0.7); if (w < 4) w = 4; if (w > 16) w = 16; print w }')
+fi
 
 export WORKERS=${WORKERS:-$DEFAULT_WORKERS}
-export CONCURRENT=${CONCURRENT:-4}
+export CONCURRENT=${CONCURRENT:-$DEFAULT_CONCURRENT}
 export EVAL_EPISODES=${EVAL_EPISODES:-20}
 
 TOTAL_ALGOS=${#SELECTED_ALGOS[@]}
