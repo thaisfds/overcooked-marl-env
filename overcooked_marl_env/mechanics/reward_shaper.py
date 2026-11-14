@@ -73,8 +73,8 @@ class RewardValues:
     handoff_place: float = 1.0                # Small positive nudge when placing needed item on counter
     cooperative_delivery_bonus: float = 50.0  # Extra team bonus when both agents contributed to a delivered recipe
     solo_delivery_bonus: float = 0.0          # Bonus for delivering agent on solo deliveries
-    inactivity_penalty: float = -0.05         # Penalty per step when empty-handed and idle > threshold steps
-    inactivity_threshold: int = 40            # Steps before inactivity penalty kicks in
+    inactivity_penalty: float = 0.0           # 0.0 by default to prevent penalizing agents waiting for teammates
+    inactivity_threshold: int = 40            # Steps before inactivity penalty kicks in (if enabled)
 
     # Penalties (Anti-Reward Hacking & Efficiency)
     invalid: float = -0.01
@@ -86,8 +86,8 @@ class RewardValues:
     trash_ready_penalty: float = -30.0
     trash_dish_penalty: float = -60.0
     unneeded_pickup_penalty: float = -2.0
-    useless_cycle_penalty: float = -5.0
-    useless_cycle: float = -5.0
+    useless_cycle_penalty: float = -1.0
+    useless_cycle: float = -1.0
     repetition_penalty: float = 0.0
     accumulation_penalty: float = 0.0
     accumulation_threshold: int = 5
@@ -296,7 +296,8 @@ class RewardShaper:
         self,
         ingredient_name: str,
         game_state: Dict,
-        exclude_instance_id: Optional[int] = None
+        exclude_instance_id: Optional[int] = None,
+        check_all_pending: bool = False
     ) -> bool:
         """
         Check if this ingredient is already available or in production across the kitchen.
@@ -342,11 +343,18 @@ class RewardShaper:
                 if ingredient_name_lower in p_ings:
                     existing_count += 1
 
-        # How many are needed for the active pending recipe?
-        _, recipe, required_ingredients = self._get_next_pending_recipe(game_state)
+        # How many are needed?
         needed_count = 0
-        if required_ingredients:
-            needed_count = sum(1 for i in required_ingredients if i.lower() == ingredient_name_lower)
+        if check_all_pending:
+            pending_recipes = self._get_pending_recipes(game_state)
+            for p_name in pending_recipes:
+                p_rec = self.recipe_manager.get_recipe_by_name(p_name)
+                if p_rec and p_rec.ingredients:
+                    needed_count += sum(1 for i in p_rec.ingredients if i.lower() == ingredient_name_lower)
+        else:
+            _, recipe, required_ingredients = self._get_next_pending_recipe(game_state)
+            if required_ingredients:
+                needed_count = sum(1 for i in required_ingredients if i.lower() == ingredient_name_lower)
 
         # If we already have at least as many as needed, it's considered already processed/available
         return existing_count >= max(1, needed_count)
@@ -381,12 +389,12 @@ class RewardShaper:
                     exclude_id = i_id
                     break
             if ingredient_name in req_lower:
-                if self._check_ingredient_already_processed(ingredient_name, game_state, exclude_instance_id=exclude_id):
+                if self._check_ingredient_already_processed(ingredient_name, game_state, exclude_instance_id=exclude_id, check_all_pending=False):
                     progress_reward += self.rewards.unneeded_pickup_penalty
                 else:
                     progress_reward += self.rewards.progress_pickup_needed
             elif ingredient_name in all_pending_reqs:
-                if self._check_ingredient_already_processed(ingredient_name, game_state, exclude_instance_id=exclude_id):
+                if self._check_ingredient_already_processed(ingredient_name, game_state, exclude_instance_id=exclude_id, check_all_pending=True):
                     progress_reward += self.rewards.unneeded_pickup_penalty
                 else:
                     progress_reward += self.rewards.progress_pickup_needed * 0.75

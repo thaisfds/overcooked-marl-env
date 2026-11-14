@@ -72,11 +72,11 @@ from experiments.utils.training_postprocessor import (
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (IMPALA)
 # ======================================================================
 HYPERPARAMETER_GRID = {
-    "lr": [3e-4, 5e-4],                   # Taxa de aprendizado para RMSprop / Adam
-    "gamma": [0.98, 0.99],                # Fator de desconto
-    "entropy_coeff": [0.01, 0.02],        # Coeficiente de entropia para exploração contínua
-    "train_batch_size": [500, 1000],      # Lote de atualização do learner
-    "num_episodes": [2500],               # Total de episódios
+    "lr": [3e-4, 5e-4],                   # Taxas comprovadas dos modelos campeões (#1 e #2)
+    "gamma": [0.98],                      # Fator de desconto ótimo (+1847.13 pico)
+    "entropy_coeff": [0.01, 0.02],        # Coeficiente de entropia ótimo
+    "train_batch_size": [1000],           # Lote ótimo de atualização
+    "num_episodes": [1500],               # 1500 episódios
     "seed": [42]
 }
 
@@ -124,7 +124,7 @@ def parse_args():
     default_workers = max(2, min(12, os.cpu_count() - 2)) if hasattr(os, 'cpu_count') and os.cpu_count() else 4
     parser = argparse.ArgumentParser(description="High-Throughput Distributed IMPALA Training for Overcooked MARL.")
     parser.add_argument("--map", type=str, default="tutorial.txt", help="Map file name (default: tutorial.txt)")
-    parser.add_argument("--num-agents", type=int, default=2, help="Number of agents to train (default: 2)")
+    parser.add_argument("--num-agents", type=int, default=4, help="Number of agents to train (default: 4)")
     parser.add_argument("--episodes", type=int, default=None, help="Override training episodes")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--gamma", type=float, default=None, help="Override discount factor")
@@ -146,6 +146,8 @@ def main():
         HYPERPARAMETER_GRID["lr"] = [args.lr]
     if args.gamma is not None:
         HYPERPARAMETER_GRID["gamma"] = [args.gamma]
+    if args.batch_size is not None:
+        HYPERPARAMETER_GRID["train_batch_size"] = [args.batch_size]
 
     print("\n" + "="*70)
     print("⚡ INICIANDO TREINAMENTO DISTRIBUÍDO COM IMPALA (V-TRACE)")

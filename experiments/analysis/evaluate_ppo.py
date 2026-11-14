@@ -158,8 +158,13 @@ def main():
             featurized_obs=True
         )
         
-    env_name = "overcooked_marl_parallel"
-    register_env(env_name, lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
+    for env_n in [
+        "overcooked_marl_parallel",
+        "overcooked_marl_parallel_impala",
+        "overcooked_marl_parallel_appo",
+        "overcooked_marl_parallel_dqn"
+    ]:
+        register_env(env_n, lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
     
     algo = None
     policies = None

@@ -111,8 +111,9 @@ def generate_heuristic_demonstrations(env, num_steps=2000) -> Dict[str, Dict[str
 def parse_args():
     parser = argparse.ArgumentParser(description="Multi-Agent Behavioral Cloning (BC) Pre-trainer for Overcooked.")
     parser.add_argument("--map", type=str, default="tutorial.txt", help="Map file name (default: tutorial.txt)")
-    parser.add_argument("--num-agents", type=int, default=2, help="Number of agents (default: 2)")
+    parser.add_argument("--num-agents", type=int, default=4, help="Number of agents (default: 4)")
     parser.add_argument("--epochs", type=int, default=30, help="Training epochs for BC (default: 30)")
+    parser.add_argument("--episodes", type=int, default=None, help="Alias or override for demonstration dataset size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate for Adam optimizer")
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size for training")
     parser.add_argument("--demo-steps", type=int, default=5000, help="Number of demonstration steps to generate")

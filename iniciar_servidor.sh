@@ -27,7 +27,7 @@ tmux split-window -h -t "$SESSION_NAME" -c "$PWD"
 
 # 4. Monta os argumentos e repassa variáveis de ambiente para o treinamento
 if [ $# -eq 0 ]; then
-  TRAIN_ARGS="--map tutorial.txt --num-agents 2"
+  TRAIN_ARGS="--map tutorial.txt --num-agents 4"
 else
   TRAIN_ARGS="$*"
 fi

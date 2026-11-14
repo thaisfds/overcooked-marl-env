@@ -246,20 +246,23 @@ class OvercookedMARL(ParallelEnv):
         if global_reward > 0:
             for agent_id in self.agents: rewards[agent_id] += global_reward
 
-        # Inactivity Penalty Tracking (Penalize agents that idle or wander empty-handed)
-        inactivity_penalty = getattr(self.interaction_handler.rewards, 'inactivity_penalty', -0.05)
+        # Inactivity Penalty Tracking
+        inactivity_penalty = getattr(self.interaction_handler.rewards, 'inactivity_penalty', 0.0)
         inactivity_threshold = getattr(self.interaction_handler.rewards, 'inactivity_threshold', 40)
         inactivity_counters = self.state.setdefault("inactivity_counters", {agent: 0 for agent in self.possible_agents})
 
-        for agent_id in self.agents:
-            is_holding = self.state["agent_holding_instance"].get(agent_id) is not None
-            action = actions.get(agent_id, None)
-            if is_holding or action == 4:
-                inactivity_counters[agent_id] = 0
-            else:
-                inactivity_counters[agent_id] += 1
-                if inactivity_counters[agent_id] > inactivity_threshold:
-                    rewards[agent_id] += inactivity_penalty
+        if inactivity_penalty < 0:
+            for agent_id in self.agents:
+                action = actions.get(agent_id, None)
+                old_pos = current_positions.get(agent_id)
+                new_pos = final_positions.get(agent_id)
+                moved = (old_pos != new_pos)
+                if action == 4 or moved:
+                    inactivity_counters[agent_id] = 0
+                else:
+                    inactivity_counters[agent_id] += 1
+                    if inactivity_counters[agent_id] > inactivity_threshold:
+                        rewards[agent_id] += inactivity_penalty
                 
         # State Update and Episode Conclusion
         

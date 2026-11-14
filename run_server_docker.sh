@@ -84,10 +84,10 @@ if ! docker build -t overcooked_marl:latest .; then
   docker build --no-cache -t overcooked_marl:latest .
 fi
 
-# Se nenhum argumento for passado, usar por padrão 2 agentes no tutorial.txt
+# Se nenhum argumento for passado, usar por padrão 4 agentes no tutorial.txt
 ARGS=("$@")
 if [ ${#ARGS[@]} -eq 0 ]; then
-  ARGS=(--map tutorial.txt --num-agents 2)
+  ARGS=(--map tutorial.txt --num-agents 4)
 fi
 
 echo "=================================================="

@@ -41,6 +41,10 @@ while [ $# -gt 0 ]; do
             ALGO="$2"
             shift 2
             ;;
+        -h|--help)
+            $PYTHON_CMD ${TRAIN_SCRIPT:-experiments/training/train_ppo.py} --help
+            exit 0
+            ;;
         *)
             TRAIN_ARGS+=("$1")
             shift

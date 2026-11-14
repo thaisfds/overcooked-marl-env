@@ -48,7 +48,7 @@ def get_pretrained_weights(checkpoint_path: str):
     return _WARM_START_WEIGHTS_CACHE[checkpoint_path]
 
 class WarmStartFromCheckpointCallback(DefaultCallbacks):
-    """Restores pre-trained policy weights from Model 04 into algorithm at initialization."""
+    """Restores pre-trained policy weights into algorithm at initialization if compatible."""
     def on_algorithm_init(self, *, algorithm, **kwargs):
         cfg = algorithm.config
         env_cfg = cfg.get("env_config", {})
@@ -56,14 +56,35 @@ class WarmStartFromCheckpointCallback(DefaultCallbacks):
         if cp_path and os.path.exists(cp_path):
             try:
                 pretrained = get_pretrained_weights(cp_path)
-                available_policies = set(algorithm.get_weights().keys())
-                target_weights = {p_id: w for p_id, w in pretrained.items() if p_id in available_policies}
-                algorithm.set_weights(target_weights)
-                print("\n" + "="*70)
-                print("🔥 [WARM-START] Injected pretrained weights into policies:")
-                print(f"   Source Checkpoint: {cp_path}")
-                print(f"   Target Policies:   {list(target_weights.keys())}")
-                print("="*70 + "\n")
+                current_weights = algorithm.get_weights()
+                available_policies = set(current_weights.keys())
+                target_weights = {}
+                for p_id, w in pretrained.items():
+                    if p_id in available_policies:
+                        curr_p_w = current_weights[p_id]
+                        mismatch = False
+                        for k, tensor_val in w.items():
+                            if k in curr_p_w:
+                                if hasattr(tensor_val, 'shape') and hasattr(curr_p_w[k], 'shape'):
+                                    if tensor_val.shape != curr_p_w[k].shape:
+                                        print(f"⚠️ [WARM-START] Architecture mismatch in {p_id}.{k}: checkpoint {tensor_val.shape} vs current model {curr_p_w[k].shape}")
+                                        mismatch = True
+                                        break
+                        if not mismatch:
+                            target_weights[p_id] = w
+
+                if target_weights:
+                    algorithm.set_weights(target_weights)
+                    print("\n" + "="*70)
+                    print("🔥 [WARM-START] Injected pretrained weights into policies:")
+                    print(f"   Source Checkpoint: {cp_path}")
+                    print(f"   Target Policies:   {list(target_weights.keys())}")
+                    print("="*70 + "\n")
+                else:
+                    print("\n" + "="*70)
+                    print(f"⚠️ [WARM-START] Checkpoint {cp_path} architecture is incompatible with current model.")
+                    print("   Training policies cleanly from scratch.")
+                    print("="*70 + "\n")
             except Exception as e:
                 print(f"⚠️ [WARM-START ERROR] Failed to set weights from {cp_path}: {e}")
 
@@ -71,14 +92,30 @@ class WarmStartFromCheckpointCallback(DefaultCallbacks):
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (OPTIMIZED TOP-PERFORMING GRID)
 # ======================================================================
 
+# ======================================================================
+# TOP 4 BEST HYPERPARAMETERS DISCOVERED IN BENCHMARKS (12/10 SESSION)
+# ======================================================================
+# Sessão PPO_Marl_20261011_184017 (tutorial.txt, 2000 episódios, 6M timesteps):
+# 1. Rank 1 (Trial 00000): lr=1e-4, gamma=0.98, entropy=0.015 -> Train: +1792.79, Eval: +1877.14 (4.0 entregas/ep)
+# 2. Rank 2 (Trial 00003): lr=1e-4, gamma=0.99, entropy=0.020 -> Train: +1264.28
+# 3. Rank 3 (Trial 00004): lr=3e-4, gamma=0.98, entropy=0.015 -> Train: +1079.52
+# 4. Rank 4 (Trial 00002): lr=1e-4, gamma=0.99, entropy=0.015 -> Train: +832.37
+
+TOP_4_HYPERPARAMETERS = [
+    {"lr": 0.0001, "gamma": 0.98, "entropy_coeff": 0.015, "rank": 1, "desc": "Rank 1: Campeão (+1877.14 eval, 4.0 entregas/ep)"},
+    {"lr": 0.0001, "gamma": 0.99, "entropy_coeff": 0.020, "rank": 2, "desc": "Rank 2: Vice-campeão (+1264.28 treino)"},
+    {"lr": 0.0003, "gamma": 0.98, "entropy_coeff": 0.015, "rank": 3, "desc": "Rank 3: Melhor LR rápida (+1079.52 treino)"},
+    {"lr": 0.0001, "gamma": 0.99, "entropy_coeff": 0.015, "rank": 4, "desc": "Rank 4: Alta estabilidade (+832.37 treino)"},
+]
+
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 3e-4, 5e-4],            # Faixa ótima baseada nos modelos campeões (#1, #2, #13)
-    "gamma": [0.98, 0.99, 0.995],        # 0.98 (ágil), 0.99 (padrão) e 0.995 (longo prazo p/ receitas complexas)
-    "entropy_coeff": [0.015, 0.020, 0.030], # Sweet spot empírico para exploração sem colapso
+    "lr": [1e-4, 3e-4],                  # Melhores taxas de aprendizado dos modelos campeões (#1 e #3)
+    "gamma": [0.98, 0.99],               # Melhores fatores de desconto comprovados (#1 ágil e #2 padrão)
+    "entropy_coeff": [0.015],            # Entropia ótima do modelo campeão (+1792.79)
     "train_batch_size": [4000],          # Tamanho de coleta ótimo
     "sgd_minibatch_size": [256],         # Minibatch PPO
     "update_epochs": [12],               # Épocas de atualização por iteração
-    "num_episodes": [2000],              # ~3.0M a 4.0M timesteps por trial
+    "num_episodes": [1500],              # 1500 episódios por trial para 4 agentes
     "seed": [42]
 }
 
@@ -141,8 +178,8 @@ def convert_to_serializable(obj):
 def parse_args():
     default_workers = max(2, min(12, os.cpu_count() - 2)) if hasattr(os, 'cpu_count') and os.cpu_count() else 4
     parser = argparse.ArgumentParser(description="Optimized, parameterized RLlib PPO training for Overcooked MARL.")
-    parser.add_argument("--map", type=str, default="default_map.txt", help="Map name (default: default_map.txt)")
-    parser.add_argument("--num-agents", type=int, default=1, help="Number of agents to train with (default: 1)")
+    parser.add_argument("--map", type=str, default="tutorial.txt", help="Map name (default: tutorial.txt)")
+    parser.add_argument("--num-agents", type=int, default=4, help="Number of agents to train with (default: 4)")
     parser.add_argument("--episodes", type=int, default=None, help="Override training episodes")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--gamma", type=float, default=None, help="Override discount factor")
@@ -165,6 +202,8 @@ def resolve_restore_checkpoint(arg_val: Optional[str]) -> Optional[str]:
     if not arg_val:
         return None
     val_str = str(arg_val).strip()
+    if val_str.lower() in ("none", "false", "0", ""):
+        return None
     
     # 1. Caminho explícito passado pelo usuário (arquivo, pasta de checkpoint ou pasta da trial)
     p = Path(val_str)
@@ -265,6 +304,12 @@ def main():
     if args.seed is not None:
         HYPERPARAMETER_GRID['seed'] = [args.seed]
         
+    has_explicit_hparams = (
+        args.lr is not None or
+        args.gamma is not None or
+        args.entropy_coeff is not None
+    )
+
     print("\n" + "="*50)
     print("STARTING OPTIMIZED MULTI-AGENT PPO TRAINING" + (" (WARM-START FINE-TUNING)" if restore_checkpoint_path else ""))
     print(f"  Map:          {args.map}")
@@ -272,7 +317,12 @@ def main():
     print(f"  Workers:      {args.workers}")
     print(f"  GPUs:         {args.gpus}")
     print(f"  Warm-Start:   {restore_checkpoint_path or 'None (scratch)'}")
-    print(f"  Grid Options: {HYPERPARAMETER_GRID}")
+    if not has_explicit_hparams and not restore_checkpoint_path:
+        print(f"  Mode:         TOP 4 BEST BENCHMARK HYPERPARAMETERS")
+        for p in TOP_4_HYPERPARAMETERS:
+            print(f"    - {p['desc']}: lr={p['lr']}, gamma={p['gamma']}, entropy={p['entropy_coeff']}")
+    else:
+        print(f"  Grid Options: {HYPERPARAMETER_GRID}")
     print("="*50 + "\n")
     
     ray.init(ignore_reinit_error=True)
@@ -305,9 +355,17 @@ def main():
     }
     
     # Map hyperparameters grid to Ray Tune's search space dynamically
-    tune_lr = tune.grid_search(HYPERPARAMETER_GRID['lr']) if len(HYPERPARAMETER_GRID['lr']) > 1 else HYPERPARAMETER_GRID['lr'][0]
-    tune_gamma = tune.grid_search(HYPERPARAMETER_GRID['gamma']) if len(HYPERPARAMETER_GRID['gamma']) > 1 else HYPERPARAMETER_GRID['gamma'][0]
-    tune_entropy = tune.grid_search(HYPERPARAMETER_GRID['entropy_coeff']) if len(HYPERPARAMETER_GRID['entropy_coeff']) > 1 else HYPERPARAMETER_GRID['entropy_coeff'][0]
+    tune_hparam = None
+    if not has_explicit_hparams and not restore_checkpoint_path:
+        tune_hparam = tune.grid_search(TOP_4_HYPERPARAMETERS)
+        tune_lr = tune.sample_from(lambda config: config["hparam_trial"]["lr"])
+        tune_gamma = tune.sample_from(lambda config: config["hparam_trial"]["gamma"])
+        tune_entropy = tune.sample_from(lambda config: config["hparam_trial"]["entropy_coeff"])
+    else:
+        tune_lr = tune.grid_search(HYPERPARAMETER_GRID['lr']) if len(HYPERPARAMETER_GRID['lr']) > 1 else HYPERPARAMETER_GRID['lr'][0]
+        tune_gamma = tune.grid_search(HYPERPARAMETER_GRID['gamma']) if len(HYPERPARAMETER_GRID['gamma']) > 1 else HYPERPARAMETER_GRID['gamma'][0]
+        tune_entropy = tune.grid_search(HYPERPARAMETER_GRID['entropy_coeff']) if len(HYPERPARAMETER_GRID['entropy_coeff']) > 1 else HYPERPARAMETER_GRID['entropy_coeff'][0]
+
     tune_batch_size = tune.grid_search(HYPERPARAMETER_GRID['train_batch_size']) if len(HYPERPARAMETER_GRID['train_batch_size']) > 1 else HYPERPARAMETER_GRID['train_batch_size'][0]
     tune_minibatch_size = tune.grid_search(HYPERPARAMETER_GRID['sgd_minibatch_size']) if len(HYPERPARAMETER_GRID['sgd_minibatch_size']) > 1 else HYPERPARAMETER_GRID['sgd_minibatch_size'][0]
     tune_epochs = tune.grid_search(HYPERPARAMETER_GRID['update_epochs']) if len(HYPERPARAMETER_GRID['update_epochs']) > 1 else HYPERPARAMETER_GRID['update_epochs'][0]
@@ -362,6 +420,8 @@ def main():
     )
     
     config_dict = ppo_config.to_dict()
+    if tune_hparam is not None:
+        config_dict['hparam_trial'] = tune_hparam
     config_dict['sgd_minibatch_size'] = tune_minibatch_size
     config_dict['train_batch_size'] = tune_batch_size
     config_dict['seed'] = tune_seed
@@ -549,6 +609,14 @@ def main():
             p_epochs = trial_config.get('num_epochs', 8)
             p_entropy = trial_config.get('entropy_coeff', 0.01)
             p_episodes = trial_env_config.get('num_episodes', 300)
+            
+            # Resolve from hparam_trial if value is callable or dictionary
+            if callable(p_lr) or not isinstance(p_lr, (int, float)):
+                p_lr = trial_config.get('hparam_trial', {}).get('lr', 1e-4)
+            if callable(p_gamma) or not isinstance(p_gamma, (int, float)):
+                p_gamma = trial_config.get('hparam_trial', {}).get('gamma', 0.98)
+            if callable(p_entropy) or not isinstance(p_entropy, (int, float)):
+                p_entropy = trial_config.get('hparam_trial', {}).get('entropy_coeff', 0.015)
             
             config_str = f"lr{p_lr}_gamma{p_gamma}_batch{p_batch}_epochs{p_epochs}_episodes{p_episodes}_entropy{p_entropy}_seed{p_seed}"
             config_name = f"PPO_Config_{config_str}"

@@ -43,6 +43,7 @@ os.environ["RAY_AIR_NEW_OUTPUT"] = "0"
 os.environ["AIR_VERBOSITY"] = "0"
 
 import argparse
+import random
 import time
 import json
 from datetime import datetime
@@ -74,12 +75,12 @@ from experiments.utils.training_postprocessor import (
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (DQN / RAINBOW)
 # ======================================================================
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 3e-4],                   # Taxa de aprendizado para Adam
-    "gamma": [0.98, 0.99],                # Fator de desconto para planejamento
+    "lr": [1e-4, 3e-4],                   # Taxas de aprendizado balanceadas
+    "gamma": [0.98, 0.99],                # Fatores de desconto para horizonte curto e longo
     "n_step": [3],                        # n-step bootstrapping para propagação rápida de crédito
-    "train_batch_size": [64, 128],        # Tamanho do lote de treino amostrado do buffer
+    "train_batch_size": [128],            # Tamanho ótimo de batch para estabilidade com 4 agentes
     "target_network_update_freq": [500],  # Frequência de sincronização da rede alvo
-    "num_episodes": [2000],               # Total de episódios
+    "num_episodes": [1500],               # 1500 episódios
     "seed": [42]
 }
 
@@ -123,27 +124,63 @@ class ParallelEnvToMultiAgent(MultiAgentEnv):
         except AttributeError:
             raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
 
-class SafeDQN(DQN):
-    """Subclass of DQN patching Ray 2.40+ ABCMeta containment bug in replay_buffer_config."""
-    def setup(self, config):
-        if "replay_buffer_config" in config and "type" in config["replay_buffer_config"]:
-            t = config["replay_buffer_config"]["type"]
-            if not isinstance(t, str):
-                config["replay_buffer_config"]["type"] = getattr(t, "__name__", str(t))
-        super().setup(config)
+from ray.rllib.utils.replay_buffers.multi_agent_prioritized_replay_buffer import MultiAgentPrioritizedReplayBuffer
+from ray.rllib.utils.replay_buffers.prioritized_replay_buffer import PrioritizedReplayBuffer
 
-    def _create_local_replay_buffer_if_necessary(self, config):
-        if "replay_buffer_config" in config and "type" in config["replay_buffer_config"]:
-            t = config["replay_buffer_config"]["type"]
-            if not isinstance(t, str):
-                config["replay_buffer_config"]["type"] = getattr(t, "__name__", str(t))
-        return super()._create_local_replay_buffer_if_necessary(config)
+def _patch_prioritized_replay_buffer():
+    """Patches Ray RLlib PrioritizedReplayBuffer to eliminate IndexError when sampling at boundaries."""
+    if getattr(PrioritizedReplayBuffer, "_bounds_safe_patched", False):
+        return
+
+    orig_sample_proportional = PrioritizedReplayBuffer._sample_proportional
+
+    def _safe_sample_proportional(self, num_items: int):
+        storage_len = len(self._storage)
+        if storage_len == 0:
+            return []
+        res = []
+        for _ in range(num_items):
+            total_mass = self._it_sum.sum(0, storage_len)
+            mass = random.random() * total_mass
+            idx = self._it_sum.find_prefixsum_idx(mass)
+            # Clamping guarantees idx is strictly within [0, storage_len - 1]
+            idx = max(0, min(int(idx), storage_len - 1))
+            res.append(idx)
+        return res
+
+    PrioritizedReplayBuffer._sample_proportional = _safe_sample_proportional
+
+    orig_sample = PrioritizedReplayBuffer.sample
+
+    def _safe_sample(self, num_items: int, beta: float = 0.4, **kwargs):
+        if len(self) == 0 or len(self._storage) == 0:
+            return None
+        return orig_sample(self, num_items, beta=beta, **kwargs)
+
+    PrioritizedReplayBuffer.sample = _safe_sample
+    PrioritizedReplayBuffer._bounds_safe_patched = True
+
+_patch_prioritized_replay_buffer()
+
+class MetaWithContains(type(MultiAgentPrioritizedReplayBuffer)):
+    def __contains__(cls, item):
+        return str(item) in cls.__name__
+
+class SafeMAPRB(MultiAgentPrioritizedReplayBuffer, metaclass=MetaWithContains):
+    """Subclass patching Ray 2.40+ ABCMeta containment bug and PrioritizedReplayBuffer bounds bug."""
+    def __init__(self, *args, **kwargs):
+        _patch_prioritized_replay_buffer()
+        super().__init__(*args, **kwargs)
+
+    def sample(self, *args, **kwargs):
+        _patch_prioritized_replay_buffer()
+        return super().sample(*args, **kwargs)
 
 def parse_args():
     default_workers = max(2, min(8, os.cpu_count() - 2)) if hasattr(os, 'cpu_count') and os.cpu_count() else 4
     parser = argparse.ArgumentParser(description="Multi-Agent DQN / Rainbow Training for Overcooked MARL.")
     parser.add_argument("--map", type=str, default="tutorial.txt", help="Map file name (default: tutorial.txt)")
-    parser.add_argument("--num-agents", type=int, default=2, help="Number of agents to train (default: 2)")
+    parser.add_argument("--num-agents", type=int, default=4, help="Number of agents to train (default: 4)")
     parser.add_argument("--episodes", type=int, default=None, help="Override training episodes")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--gamma", type=float, default=None, help="Override discount factor")
@@ -154,6 +191,7 @@ def parse_args():
     parser.add_argument("--keep-checkpoints-num", type=int, default=15, help="Number of checkpoints to keep")
     parser.add_argument("--batch-size", type=int, default=None, help="Override train batch size")
     parser.add_argument("--restore-checkpoint", type=str, default=None, help="Path to checkpoint or 'auto' to warm-start policies")
+    parser.add_argument("--resume", type=str, default=None, help="Resume Ray Tune experiment ('AUTO', 'LOCAL', etc.)")
     return parser.parse_args()
 
 def main():
@@ -231,7 +269,7 @@ def main():
             target_network_update_freq=tune_target_sync,
             num_steps_sampled_before_learning_starts=2000,
             replay_buffer_config={
-                "type": "MultiAgentPrioritizedReplayBuffer",
+                "type": SafeMAPRB,
                 "capacity": 100000,
                 "prioritized_replay_alpha": 0.6,
                 "prioritized_replay_beta": 0.4,
@@ -262,13 +300,6 @@ def main():
     )
 
     config_dict = dqn_config.to_dict()
-    # Ray 2.40+ bugfix: algorithm.py line 4475 checks `if "EpisodeReplayBuffer" in config["replay_buffer_config"]["type"]`
-    # which raises TypeError: argument of type 'ABCMeta' is not iterable when type is a class.
-    # We ensure type is a string name so containment checks and from_config both work seamlessly.
-    if "replay_buffer_config" in config_dict and "type" in config_dict["replay_buffer_config"]:
-        rb_type = config_dict["replay_buffer_config"]["type"]
-        if not isinstance(rb_type, str):
-            config_dict["replay_buffer_config"]["type"] = getattr(rb_type, "__name__", str(rb_type))
 
     def stop_fn(trial_id, result):
         config = result.get("config", {})
@@ -289,7 +320,7 @@ def main():
     start_time = time.time()
     try:
         analysis = tune.run(
-            SafeDQN,
+            "DQN",
             name=params_dir_name,
             stop=stop_fn,
             config=config_dict,
@@ -298,6 +329,8 @@ def main():
             checkpoint_score_attr="env_runners/episode_reward_mean",
             keep_checkpoints_num=args.keep_checkpoints_num,
             max_concurrent_trials=args.concurrent,
+            max_failures=3,
+            resume=args.resume if args.resume else False,
             verbose=1,
             progress_reporter=create_cli_progress_reporter(),
             callbacks=[TrainingProgressCallback()],

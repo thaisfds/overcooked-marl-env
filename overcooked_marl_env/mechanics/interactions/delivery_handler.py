@@ -104,22 +104,26 @@ class DeliveryHandler(StationHandler):
         contributors = set(carrying_item.get("contributors", [])) | {agent_id}
         num_agents = len(game_state.get("agent_pos", {}))
 
+        team_delivery_reward = recipe_reward + order_bonus + out_of_order_pen + delivery_bonus + episode_complete_bonus
+
         if num_agents > 1:
             if len(contributors) > 1:
                 cooperative_bonus = getattr(self.rewards, "cooperative_delivery_bonus", 50.0)
                 total_reward = base_reward + order_bonus + out_of_order_pen + sequence_bonus + delivery_bonus + episode_complete_bonus + cooperative_bonus
-                global_reward_bonus = recipe_reward + order_bonus + out_of_order_pen + delivery_bonus + episode_complete_bonus + cooperative_bonus
+                global_reward_bonus = team_delivery_reward + cooperative_bonus
                 if verbose:
                     print(f"  COOPERATIVE DELIVERY! Contributors: {list(contributors)} (+{cooperative_bonus} bonus shared with team)")
             else:
                 solo_bonus = getattr(self.rewards, "solo_delivery_bonus", 0.0)
                 total_reward = base_reward + order_bonus + out_of_order_pen + sequence_bonus + delivery_bonus + episode_complete_bonus + solo_bonus
-                global_reward_bonus = 0.0
+                # In cooperative MARL, team delivery reward is essential for credit assignment.
+                # All agents receive the base recipe delivery reward, but miss out on the cooperative bonus.
+                global_reward_bonus = team_delivery_reward
                 if verbose:
-                    print(f"  SOLO DELIVERY by {agent_id}! Team global reward bonus is 0 (non-contributing agents get no free delivery credit)")
+                    print(f"  SOLO DELIVERY by {agent_id}! Team base recipe credit awarded (+{global_reward_bonus:.1f})")
         else:
             total_reward = base_reward + order_bonus + out_of_order_pen + sequence_bonus + delivery_bonus + episode_complete_bonus
-            global_reward_bonus = recipe_reward + order_bonus + out_of_order_pen + delivery_bonus + episode_complete_bonus
+            global_reward_bonus = team_delivery_reward
 
         if verbose:
             if is_correct_order:
