@@ -8,8 +8,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Garante uso do ambiente virtual local
-if [ -f "venv/bin/python" ]; then
+# Garante uso do Python correto (container Docker ou venv local)
+if [ -n "$PYTHON_CMD" ]; then
+    :
+elif [ -f /.dockerenv ]; then
+    export PYTHON_CMD="python3"
+elif [ -f "venv/bin/python" ]; then
     export PYTHON_CMD="venv/bin/python"
 elif command -v python3 &>/dev/null; then
     export PYTHON_CMD="python3"

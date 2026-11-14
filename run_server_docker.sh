@@ -4,22 +4,26 @@
 # ==============================================================================
 # Exemplos de uso no servidor:
 #
-# 1. Padrão (2 agentes no mapa tutorial.txt):
+# 1. Padrão (4 agentes no mapa tutorial.txt):
 #    ./run_server_docker.sh
 #
-# 2. Especificar mapa e quantidade de agentes:
-#    ./run_server_docker.sh --map tutorial.txt --num-agents 2
+# 2. Rodar bateria de todos os algoritmos (ou subconjunto):
+#    ALGOS="dqn impala appo bc" ./run_server_docker.sh
+#    ./run_server_docker.sh --all-algos
+#
+# 3. Especificar mapa e quantidade de agentes:
+#    ./run_server_docker.sh --map tutorial.txt --num-agents 4
 #    ./run_server_docker.sh --map default_map.txt --num-agents 1
 #
-# 3. Customizar iterações de treinamento ou GPU:
-#    ./run_server_docker.sh --map tutorial.txt --num-agents 2 --training-iterations 150
-#    ./run_server_docker.sh --map tutorial.txt --num-agents 2 --gpus 1.0
+# 4. Customizar iterações de treinamento ou GPU:
+#    ./run_server_docker.sh --map tutorial.txt --num-agents 4 --episodes 1500
+#    ./run_server_docker.sh --map tutorial.txt --num-agents 4 --gpus 1.0
 #
-# 4. Ajustar recursos de concorrência e avaliação via variáveis de ambiente:
+# 5. Ajustar recursos de concorrência e avaliação via variáveis de ambiente:
 #    WORKERS=8 CONCURRENT=4 ./run_server_docker.sh
 #    EVAL_EPISODES=50 ./run_server_docker.sh
 #
-# 5. Executar em background no servidor (recomendado para não travar a conexão SSH):
+# 6. Executar em background no servidor (recomendado para não travar a conexão SSH):
 #    tmux new -s treino "./run_server_docker.sh"
 #    # Ou via nohup:
 #    nohup ./run_server_docker.sh > treino.log 2>&1 &
@@ -84,15 +88,35 @@ if ! docker build -t overcooked_marl:latest .; then
   docker build --no-cache -t overcooked_marl:latest .
 fi
 
-# Se nenhum argumento for passado, usar por padrão 4 agentes no tutorial.txt
-ARGS=("$@")
+# Detectar se o usuário quer rodar a bateria de algoritmos ou um algoritmo específico
+RUN_ALL_ALGOS=0
+FILTERED_ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = "--all-algos" ]; then
+    RUN_ALL_ALGOS=1
+  else
+    FILTERED_ARGS+=("$arg")
+  fi
+done
+
+if [ -n "$ALGOS" ] || [ "$RUN_ALL_ALGOS" -eq 1 ]; then
+  ENTRY_SCRIPT="treinar_todos_algoritmos.sh"
+else
+  ENTRY_SCRIPT="experiments/training/run_experiment_cycle.sh"
+fi
+
+ARGS=("${FILTERED_ARGS[@]}")
 if [ ${#ARGS[@]} -eq 0 ]; then
   ARGS=(--map tutorial.txt --num-agents 4)
 fi
 
 echo "=================================================="
 echo "3. Running Docker Container with GPU access..."
+echo "   Script:    $ENTRY_SCRIPT"
 echo "   Arguments: ${ARGS[*]}"
+if [ -n "$ALGOS" ]; then
+  echo "   ALGOS:     $ALGOS"
+fi
 echo "=================================================="
 docker run --rm $DOCKER_TTY \
   --gpus all \
@@ -101,7 +125,9 @@ docker run --rm $DOCKER_TTY \
   -e CONCURRENT \
   -e EVAL_EPISODES \
   -e ALGO \
+  -e ALGOS \
+  -e FAIL_FAST \
   --name overcooked_container \
   -v "$PWD":/app \
   overcooked_marl:latest \
-  bash experiments/training/run_experiment_cycle.sh "${ARGS[@]}"
+  bash "$ENTRY_SCRIPT" "${ARGS[@]}"
