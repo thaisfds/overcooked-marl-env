@@ -12,6 +12,15 @@ SESSION_NAME="treino"
 # Mata sessão anterior com mesmo nome caso exista
 tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 
+# 0. Auto-recuperação do Docker: se o daemon não responder, limpa travas e zumbis automaticamente
+if ! docker info &>/dev/null; then
+  echo "🧹 Docker não respondendo. Limpando processos antigos e travas órfãs..."
+  pkill -9 -u "$USER" -f "dockerd|rootlesskit|containerd|docker-proxy" 2>/dev/null || true
+  USER_DIR="${USER_DOCKER_DIR:-/draft-hdd/$USER/docker-rootless}"
+  rm -f "$USER_DIR/.docker/run/docker.pid" "$USER_DIR/.docker/run/docker.sock" 2>/dev/null || true
+  rm -f "/draft-hdd/$USER/docker-rootless/.docker/run/docker.pid" "/draft-hdd/$USER/docker-rootless/.docker/run/docker.sock" 2>/dev/null || true
+fi
+
 echo "=================================================="
 echo "Iniciando sessão tmux: $SESSION_NAME"
 echo "=================================================="
@@ -19,14 +28,15 @@ echo "=================================================="
 # 1. Cria a sessão com terminal interativo padrão (carrega ~/.bashrc e todos os aliases)
 tmux new-session -d -s "$SESSION_NAME" -c "$PWD"
 
-# 2. Envia o comando para rodar o daemon do docker no painel esquerdo (.0) se necessário
-tmux send-keys -t "$SESSION_NAME.0" 'if docker info &>/dev/null; then echo "✅ Docker daemon já está ativo e funcionando."; elif type docker-rootless-daemon-run &>/dev/null; then docker-rootless-daemon-run; else echo "ℹ️ Docker daemon do sistema pronto."; fi' C-m
+# 2. Inicia o daemon do docker no painel esquerdo (.0) de forma resiliente
+DAEMON_CMD='if docker info &>/dev/null; then echo "✅ Docker daemon já está ativo e funcionando."; elif type docker-rootless-daemon-run &>/dev/null; then pkill -9 -u "$USER" -f "dockerd|rootlesskit|containerd|docker-proxy" 2>/dev/null || true; USER_DIR="${USER_DOCKER_DIR:-/draft-hdd/$USER/docker-rootless}"; rm -f "$USER_DIR/.docker/run/docker.pid" "$USER_DIR/.docker/run/docker.sock" 2>/dev/null || true; echo "🚀 Iniciando Docker Rootless Daemon..."; docker-rootless-daemon-run; else echo "ℹ️ Docker daemon do sistema pronto."; fi'
+tmux send-keys -t "$SESSION_NAME.0" "$DAEMON_CMD" C-m
 
 # 3. Divide a tela verticalmente (-h: lado a lado)
 tmux split-window -h -t "$SESSION_NAME" -c "$PWD"
 
-# Pequena pausa para garantir que o bash do painel direito carregou o ~/.bashrc completamente
-sleep 1
+# Pausa para o shell carregar ~/.bashrc completamente antes de receber comandos
+sleep 2
 
 # 4. Monta os argumentos e repassa variáveis de ambiente para o treinamento
 if [ $# -eq 0 ]; then
@@ -43,8 +53,9 @@ ENV_PREFIX=""
 [ -n "$FAIL_FAST" ] && ENV_PREFIX="FAIL_FAST=$FAIL_FAST $ENV_PREFIX"
 [ -n "$EVAL_EPISODES" ] && ENV_PREFIX="EVAL_EPISODES=$EVAL_EPISODES $ENV_PREFIX"
 
-# Envia o comando no painel direito (.1) aguardando 6s para o daemon subir
-tmux send-keys -t "$SESSION_NAME.1" "sleep 6 && ${ENV_PREFIX}bash run_server_docker.sh $TRAIN_ARGS; echo ''; echo '🏁 Processo finalizado com status: '\$?; echo 'Pressione Enter para fechar este painel.'; read" C-m
+# Envia o comando no painel direito (.1) aguardando dinamicamente o Docker responder antes de rodar
+TRAIN_CMD="echo '⏳ Aguardando Docker daemon responder...'; for i in {1..30}; do if docker info &>/dev/null; then echo '✅ Docker conectado com sucesso!'; break; fi; sleep 1; done; ${ENV_PREFIX}bash run_server_docker.sh $TRAIN_ARGS; echo ''; echo '🏁 Processo finalizado com status: '\$?; echo 'Pressione Enter para fechar este painel.'; read"
+tmux send-keys -t "$SESSION_NAME.1" "$TRAIN_CMD" C-m
 
 # 5. Anexa o usuário diretamente à sessão para acompanhar
 tmux attach-session -t "$SESSION_NAME"

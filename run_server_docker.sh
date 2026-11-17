@@ -73,13 +73,19 @@ echo "=================================================="
 # Aguardar até o docker daemon responder (útil para Docker Rootless)
 if ! docker info >/dev/null 2>&1; then
   echo "Aguardando Docker daemon inicializar o socket..."
-  for i in {1..20}; do
+  for i in {1..30}; do
     if docker info >/dev/null 2>&1; then
-      echo "Docker daemon conectado com sucesso!"
+      echo "✅ Docker daemon conectado com sucesso!"
       break
     fi
     sleep 1
   done
+fi
+
+if ! docker info >/dev/null 2>&1; then
+  echo "❌ Erro: Não foi possível conectar ao Docker daemon após 30 segundos."
+  echo "   Dica: execute './iniciar_servidor.sh' para auto-recuperar e iniciar o daemon."
+  exit 1
 fi
 
 if ! docker build -t overcooked_marl:latest .; then
