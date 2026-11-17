@@ -19,11 +19,14 @@ echo "=================================================="
 # 1. Cria a sessão com terminal interativo padrão (carrega ~/.bashrc e todos os aliases)
 tmux new-session -d -s "$SESSION_NAME" -c "$PWD"
 
-# 2. Envia o comando para rodar o daemon do docker no painel esquerdo (.0) se existir no ambiente
-tmux send-keys -t "$SESSION_NAME.0" 'if type docker-rootless-daemon-run &>/dev/null; then docker-rootless-daemon-run; else echo "ℹ️ Docker daemon do sistema pronto."; fi' C-m
+# 2. Envia o comando para rodar o daemon do docker no painel esquerdo (.0) se necessário
+tmux send-keys -t "$SESSION_NAME.0" 'if docker info &>/dev/null; then echo "✅ Docker daemon já está ativo e funcionando."; elif type docker-rootless-daemon-run &>/dev/null; then docker-rootless-daemon-run; else echo "ℹ️ Docker daemon do sistema pronto."; fi' C-m
 
 # 3. Divide a tela verticalmente (-h: lado a lado)
 tmux split-window -h -t "$SESSION_NAME" -c "$PWD"
+
+# Pequena pausa para garantir que o bash do painel direito carregou o ~/.bashrc completamente
+sleep 1
 
 # 4. Monta os argumentos e repassa variáveis de ambiente para o treinamento
 if [ $# -eq 0 ]; then
