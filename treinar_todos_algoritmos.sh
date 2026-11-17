@@ -29,6 +29,22 @@ else
     export PYTHON_CMD="python"
 fi
 
+# Verifica se o ambiente Python possui as dependências necessárias
+if ! $PYTHON_CMD -c "import numpy" &>/dev/null; then
+    echo "❌ Erro: O Python selecionado ($PYTHON_CMD) não possui as dependências instaladas (ex: numpy)."
+    echo ""
+    echo "💡 Como resolver:"
+    echo "  1. No servidor com Docker (recomendado, com GPU):"
+    echo "     ALGOS=\"${ALGOS:-dqn impala appo bc}\" ./iniciar_servidor.sh"
+    echo "     ou:"
+    echo "     ALGOS=\"${ALGOS:-dqn impala appo bc}\" ./run_server_docker.sh"
+    echo ""
+    echo "  2. Para rodar diretamente no host sem Docker:"
+    echo "     python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+    echo ""
+    exit 1
+fi
+
 # 2. Ajuda CLI
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "Uso: bash treinar_todos_algoritmos.sh [OPÇÕES]"
