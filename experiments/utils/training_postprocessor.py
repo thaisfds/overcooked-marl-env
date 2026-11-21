@@ -20,6 +20,25 @@ from typing import Dict, Any, Optional, List
 
 import numpy as np
 from ray import tune
+from ray.tune.result import SHOULD_CHECKPOINT
+from ray.tune.utils import flatten_dict
+from ray.train._internal.checkpoint_manager import _CheckpointManager
+
+# Patch Ray _CheckpointManager so nested 'env_runners/episode_reward_mean' is properly scored
+# and Ray keeps the TOP-K BEST checkpoints by reward instead of only the last K checkpoints.
+if not getattr(_CheckpointManager, "_overcooked_flat_patched", False):
+    _orig_register_cp = _CheckpointManager.register_checkpoint
+
+    def _patched_register_cp(self, checkpoint_result):
+        if hasattr(checkpoint_result, "metrics") and isinstance(checkpoint_result.metrics, dict):
+            flat = flatten_dict(checkpoint_result.metrics)
+            for k in ("env_runners/episode_reward_mean", "env_runners/episode_return_mean"):
+                if k in flat and k not in checkpoint_result.metrics:
+                    checkpoint_result.metrics[k] = flat[k]
+        return _orig_register_cp(self, checkpoint_result)
+
+    _CheckpointManager.register_checkpoint = _patched_register_cp
+    _CheckpointManager._overcooked_flat_patched = True
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -47,12 +66,29 @@ def convert_to_serializable(obj):
 
 
 class TrainingProgressCallback(tune.Callback):
-    """Callback to compute training progress percentage and update trial results for Ray Tune."""
+    """Callback to compute training progress percentage, force checkpoint on new peak, and expose top-level reward."""
+    def __init__(self):
+        super().__init__()
+        self._best_rewards = {}
+
     def on_trial_result(self, iteration, trials, trial, result, **info):
+        er = result.get("env_runners", {})
+        if isinstance(er, dict):
+            rw = er.get("episode_reward_mean", er.get("episode_return_mean"))
+            if rw is not None and not np.isnan(rw):
+                rw_float = float(rw)
+                result["env_runners/episode_reward_mean"] = rw_float
+                result["episode_reward_mean"] = rw_float
+                prev_best = self._best_rewards.get(trial.trial_id, -float("inf"))
+                if rw_float > prev_best:
+                    self._best_rewards[trial.trial_id] = rw_float
+                    # Force an immediate checkpoint whenever the trial hits a new all-time high reward!
+                    if int(result.get("training_iteration", 0)) >= 5:
+                        result[SHOULD_CHECKPOINT] = True
         config = result.get("config", {})
         env_config_dict = config.get("env_config", {})
-        episodes_limit = env_config_dict.get("num_episodes", 100)
-        target_timesteps = episodes_limit * 3000
+        episodes_limit = env_config_dict.get("num_episodes", 1000)
+        target_timesteps = episodes_limit * 2000
         timesteps_total = result.get("timesteps_total", 0)
         if target_timesteps > 0:
             pct = min(100.0, (timesteps_total / target_timesteps) * 100.0)

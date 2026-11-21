@@ -27,6 +27,8 @@ from ray.rllib.policy.policy import Policy
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 from ray.rllib.utils.framework import try_import_torch
 from ray.tune.registry import register_env
+from ray.tune.result import SHOULD_CHECKPOINT
+from experiments.utils.training_postprocessor import TrainingProgressCallback
 
 try:
     from overcooked_marl_env import OvercookedMARL
@@ -253,20 +255,6 @@ def resolve_restore_checkpoint(arg_val: Optional[str]) -> Optional[str]:
             return str(all_cps[0].resolve())
             
     return None
-
-class TrainingProgressCallback(tune.Callback):
-    """Callback to compute training progress percentage and update trial results for Ray Tune reporting."""
-    def on_trial_result(self, iteration, trials, trial, result, **info):
-        config = result.get("config", {})
-        env_config_dict = config.get("env_config", {})
-        episodes_limit = env_config_dict.get("num_episodes", 100)
-        target_timesteps = episodes_limit * 3000
-        timesteps_total = result.get("timesteps_total", 0)
-        if target_timesteps > 0:
-            pct = min(100.0, (timesteps_total / target_timesteps) * 100.0)
-            result["progress_pct"] = f"{pct:.1f}%"
-        else:
-            result["progress_pct"] = "0.0%"
 
 
 def main():
