@@ -38,6 +38,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 os.environ["OVERCOOKED_VISION_LOG"] = "batch_rollout.log"
+os.environ["OVERCOOKED_VISUALIZER_MODE"] = "1"
 os.environ["RAY_ACCELERATOR_MANAGER_LOG_LEVEL"] = "ERROR"
 
 import pygame
@@ -108,6 +109,15 @@ def find_latest_checkpoint(trial_dir: Path) -> Path:
     return checkpoints[-1]
 
 
+def detect_algo_from_path(path: Path) -> str:
+    """Detects algorithm name (DQN, IMPALA, APPO, PPO, BC) from checkpoint or directory path."""
+    path_str = str(path).upper()
+    for algo in ["DQN", "IMPALA", "APPO", "PPO", "BC"]:
+        if algo in path_str:
+            return algo
+    return "RL"
+
+
 def parse_summary_markdown(summary_path: Path, ray_results_dir: Path):
     """Parses a session summary markdown file to extract ranked trial metadata."""
     models = []
@@ -143,6 +153,7 @@ def parse_summary_markdown(summary_path: Path, ray_results_dir: Path):
                     models.append({
                         "rank": int(rank_str),
                         "trial_id": trial_id,
+                        "algo": detect_algo_from_path(cp_path),
                         "lr": float(lr),
                         "gamma": float(gamma),
                         "entropy": float(entropy),
@@ -187,10 +198,11 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
     seen_trials = set()
     for s_root in search_roots:
         if s_root.exists():
-            for t_dir in s_root.glob("**/PPO_overcooked_marl_parallel_*"):
-                if t_dir.is_dir() and t_dir.resolve() not in seen_trials:
-                    seen_trials.add(t_dir.resolve())
-                    discovered_trials.append(t_dir)
+            for pattern in ["**/*_overcooked_marl_parallel_*", "**/BC_Marl_*"]:
+                for t_dir in s_root.glob(pattern):
+                    if t_dir.is_dir() and t_dir.resolve() not in seen_trials:
+                        seen_trials.add(t_dir.resolve())
+                        discovered_trials.append(t_dir)
 
     known_trial_ids = {m["trial_id"] for m in models}
 
@@ -243,6 +255,7 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
         models.append({
             "rank": len(models) + 1,
             "trial_id": trial_id,
+            "algo": detect_algo_from_path(cp_path),
             "lr": lr,
             "gamma": gamma,
             "entropy": entropy,
@@ -267,66 +280,74 @@ def discover_all_models(ray_results_dir: Path, summary_file: Path = None, sort_b
 
 
 def draw_hud_overlay(surface, model_info, model_idx, total_models, elapsed_sec, max_seconds, current_step, max_steps, current_reward, delivered_list, pending_list, is_paused):
-    """Draws a sleek visual HUD overlay on top of Pygame window."""
+    """Draws a dedicated 2-line top info banner and bottom controls bar without overlapping environment HUD."""
     width, height = surface.get_size()
 
-    # Create semi-transparent overlay banner at the top (height: 80px)
-    hud_bar = pygame.Surface((width, 82), pygame.SRCALPHA)
-    hud_bar.fill((18, 22, 32, 230))  # Sleek dark glass background
+    # 1. Top Model Info Banner (height: 42px, organized into 2 clean lines)
+    banner_height = 42
+    hud_bar = pygame.Surface((width, banner_height), pygame.SRCALPHA)
+    hud_bar.fill((20, 24, 34, 250))  # Sleek dark espresso header
     surface.blit(hud_bar, (0, 0))
-
-    # Bottom controls bar (height: 28px)
-    ctrl_bar = pygame.Surface((width, 28), pygame.SRCALPHA)
-    ctrl_bar.fill((12, 14, 20, 230))
-    surface.blit(ctrl_bar, (0, height - 28))
+    pygame.draw.line(surface, (80, 95, 120), (0, banner_height), (width, banner_height), 1)
 
     try:
-        font_title = pygame.font.SysFont("monospace", 14, bold=True)
-        font_sub = pygame.font.SysFont("monospace", 12)
+        font_title = pygame.font.SysFont("monospace", 12, bold=True)
+        font_sub = pygame.font.SysFont("monospace", 11)
         font_ctrl = pygame.font.SysFont("monospace", 11)
     except Exception:
-        font_title = pygame.font.Font(None, 18)
-        font_sub = pygame.font.Font(None, 15)
+        font_title = pygame.font.Font(None, 16)
+        font_sub = pygame.font.Font(None, 14)
         font_ctrl = pygame.font.Font(None, 14)
 
-    # Line 1: Title & Rank
+    # Line 1 (y = 4): Model identification and live progress
+    algo_name = model_info.get("algo", detect_algo_from_path(model_info.get("cp_path", "")))
     rank_str = f"Rank #{model_info['rank']}" if model_info.get('rank') else ""
-    title_text = f"[{model_idx + 1}/{total_models}] Trial: {model_info['trial_id']} | {rank_str} | Train Rw: {model_info['reward_str']}"
-    t_surf = font_title.render(title_text, True, (255, 215, 0))  # Gold color
-    surface.blit(t_surf, (10, 6))
+    reward_str = f"Treino: {model_info['reward_str']}" if model_info.get('reward_str') else ""
 
-    # Line 2: Hyperparams & Timer
-    m_map_str = model_info.get("map", "default_map.txt")
-    m_ag_str = model_info.get("num_agents", 1)
-    hp_text = f"Map: {m_map_str} ({m_ag_str} ag) | LR: {model_info['lr']} | Gamma: {model_info['gamma']} | Entropy: {model_info['entropy']}"
-    h_surf = font_sub.render(hp_text, True, (180, 220, 255))
-    surface.blit(h_surf, (10, 26))
+    line1_left = f"[{model_idx + 1}/{total_models}] {algo_name} | Trial: {model_info['trial_id']}"
+    if rank_str:
+        line1_left += f" | {rank_str}"
+    if reward_str:
+        line1_left += f" | {reward_str}"
 
-    # Line 3: Delivered & Pending Dishes
-    del_str = ", ".join(delivered_list) if delivered_list else "None"
-    pend_str = ", ".join(pending_list[:3]) if pending_list else "None"
-    if len(pending_list) > 3:
-        pend_str += f" (+{len(pending_list)-3} more)"
+    t1_surf = font_title.render(line1_left, True, (255, 215, 0))  # Shiny gold
+    surface.blit(t1_surf, (10, 4))
 
-    dish_text = f"Delivered ({len(delivered_list)}): {del_str} | Pending ({len(pending_list)}): {pend_str}"
-    d_surf = font_sub.render(dish_text, True, (255, 230, 150))
-    surface.blit(d_surf, (10, 44))
+    pause_tag = " [PAUSADO]" if is_paused else ""
+    timer_text = f"Tempo: {elapsed_sec:04.1f}s / {max_seconds:04.1f}s | Passo: {current_step}/{max_steps}{pause_tag}"
+    timer_surf = font_sub.render(timer_text, True, (110, 255, 190) if not is_paused else (255, 110, 110))
+    surface.blit(timer_surf, (width - timer_surf.get_width() - 10, 4))
 
-    # Progress & Score (Right Aligned)
-    pause_tag = " [PAUSED]" if is_paused else ""
-    timer_text = f"Time: {elapsed_sec:04.1f}s / {max_seconds:04.1f}s | Step: {current_step}/{max_steps}{pause_tag}"
-    score_text = f"Rollout Reward: +{current_reward:.2f}"
-    
-    timer_surf = font_sub.render(timer_text, True, (100, 255, 180) if not is_paused else (255, 100, 100))
-    score_surf = font_sub.render(score_text, True, (255, 255, 255))
-    
-    surface.blit(timer_surf, (10, 62))
-    surface.blit(score_surf, (width - score_surf.get_width() - 12, 62))
+    # Line 2 (y = 22): Checkpoint, Hyperparameters & Rollout Reward
+    cp_name = model_info['cp_path'].name if model_info.get('cp_path') else ""
+    hp_parts = []
+    if cp_name:
+        hp_parts.append(cp_name)
+    if model_info.get('lr'):
+        hp_parts.append(f"LR: {model_info['lr']}")
+    if model_info.get('gamma') is not None:
+        hp_parts.append(f"γ: {model_info['gamma']}")
+    if model_info.get('entropy') is not None:
+        hp_parts.append(f"Ent: {model_info['entropy']}")
 
-    # Line 4: Bottom Controls
-    ctrl_text = "[SPACE] Pause | [N / Right] Next Model | [P / Left] Prev Model | [R] Restart | [Q / ESC] Quit"
-    c_surf = font_ctrl.render(ctrl_text, True, (180, 180, 190))
-    surface.blit(c_surf, (10, height - 22))
+    line2_left = " | ".join(hp_parts) if hp_parts else "Parâmetros padrão"
+    t2_surf = font_sub.render(line2_left, True, (190, 210, 230))  # Soft ice blue
+    surface.blit(t2_surf, (10, 22))
+
+    rollout_rw_text = f"Score Rollout: {current_reward:+.2f}"
+    rw_color = (255, 235, 170) if current_reward >= 0 else (255, 160, 160)
+    rw_surf = font_sub.render(rollout_rw_text, True, rw_color)
+    surface.blit(rw_surf, (width - rw_surf.get_width() - 10, 22))
+
+    # 2. Bottom Controls Bar (height: 22px) - sits in its own allocated bottom space
+    ctrl_bar = pygame.Surface((width, 22), pygame.SRCALPHA)
+    ctrl_bar.fill((14, 16, 22, 250))
+    surface.blit(ctrl_bar, (0, height - 22))
+    pygame.draw.line(surface, (60, 70, 85), (0, height - 22), (width, height - 22), 1)
+
+    ctrl_text = "[ESPAÇO] Pausar | [N / Seta Direita] Próximo Modelo | [P / Seta Esquerda] Modelo Anterior | [R] Reiniciar | [Q / ESC] Sair"
+    c_surf = font_ctrl.render(ctrl_text, True, (190, 205, 220))
+    surface.blit(c_surf, (10, height - 17))
 
 
 def generate_execution_summary_report(executed_logs, summary_md_path):
@@ -502,10 +523,17 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
                 featurized_obs=True
             )
 
-        try:
-            register_env("overcooked_marl_parallel", lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
-        except Exception:
-            pass
+        for env_id in [
+            "overcooked_marl_parallel",
+            "overcooked_marl_parallel_dqn",
+            "overcooked_marl_parallel_impala",
+            "overcooked_marl_parallel_appo",
+            "overcooked_marl_parallel_ppo",
+        ]:
+            try:
+                register_env(env_id, lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
+            except Exception:
+                pass
 
         active_env = ParallelEnvToMultiAgent(env_creator_fn())
         active_map = target_map
@@ -547,9 +575,15 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
 
             os.environ["OVERCOOKED_VISION_LOG"] = str(log_filepath)
 
+            algo_name = model_info.get("algo", detect_algo_from_path(cp_path))
+            try:
+                pygame.display.set_caption(f"Overcooked MARL - [{current_model_idx + 1}/{total_models}] {algo_name} ({model_info['trial_id']})")
+            except Exception:
+                pass
+
             print(f"\n" + "-"*70)
-            print(f"▶ [{current_model_idx + 1}/{total_models}] Loading Model Trial: {model_info['trial_id']}")
-            print(f"  Checkpoint : {cp_path}")
+            print(f"▶ [{current_model_idx + 1}/{total_models}] Loading Model: {algo_name} | Trial: {model_info['trial_id']}")
+            print(f"  Checkpoint : {cp_path.name} ({cp_path})")
             print(f"  Map/Agents : {m_target_map} | {m_target_agents} agent(s)")
             print(f"  Hyperparams: LR={model_info['lr']} | Gamma={model_info['gamma']} | Entropy={model_info['entropy']}")
             print(f"  Train Score: {model_info['reward_str']}")
@@ -559,13 +593,17 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
             algorithm = None
             policies = None
             try:
-                algorithm = Algorithm.from_checkpoint(str(cp_path.resolve()))
-            except Exception as e:
+                # 1. Carregamento ultra-rápido via Policy (<1s, sem instanciar cluster Ray ou workers extras)
                 from ray.rllib.policy.policy import Policy
+                policies = Policy.from_checkpoint(str(cp_path.resolve()))
+                if not isinstance(policies, dict):
+                    policies = {"policy_agent_0": policies}
+            except Exception as p_err:
+                # 2. Fallback para Algorithm completo caso necessário
                 try:
-                    policies = Policy.from_checkpoint(str(cp_path.resolve()))
-                except Exception as p_err:
-                    print(f"[ERROR] Failed to load checkpoint {cp_path.name}: {p_err}")
+                    algorithm = Algorithm.from_checkpoint(str(cp_path.resolve()))
+                except Exception as e:
+                    print(f"[ERROR] Failed to load checkpoint {cp_path.name}: {e}")
                     current_model_idx += 1
                     continue
 
@@ -626,7 +664,7 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
                                 delivered_list, pending_list, True
                             )
                             pygame.display.flip()
-                    except Exception:
+                    except Exception as r_err:
                         pass
                     pygame.time.wait(100)
                     continue
@@ -716,6 +754,20 @@ def run_models_visualizer(models, max_seconds=20.0, step_delay_ms=50, num_agents
             print(f"  Log File saved : {log_filepath.relative_to(project_root)}")
             executed_log_files.append(log_filepath)
 
+            # Limpa instâncias de Algorithm para evitar acúmulo de workers no Ray
+            if algorithm is not None:
+                try:
+                    algorithm.stop()
+                except Exception:
+                    pass
+                algorithm = None
+
+            # Mantém os eventos da janela Pygame ativos durante a transição entre modelos
+            try:
+                pygame.event.pump()
+            except Exception:
+                pass
+
             # Navigation handling
             if user_nav_action == 'quit':
                 print("[INFO] User requested exit.")
@@ -794,14 +846,14 @@ def main():
         sys.exit(1)
 
     # 2. Print discovered models table in console
-    print("\n" + "="*85)
+    print("\n" + "="*95)
     print(f"📋 DISCOVERED {len(models)} TRAINED MODELS FOR VISUALIZATION:")
-    print("="*85)
-    print(f"{'Index':<6} | {'Rank':<6} | {'Trial ID':<15} | {'Map':<16} | {'Ag':<3} | {'LR':<8} | {'Gamma':<6} | {'Entropy':<7} | {'Train Reward':<12}")
-    print("-" * 85)
+    print("="*95)
+    print(f"{'Index':<6} | {'Algo':<7} | {'Rank':<6} | {'Trial ID':<15} | {'Map':<16} | {'Ag':<3} | {'LR':<8} | {'Gamma':<6} | {'Entropy':<7} | {'Train Reward':<12}")
+    print("-" * 95)
     for idx, m in enumerate(models):
-        print(f"{idx+1:<6} | #{m['rank']:<5} | {m['trial_id']:<15} | {m.get('map','N/A'):<16} | {m.get('num_agents','N/A'):<3} | {m['lr']:<8} | {m['gamma']:<6} | {m['entropy']:<7} | {m['reward_str']:<12}")
-    print("="*85 + "\n")
+        print(f"{idx+1:<6} | {m.get('algo', 'RL'):<7} | #{m['rank']:<5} | {m['trial_id']:<15} | {m.get('map','N/A'):<16} | {m.get('num_agents','N/A'):<3} | {m['lr']:<8} | {m['gamma']:<6} | {m['entropy']:<7} | {m['reward_str']:<12}")
+    print("="*95 + "\n")
 
     # 3. Run visualizer loop
     run_models_visualizer(

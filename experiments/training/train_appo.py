@@ -72,12 +72,12 @@ from experiments.utils.training_postprocessor import (
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (APPO)
 # ======================================================================
 HYPERPARAMETER_GRID = {
-    "lr": [3e-4],                         # Taxa ótima comprovada de todos os top modelos (+1495.60)
+    "lr": [3e-4, 5e-4],                   # Taxas ágeis (3e-4 fez +1584.79; 5e-4 brilhou no IMPALA)
     "gamma": [0.98, 0.99],                # Fator de desconto para coordenação rápida e de longo prazo
-    "entropy_coeff": [0.015, 0.020],      # Coeficiente de entropia dos modelos campeões
+    "entropy_coeff": [0.020],             # Todos os melhores trials de 4 agentes usaram H=0.020 (0.015 estagnou)
     "clip_param": [0.2],                  # Parâmetro de corte da razão de probabilidade
-    "train_batch_size": [500],            # Tamanho ótimo de batch para APPO
-    "num_episodes": [1500],               # 1500 episódios
+    "train_batch_size": [1000],           # Dobrado de 500 p/ 1000 (250 passos/agente) para reduzir variância
+    "num_episodes": [1000],               # 1000 episódios
     "seed": [42]
 }
 
@@ -159,7 +159,11 @@ def main():
     print(f"  Opções do Grid: {HYPERPARAMETER_GRID}")
     print("="*70 + "\n")
 
-    ray.init(ignore_reinit_error=True)
+    avail_cpus = os.cpu_count() or 4
+    max_runners_by_cpu = max(1, (avail_cpus // max(1, args.concurrent)) - 1)
+    runners_per_trial = max(1, min(args.workers // max(1, args.concurrent), max_runners_by_cpu))
+    ray_total_cpus = max(avail_cpus, args.concurrent * (runners_per_trial + 2))
+    ray.init(num_cpus=ray_total_cpus, ignore_reinit_error=True)
 
     def env_creator_fn(num_episodes_val):
         return OvercookedMARL(
@@ -211,7 +215,7 @@ def main():
             entropy_coeff=tune_entropy,
             clip_param=tune_clip,
             train_batch_size=tune_batch_size,
-            grad_clip=1.0,
+            grad_clip=5.0,
             vtrace=True,
             model={
                 "fcnet_hiddens": [256, 256],
@@ -219,10 +223,10 @@ def main():
             }
         )
         .resources(
-            num_gpus=(args.gpus / max(1, args.concurrent)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
+            num_gpus=max(0.0, round((args.gpus / max(1, args.concurrent)) - 0.001, 4)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
         )
         .env_runners(
-            num_env_runners=max(1, args.workers // max(1, args.concurrent)),
+            num_env_runners=runners_per_trial,
             rollout_fragment_length=50,
         )
         .multi_agent(

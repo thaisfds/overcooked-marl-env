@@ -72,11 +72,11 @@ from experiments.utils.training_postprocessor import (
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (IMPALA)
 # ======================================================================
 HYPERPARAMETER_GRID = {
-    "lr": [3e-4, 5e-4],                   # Taxas comprovadas dos modelos campeões (#1 e #2)
-    "gamma": [0.98],                      # Fator de desconto ótimo (+1847.13 pico)
-    "entropy_coeff": [0.01, 0.02],        # Coeficiente de entropia ótimo
+    "lr": [3e-4, 5e-4],                   # Taxas comprovadas dos modelos campeões (+3990.62 e +2955.98)
+    "gamma": [0.98],                      # Fator de desconto ótimo (+3990.62 pico)
+    "entropy_coeff": [0.015, 0.020],      # Eliminado 0.010 (que travou em -36.17) e focado na faixa campeã
     "train_batch_size": [1000],           # Lote ótimo de atualização
-    "num_episodes": [1500],               # 1500 episódios
+    "num_episodes": [1000],               # 1000 episódios
     "seed": [42]
 }
 
@@ -158,7 +158,11 @@ def main():
     print(f"  Opções do Grid: {HYPERPARAMETER_GRID}")
     print("="*70 + "\n")
 
-    ray.init(ignore_reinit_error=True)
+    avail_cpus = os.cpu_count() or 4
+    max_runners_by_cpu = max(1, (avail_cpus // max(1, args.concurrent)) - 1)
+    runners_per_trial = max(1, min(args.workers // max(1, args.concurrent), max_runners_by_cpu))
+    ray_total_cpus = max(avail_cpus, args.concurrent * (runners_per_trial + 2))
+    ray.init(num_cpus=ray_total_cpus, ignore_reinit_error=True)
 
     def env_creator_fn(num_episodes_val):
         return OvercookedMARL(
@@ -208,7 +212,7 @@ def main():
             gamma=tune_gamma,
             entropy_coeff=tune_entropy,
             train_batch_size=tune_batch_size,
-            grad_clip=40.0,
+            grad_clip=10.0,
             vtrace=True,
             model={
                 "fcnet_hiddens": [256, 256],
@@ -216,10 +220,10 @@ def main():
             }
         )
         .resources(
-            num_gpus=(args.gpus / max(1, args.concurrent)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
+            num_gpus=max(0.0, round((args.gpus / max(1, args.concurrent)) - 0.001, 4)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
         )
         .env_runners(
-            num_env_runners=max(1, args.workers // max(1, args.concurrent)),
+            num_env_runners=runners_per_trial,
             rollout_fragment_length=50,
         )
         .multi_agent(

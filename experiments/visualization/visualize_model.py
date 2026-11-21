@@ -174,9 +174,17 @@ def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_m
     log_path = project_root / "experiments" / "logs" / "vision_analysis" / "render_rollout.log"
     cp_abs_path = Path(checkpoint_path).resolve()
     
+    algo_name = "RL"
+    for a in ["DQN", "IMPALA", "APPO", "PPO", "BC"]:
+        if a in str(cp_abs_path).upper():
+            algo_name = a
+            break
+
     print(f"\n" + "="*60)
     print(f"🎮 RUNNING PYGAME VISUAL ROLLOUT")
-    print(f"  Checkpoint: {cp_abs_path}")
+    print(f"  Algorithm : {algo_name}")
+    print(f"  Trial     : {cp_abs_path.parent.name}")
+    print(f"  Checkpoint: {cp_abs_path.name} ({cp_abs_path})")
     print(f"  Map:        {map_name} | Agents: {num_agents} | Explore: {explore}")
     print(f"  Vision Log: {log_path}")
     print("="*60 + "\n")
@@ -190,10 +198,17 @@ def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_m
             featurized_obs=True
         )
         
-    try:
-        register_env("overcooked_marl_parallel", lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
-    except Exception:
-        pass
+    for env_id in [
+        "overcooked_marl_parallel",
+        "overcooked_marl_parallel_dqn",
+        "overcooked_marl_parallel_impala",
+        "overcooked_marl_parallel_appo",
+        "overcooked_marl_parallel_ppo",
+    ]:
+        try:
+            register_env(env_id, lambda config: ParallelEnvToMultiAgent(env_creator_fn()))
+        except Exception:
+            pass
     
     if ray.is_initialized():
         ray.shutdown()
@@ -202,11 +217,13 @@ def run_pygame_visual_rollout(checkpoint_path, num_agents=1, map_name="default_m
     algorithm = None
     policies = None
     try:
-        algorithm = Algorithm.from_checkpoint(str(cp_abs_path))
-    except Exception as e:
-        print(f"[INFO] Algorithm loading fallback to direct Policy loading: {e}")
         from ray.rllib.policy.policy import Policy
         policies = Policy.from_checkpoint(str(cp_abs_path))
+        if not isinstance(policies, dict):
+            policies = {"policy_agent_0": policies}
+    except Exception as e:
+        print(f"[INFO] Direct Policy loading fallback to Algorithm: {e}")
+        algorithm = Algorithm.from_checkpoint(str(cp_abs_path))
 
     env = ParallelEnvToMultiAgent(env_creator_fn())
     

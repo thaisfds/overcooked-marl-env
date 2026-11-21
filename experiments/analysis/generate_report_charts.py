@@ -165,12 +165,12 @@ def load_experiment_data(
         print("❌ Nenhum diretório de resultados válido encontrado para carregar!")
         return []
 
-    # Coletar todas as pastas de experimentos (PPO_Marl_*)
+    # Coletar todas as pastas de experimentos (*_Marl_*)
     seen_exp_paths = set()
     exp_folders = []
     for s_dir in search_dirs:
-        candidates = sorted(list(s_dir.glob("PPO_Marl_*")), reverse=True)
-        if s_dir.name.startswith("PPO_Marl_"):
+        candidates = sorted(list(s_dir.glob("*_Marl_*")), reverse=True)
+        if "_Marl_" in s_dir.name:
             candidates.append(s_dir)
         for c in candidates:
             c_res = c.resolve()

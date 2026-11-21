@@ -102,20 +102,20 @@ class WarmStartFromCheckpointCallback(DefaultCallbacks):
 # 4. Rank 4 (Trial 00002): lr=1e-4, gamma=0.99, entropy=0.015 -> Train: +832.37
 
 TOP_4_HYPERPARAMETERS = [
-    {"lr": 0.0001, "gamma": 0.98, "entropy_coeff": 0.015, "rank": 1, "desc": "Rank 1: Campeão (+1877.14 eval, 4.0 entregas/ep)"},
-    {"lr": 0.0001, "gamma": 0.99, "entropy_coeff": 0.020, "rank": 2, "desc": "Rank 2: Vice-campeão (+1264.28 treino)"},
-    {"lr": 0.0003, "gamma": 0.98, "entropy_coeff": 0.015, "rank": 3, "desc": "Rank 3: Melhor LR rápida (+1079.52 treino)"},
-    {"lr": 0.0001, "gamma": 0.99, "entropy_coeff": 0.015, "rank": 4, "desc": "Rank 4: Alta estabilidade (+832.37 treino)"},
+    {"lr": 0.0003, "gamma": 0.98, "entropy_coeff": 0.020, "rank": 1, "desc": "Rank 1: Melhor exploração e velocidade p/ 4 agentes"},
+    {"lr": 0.0003, "gamma": 0.99, "entropy_coeff": 0.020, "rank": 2, "desc": "Rank 2: Longo prazo com alta exploração p/ 4 agentes"},
+    {"lr": 0.0005, "gamma": 0.98, "entropy_coeff": 0.020, "rank": 3, "desc": "Rank 3: Convergência rápida (estilo IMPALA/APPO)"},
+    {"lr": 0.0001, "gamma": 0.99, "entropy_coeff": 0.020, "rank": 4, "desc": "Rank 4: Campeão PPO anterior (+130.95 pts)"},
 ]
 
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 3e-4],                  # Melhores taxas de aprendizado dos modelos campeões (#1 e #3)
-    "gamma": [0.98, 0.99],               # Melhores fatores de desconto comprovados (#1 ágil e #2 padrão)
-    "entropy_coeff": [0.015],            # Entropia ótima do modelo campeão (+1792.79)
-    "train_batch_size": [4000],          # Tamanho de coleta ótimo
+    "lr": [3e-4, 5e-4],                  # Taxas mais ágeis para 4 agentes saírem do platô em 1000 ep
+    "gamma": [0.98, 0.99],               # Fatores de desconto curto e longo prazo
+    "entropy_coeff": [0.020],            # Entropia comprovada que destravou os campeões de 4 agentes
+    "train_batch_size": [2000],          # Dobro de atualizações por episódio (2x mais rápido que 4000)
     "sgd_minibatch_size": [256],         # Minibatch PPO
-    "update_epochs": [12],               # Épocas de atualização por iteração
-    "num_episodes": [1500],              # 1500 episódios por trial para 4 agentes
+    "update_epochs": [6],                # 6 épocas SGD para convergência ágil sem gargalo de CPU/GPU
+    "num_episodes": [1000],              # 1000 episódios por trial para 4 agentes
     "seed": [42]
 }
 
@@ -325,7 +325,11 @@ def main():
         print(f"  Grid Options: {HYPERPARAMETER_GRID}")
     print("="*50 + "\n")
     
-    ray.init(ignore_reinit_error=True)
+    avail_cpus = os.cpu_count() or 4
+    max_runners_by_cpu = max(1, (avail_cpus // max(1, args.concurrent)) - 1)
+    runners_per_trial = max(1, min(args.workers // max(1, args.concurrent), max_runners_by_cpu))
+    ray_total_cpus = max(avail_cpus, args.concurrent * (runners_per_trial + 1))
+    ray.init(num_cpus=ray_total_cpus, ignore_reinit_error=True)
     
     # Environment Creator Fn
     def env_creator_fn(num_episodes_val):
@@ -405,10 +409,10 @@ def main():
             }
         )
         .resources(
-            num_gpus=(args.gpus / max(1, args.concurrent)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
+            num_gpus=max(0.0, round((args.gpus / max(1, args.concurrent)) - 0.001, 4)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
         )
         .env_runners(
-            num_env_runners=max(1, args.workers // max(1, args.concurrent)),
+            num_env_runners=runners_per_trial,
             rollout_fragment_length="auto",
             batch_mode="truncate_episodes",
         )
@@ -430,9 +434,9 @@ def main():
     def stop_fn(trial_id, result):
         config = result.get("config", {})
         env_config_dict = config.get("env_config", {})
-        episodes_limit = env_config_dict.get("num_episodes", 100)
-        target_timesteps = episodes_limit * 3000
-        return result.get("timesteps_total", 0) >= target_timesteps
+        episodes_limit = env_config_dict.get("num_episodes", 1000)
+        target_timesteps = episodes_limit * 2000
+        return result.get("timesteps_total", 0) >= target_timesteps or result.get("training_iteration", 0) >= episodes_limit
         
     # Output path creation
     exp_dir = Path(__file__).resolve().parent.parent

@@ -75,12 +75,12 @@ from experiments.utils.training_postprocessor import (
 # HYPERPARAMETER GRID SEARCH CONFIGURATION (DQN / RAINBOW)
 # ======================================================================
 HYPERPARAMETER_GRID = {
-    "lr": [1e-4, 3e-4],                   # Taxas de aprendizado balanceadas
+    "lr": [1e-4, 2e-4],                   # Taxas estáveis (1e-4 foi campeão +177.6; 3e-4 divergia Q-values)
     "gamma": [0.98, 0.99],                # Fatores de desconto para horizonte curto e longo
-    "n_step": [3],                        # n-step bootstrapping para propagação rápida de crédito
-    "train_batch_size": [128],            # Tamanho ótimo de batch para estabilidade com 4 agentes
-    "target_network_update_freq": [500],  # Frequência de sincronização da rede alvo
-    "num_episodes": [1500],               # 1500 episódios
+    "n_step": [5],                        # 5-step bootstrapping propaga crédito de corte (3 cortes + passe)
+    "train_batch_size": [256],            # Lote maior com menos overhead por passo
+    "target_network_update_freq": [1000], # Sincronização estável da rede alvo
+    "num_episodes": [1000],               # 1000 episódios / iterações (<24h benchmark)
     "seed": [42]
 }
 
@@ -213,7 +213,11 @@ def main():
     print(f"  Opções do Grid: {HYPERPARAMETER_GRID}")
     print("="*70 + "\n")
 
-    ray.init(ignore_reinit_error=True)
+    avail_cpus = os.cpu_count() or 4
+    max_runners_by_cpu = max(1, (avail_cpus // max(1, args.concurrent)) - 1)
+    runners_per_trial = max(1, min(args.workers // max(1, args.concurrent), max_runners_by_cpu))
+    ray_total_cpus = max(avail_cpus, args.concurrent * (runners_per_trial + 1))
+    ray.init(num_cpus=ray_total_cpus, ignore_reinit_error=True)
 
     def env_creator_fn(num_episodes_val):
         return OvercookedMARL(
@@ -280,16 +284,16 @@ def main():
             }
         )
         .resources(
-            num_gpus=(args.gpus / max(1, args.concurrent)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
+            num_gpus=max(0.0, round((args.gpus / max(1, args.concurrent)) - 0.001, 4)) if (args.gpus > 0 and torch.cuda.is_available()) else 0
         )
         .env_runners(
-            num_env_runners=max(1, args.workers // max(1, args.concurrent)),
-            rollout_fragment_length="auto",
+            num_env_runners=runners_per_trial,
+            rollout_fragment_length=20,
             exploration_config={
                 "type": "EpsilonGreedy",
                 "initial_epsilon": 1.0,
-                "final_epsilon": 0.05,
-                "epsilon_timesteps": 100000,
+                "final_epsilon": 0.02,
+                "epsilon_timesteps": 150000,
             },
         )
         .multi_agent(
@@ -304,9 +308,9 @@ def main():
     def stop_fn(trial_id, result):
         config = result.get("config", {})
         env_config_dict = config.get("env_config", {})
-        episodes_limit = env_config_dict.get("num_episodes", 2000)
-        target_timesteps = episodes_limit * 1500
-        return result.get("timesteps_total", 0) >= target_timesteps
+        episodes_limit = env_config_dict.get("num_episodes", 1000)
+        target_timesteps = episodes_limit * 1000
+        return result.get("timesteps_total", 0) >= target_timesteps or result.get("training_iteration", 0) >= episodes_limit
 
     exp_dir = Path(__file__).resolve().parent.parent
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

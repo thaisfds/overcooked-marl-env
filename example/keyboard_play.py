@@ -3,7 +3,42 @@ import time
 import sys
 import os
 import argparse
+from pathlib import Path
 from overcooked_marl_env.env import OvercookedMARL
+
+def resolve_map_path(map_name_or_path: str = None) -> str:
+    """
+    Resolve o caminho do mapa de forma inteligente:
+    1. Caminho direto relativo ou absoluto
+    2. Nome do arquivo dentro de overcooked_marl_env/map/maps/
+    3. Adiciona automaticamente a extensão .txt se omitida
+    """
+    project_root = Path(__file__).resolve().parent.parent
+    maps_dir = project_root / "overcooked_marl_env" / "map" / "maps"
+
+    if not map_name_or_path:
+        default_map = maps_dir / "default_map.txt"
+        return str(default_map) if default_map.exists() else "default_map.txt"
+
+    candidates = [
+        Path(map_name_or_path),
+        Path(f"{map_name_or_path}.txt"),
+        maps_dir / map_name_or_path,
+        maps_dir / f"{map_name_or_path}.txt",
+        project_root / map_name_or_path,
+        project_root / f"{map_name_or_path}.txt",
+    ]
+
+    for cand in candidates:
+        if cand.is_file():
+            return str(cand.resolve())
+
+    # Se não encontrar, lista mapas disponíveis para orientar o usuário
+    available = [f.name for f in maps_dir.glob("*.txt")] if maps_dir.exists() else []
+    print(f"\n[AVISO] Mapa '{map_name_or_path}' não foi encontrado!")
+    if available:
+        print(f"[INFO] Mapas disponíveis em '{maps_dir.name}/': {', '.join(available)}")
+    return map_name_or_path
 
 def run_countdown(env):
     """Run a 3, 2, 1 countdown overlay on the game screen without flickering."""
@@ -224,17 +259,26 @@ def play(map_path=None, custom_recipes=None, num_agents=1):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Interactive Playtest for Overcooked MARL")
-    parser.add_argument("--map", default=None, help="Path to map text file")
-    parser.add_argument("--recipes", default=None, help="Path to recipes JSON file")
-    parser.add_argument("--agents", type=int, default=1, help="Number of agents to play with (default: 1)")
+    parser.add_argument("--map", "-m", default=None, help="Name or path of the map (e.g. tutorial, default_map.txt)")
+    parser.add_argument("--recipes", "-r", default=None, help="Path to recipes JSON file")
+    parser.add_argument("--agents", "-a", type=int, default=1, help="Number of agents to play with (default: 1, up to 4)")
+    parser.add_argument("--list-maps", "-l", action="store_true", help="List all available maps in the environment")
     args = parser.parse_args()
-    
-    # Try using custom map template by default if it exists
-    map_file = args.map
-    if map_file is None:
-        template_map = "overcooked_marl_env/map/maps/default_map.txt"
-        if os.path.exists(template_map):
-            map_file = template_map
-            print(f"Auto-selected default map: {template_map}")
-            
+
+    # List maps if requested
+    if args.list_maps:
+        maps_dir = Path(__file__).resolve().parent.parent / "overcooked_marl_env" / "map" / "maps"
+        available = sorted([f.name for f in maps_dir.glob("*.txt")]) if maps_dir.exists() else []
+        print("\n🗺️  MAPAS DISPONÍVEIS:")
+        for m in available:
+            print(f"  • {m}  ->  (use: --map {m.replace('.txt', '')})")
+        print("\nExemplo de uso:")
+        print("  python example/keyboard_play.py --map tutorial --agents 2\n")
+        sys.exit(0)
+
+    # Resolves map file automatically
+    map_file = resolve_map_path(args.map)
+    print(f"\n[CONFIG] Mapa selecionado: {map_file}")
+    print(f"[CONFIG] Agentes: {args.agents}\n")
+
     play(map_file, args.recipes, num_agents=args.agents)

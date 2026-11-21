@@ -9,6 +9,7 @@ Supports two rendering modes:
 - "ascii": ASCII text rendering to console
 """
 
+import os
 import pygame
 from pygame import gfxdraw
 import numpy as np
@@ -271,7 +272,7 @@ class Renderer:
         
         # 1.1 Draw Recipe Cards on the left
         card_x_start = self.hud_padding
-        card_y = 12
+        card_y = 12 + getattr(self, 'top_banner_offset', 0)
         card_width = 110
         card_height = 50
         card_spacing = 8
@@ -379,69 +380,151 @@ class Renderer:
             none_txt = self.font_small.render("None", True, (160, 140, 130))
             self.window.blit(none_txt, (left_column_x + 95, delivered_badges_y + 2))
             
-        # 2.2 Chef Status Cards (Bottom Right - side-by-side)
-        chef_card_width = 180
-        chef_card_height = 95
-        chef_card_spacing = 15
-        
-        right_column_start = self.virtual_width - self.hud_padding - (chef_card_width * 2 + chef_card_spacing)
-        
-        for idx, agent_id in enumerate(sorted(agents)):
-            card_x = right_column_start + idx * (chef_card_width + chef_card_spacing)
-            card_y = hud_y_start + 12
-            
-            # Card background panel (Warm light brown)
-            pygame.draw.rect(self.window, (95, 72, 58), (card_x, card_y, chef_card_width, chef_card_height), border_radius=8)
-            pygame.draw.rect(self.window, (166, 138, 118), (card_x, card_y, chef_card_width, chef_card_height), width=1, border_radius=8)
-            
-            # Agent identity badge (colored circle)
-            agent_num = self._get_agent_number(agent_id)
-            badge_color = (100, 175, 185) if agent_num == 0 else (210, 130, 80) # Cozy Teal or Caramel
-            pygame.draw.circle(self.window, badge_color, (card_x + 15, card_y + 15), 6)
-            
-            # Title
-            title_txt = self.font.render(f"Chef {agent_num}", True, (255, 250, 240))
-            self.window.blit(title_txt, (card_x + 28, card_y + 6))
-            
-            # Rewards
-            step_reward = game_state.get("last_step_rewards", {}).get(agent_id, 0.0)
-            total_reward = game_state.get("accumulated_rewards", {}).get(agent_id, 0.0)
-            
-            # Inventory item name
-            carrying_instance_id = game_state.get("agent_holding_instance", {}).get(agent_id, None)
-            if carrying_instance_id is not None and carrying_instance_id in game_state.get("item_instances", {}):
-                carrying_item = game_state["item_instances"][carrying_instance_id]
-                inventory = get_ingredient_display_name(carrying_item)
-                if len(inventory) > 15:
-                    inventory = inventory[:13] + ".."
-            else:
-                inventory = "Empty"
-                
-            score_txt = self.font_small_bold.render(f"Score: {total_reward:+.1f}", True, (255, 235, 200) if total_reward >= 0 else (255, 150, 150))
-            step_txt = self.font_small_bold.render(f"Step: {step_reward:+.1f}", True, (255, 245, 230))
-            inv_color = (200, 235, 190) if inventory != "Empty" else (220, 200, 185)
-            inv_txt = self.font_small_bold.render(f"Holding: {inventory}", True, inv_color)
-            
-            # Find nearest object for the text HUD
-            ax, ay = game_state["agent_pos"][agent_id]
-            closest_obj = "None"
-            min_dist = float('inf')
-            H, W = game_state["map_static"].shape
-            for y in range(H):
-                for x in range(W):
-                    char = self.item_manager.get_cell_char(game_state["map_static"][y, x])
+        # 2.2 Chef Status Cards (Bottom Right)
+        num_agents = len(agents)
+        sorted_agents = sorted(agents)
+
+        CHEF_COLORS = [
+            (100, 185, 195),  # Chef 0: Cozy Teal
+            (225, 135, 75),   # Chef 1: Warm Caramel
+            (95, 195, 125),   # Chef 2: Fresh Mint Green
+            (185, 125, 215),  # Chef 3: Soft Lavender / Purple
+            (240, 200, 80),   # Chef 4: Golden Yellow
+            (230, 100, 110),  # Chef 5: Rose Coral
+        ]
+
+        if num_agents <= 2:
+            chef_card_width = 180
+            chef_card_height = 92
+            chef_card_spacing = 15
+            right_column_start = self.virtual_width - self.hud_padding - (chef_card_width * num_agents + chef_card_spacing * (num_agents - 1)) - 5
+
+            for idx, agent_id in enumerate(sorted_agents):
+                card_x = right_column_start + idx * (chef_card_width + chef_card_spacing)
+                card_y = hud_y_start + 10
+
+                # Card background panel (Warm light brown)
+                pygame.draw.rect(self.window, (95, 72, 58), (card_x, card_y, chef_card_width, chef_card_height), border_radius=8)
+                pygame.draw.rect(self.window, (166, 138, 118), (card_x, card_y, chef_card_width, chef_card_height), width=1, border_radius=8)
+
+                agent_num = self._get_agent_number(agent_id)
+                badge_color = CHEF_COLORS[agent_num % len(CHEF_COLORS)]
+                pygame.draw.circle(self.window, badge_color, (card_x + 15, card_y + 15), 6)
+
+                title_txt = self.font.render(f"Chef {agent_num}", True, (255, 250, 240))
+                self.window.blit(title_txt, (card_x + 28, card_y + 6))
+
+                step_reward = game_state.get("last_step_rewards", {}).get(agent_id, 0.0)
+                total_reward = game_state.get("accumulated_rewards", {}).get(agent_id, 0.0)
+
+                carrying_instance_id = game_state.get("agent_holding_instance", {}).get(agent_id, None)
+                if carrying_instance_id is not None and carrying_instance_id in game_state.get("item_instances", {}):
+                    carrying_item = game_state["item_instances"][carrying_instance_id]
+                    inventory = get_ingredient_display_name(carrying_item)
+                    if len(inventory) > 15:
+                        inventory = inventory[:13] + ".."
+                else:
+                    inventory = "Empty"
+
+                score_txt = self.font_small_bold.render(f"Score: {total_reward:+.1f}", True, (255, 235, 200) if total_reward >= 0 else (255, 150, 150))
+                step_txt = self.font_small_bold.render(f"Step: {step_reward:+.1f}", True, (255, 245, 230))
+                inv_color = (200, 235, 190) if inventory != "Empty" else (220, 200, 185)
+                inv_txt = self.font_small_bold.render(f"Holding: {inventory}", True, inv_color)
+
+                ax, ay = game_state["agent_pos"][agent_id]
+                closest_obj = "None"
+                min_dist = float('inf')
+                H, W = game_state["map_static"].shape
+                for y in range(H):
+                    for x in range(W):
+                        char = self.item_manager.get_cell_char(game_state["map_static"][y, x])
+                        dist = abs(ax - x) + abs(ay - y)
+                        if char in ['C', 'P', 'D'] and dist < min_dist:
+                            min_dist = dist
+                            name_map = {'C': 'Board', 'P': 'Plates', 'D': 'Delivery'}
+                            closest_obj = f"{name_map[char]} ({dist} steps)"
+                for (x, y), ing in game_state.get("dispensers", {}).items():
                     dist = abs(ax - x) + abs(ay - y)
-                    if char in ['C', 'P', 'D'] and dist < min_dist:
+                    if dist < min_dist:
                         min_dist = dist
-                        name_map = {'C': 'Board', 'P': 'Plates', 'D': 'Delivery'}
-                        closest_obj = f"{name_map[char]} ({dist} steps)"
-            for (x, y), ing in game_state.get("dispensers", {}).items():
-                dist = abs(ax - x) + abs(ay - y)
-                if dist < min_dist:
-                    min_dist = dist
-                    closest_obj = f"{ing.title()} ({dist} steps)"
-                    
-            vis_txt = self.font_small_bold.render(f"Focus: {closest_obj}", True, (200, 220, 255))
+                        closest_obj = f"{ing.title()} ({dist} steps)"
+
+                vis_txt = self.font_small_bold.render(f"Focus: {closest_obj}", True, (200, 220, 255))
+
+                self.window.blit(score_txt, (card_x + 12, card_y + 28))
+                self.window.blit(step_txt, (card_x + 105, card_y + 28))
+                self.window.blit(inv_txt, (card_x + 12, card_y + 48))
+                self.window.blit(vis_txt, (card_x + 12, card_y + 68))
+        else:
+            # 3, 4 (ou mais) agentes: grade 2x2 com 2 colunas para todos ficarem visíveis sem corte!
+            cols = 2
+            col_width = (self.virtual_width - self.hud_padding - (left_column_x + 185) - 12) // cols
+            col_width = max(245, min(275, col_width))
+            card_height = 45
+            chef_start_x = self.virtual_width - self.hud_padding - (col_width * cols + 10)
+
+            for idx, agent_id in enumerate(sorted_agents):
+                col = idx % cols
+                row = idx // cols
+                card_x = chef_start_x + col * (col_width + 10)
+                card_y = hud_y_start + 8 + row * (card_height + 6)
+
+                # Card background panel
+                pygame.draw.rect(self.window, (95, 72, 58), (card_x, card_y, col_width, card_height), border_radius=6)
+                pygame.draw.rect(self.window, (166, 138, 118), (card_x, card_y, col_width, card_height), width=1, border_radius=6)
+
+                agent_num = self._get_agent_number(agent_id)
+                badge_color = CHEF_COLORS[agent_num % len(CHEF_COLORS)]
+                pygame.draw.circle(self.window, badge_color, (card_x + 10, card_y + 11), 5)
+
+                # Line 1: Chef Name + Score + Step
+                total_reward = game_state.get("accumulated_rewards", {}).get(agent_id, 0.0)
+                step_reward = game_state.get("last_step_rewards", {}).get(agent_id, 0.0)
+
+                title_txt = self.font_small_bold.render(f"Chef {agent_num}", True, (255, 250, 240))
+                self.window.blit(title_txt, (card_x + 20, card_y + 3))
+
+                score_color = (255, 220, 160) if total_reward >= 0 else (255, 150, 150)
+                score_txt = self.font_small_bold.render(f"Score: {total_reward:+.1f}", True, score_color)
+                self.window.blit(score_txt, (card_x + 85, card_y + 4))
+
+                step_txt = self.font_small_bold.render(f"Step: {step_reward:+.1f}", True, (240, 230, 220))
+                self.window.blit(step_txt, (card_x + 185, card_y + 4))
+
+                # Line 2: Holding + Focus
+                carrying_instance_id = game_state.get("agent_holding_instance", {}).get(agent_id, None)
+                if carrying_instance_id is not None and carrying_instance_id in game_state.get("item_instances", {}):
+                    carrying_item = game_state["item_instances"][carrying_instance_id]
+                    inventory = get_ingredient_display_name(carrying_item)
+                    if len(inventory) > 13:
+                        inventory = inventory[:11] + ".."
+                else:
+                    inventory = "Empty"
+
+                ax, ay = game_state["agent_pos"][agent_id]
+                closest_obj = "None"
+                min_dist = float('inf')
+                H, W = game_state["map_static"].shape
+                for y in range(H):
+                    for x in range(W):
+                        char = self.item_manager.get_cell_char(game_state["map_static"][y, x])
+                        dist = abs(ax - x) + abs(ay - y)
+                        if char in ['C', 'P', 'D'] and dist < min_dist:
+                            min_dist = dist
+                            name_map = {'C': 'Board', 'P': 'Plates', 'D': 'Delivery'}
+                            closest_obj = f"{name_map[char]} ({dist}s)"
+                for (x, y), ing in game_state.get("dispensers", {}).items():
+                    dist = abs(ax - x) + abs(ay - y)
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_obj = f"{ing.title()[:6]} ({dist}s)"
+
+                inv_color = (200, 240, 190) if inventory != "Empty" else (200, 185, 175)
+                inv_txt = self.font_small_bold.render(f"Hold: {inventory}", True, inv_color)
+                self.window.blit(inv_txt, (card_x + 10, card_y + 24))
+
+                foc_txt = self.font_small_bold.render(f"Focus: {closest_obj}", True, (180, 220, 255))
+                self.window.blit(foc_txt, (card_x + 140, card_y + 24))
             
             # Optional log analysis to file (default: disabled)
             try:
@@ -465,11 +548,6 @@ class Renderer:
                         f.write(f"[Step {time_step:04d}] {agent_id} | Pos: {ax:02d},{ay:02d} | Hold: {inventory:10} | Focus: {closest_obj:20} | Score: {total_reward:+.1f} | Step Rwd: {step_reward:+.1f} | Delivered: [{del_str}] | Pending: [{pend_str}]\n")
             except Exception:
                 pass
-            
-            self.window.blit(score_txt, (card_x + 12, card_y + 30))
-            self.window.blit(step_txt, (card_x + 100, card_y + 30))
-            self.window.blit(inv_txt, (card_x + 12, card_y + 50))
-            self.window.blit(vis_txt, (card_x + 12, card_y + 70))
     
     def _draw_agent_vision(self, agent_id: str, pos: Tuple[int, int], game_state: Dict):
         """Draw lines to represent what the agent's neural network is focusing on."""
@@ -733,8 +811,13 @@ class Renderer:
         
         H, W = map_size
         self.hud_padding = RENDER_CONFIG['hud_padding']
-        self.top_hud_height = 70
-        self.bottom_hud_height = 110
+        
+        # When running in visualizer mode, allocate extra vertical margins for top info banner and bottom controls
+        is_visualizer = os.environ.get("OVERCOOKED_VISUALIZER_MODE") == "1"
+        self.top_banner_offset = 46 if is_visualizer else 0
+        self.top_hud_height = 70 + self.top_banner_offset
+        self.bottom_hud_height = 118 if is_visualizer else 110
+        self.bottom_controls_offset = 24 if is_visualizer else 0
         self.hud_height = self.bottom_hud_height
         
         # Fixed cell size for the internal virtual surface
@@ -748,7 +831,7 @@ class Renderer:
         
         min_width = RENDER_CONFIG['hud_min_width']
         window_width = max(grid_width + 2 * self.hud_padding, min_width)
-        window_height = self.grid_offset_y + grid_height + self.hud_padding + self.bottom_hud_height
+        window_height = self.grid_offset_y + grid_height + self.hud_padding + self.bottom_hud_height + self.bottom_controls_offset
         
         # Center the grid horizontally if window is wider than grid
         if window_width > grid_width + 2 * self.hud_padding:

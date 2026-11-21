@@ -83,7 +83,7 @@ for arg in "${PASSTHROUGH_ARGS[@]}"; do
     fi
 done
 if [ "$HAS_EPISODES" -eq 0 ]; then
-    PASSTHROUGH_ARGS+=("--episodes" "1500")
+    PASSTHROUGH_ARGS+=("--episodes" "1000")
 fi
 
 # 4. Definição da lista de algoritmos
@@ -100,13 +100,19 @@ CPU_COUNT=$($PYTHON_CMD -c "import os; print(os.cpu_count() or 4)" 2>/dev/null |
 
 if [ "$TOTAL_RAM_GB" -le 16 ]; then
     DEFAULT_CONCURRENT=2
-    DEFAULT_WORKERS=6
+    MAX_W_BY_CPU=$(( (CPU_COUNT / DEFAULT_CONCURRENT - 1) * DEFAULT_CONCURRENT ))
+    [ "$MAX_W_BY_CPU" -lt 2 ] && MAX_W_BY_CPU=2
+    DEFAULT_WORKERS=$(( MAX_W_BY_CPU < 6 ? MAX_W_BY_CPU : 6 ))
 elif [ "$TOTAL_RAM_GB" -le 32 ]; then
     DEFAULT_CONCURRENT=2
-    DEFAULT_WORKERS=10
+    MAX_W_BY_CPU=$(( (CPU_COUNT / DEFAULT_CONCURRENT - 1) * DEFAULT_CONCURRENT ))
+    [ "$MAX_W_BY_CPU" -lt 2 ] && MAX_W_BY_CPU=2
+    DEFAULT_WORKERS=$(( MAX_W_BY_CPU < 8 ? MAX_W_BY_CPU : 8 ))
 else
-    DEFAULT_CONCURRENT=4
-    DEFAULT_WORKERS=$(awk -v c="$CPU_COUNT" 'BEGIN { w = int(c * 0.7); if (w < 4) w = 4; if (w > 16) w = 16; print w }')
+    DEFAULT_CONCURRENT=2
+    MAX_W_BY_CPU=$(( (CPU_COUNT / DEFAULT_CONCURRENT - 1) * DEFAULT_CONCURRENT ))
+    [ "$MAX_W_BY_CPU" -lt 4 ] && MAX_W_BY_CPU=4
+    DEFAULT_WORKERS=$(( MAX_W_BY_CPU < 10 ? MAX_W_BY_CPU : 10 ))
 fi
 
 export WORKERS=${WORKERS:-$DEFAULT_WORKERS}
