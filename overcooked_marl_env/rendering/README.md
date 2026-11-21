@@ -1,64 +1,47 @@
-# Rendering System - ASCII and Pygame Visualization
+<div align="center">
 
-The `rendering` module provides dual visualization: fast console-based ASCII output and a rich Pygame graphical window.
+![Rendering](https://img.shields.io/badge/🎨_Module-rendering-9333ea?style=for-the-badge&labelColor=1e1b4b)
+![Modes](https://img.shields.io/badge/Modes-Pygame_HUD_|_ASCII-3b82f6?style=for-the-badge&labelColor=1e1b4b)
 
-## Sub-package Contents
+# 🎨 Rendering System — Pygame HUD & ASCII Visualization
 
-```
+Dual visualization backend providing a real-time Pygame graphical HUD (`render_mode="human"`) and a lightweight console ASCII renderer (`render_mode="ascii"`).
+
+</div>
+
+<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+<div align="center">
+  <img src="../../resultados_experimentos/03_experimento_2_agentes_cooperacao/env_hud_tutorial_2_agentes.png" alt="Pygame HUD Preview" width="70%" />
+</div>
+
+## 📁 Sub-package Contents
+
+```text
 rendering/
 ├── __init__.py      # Module exports
 ├── render_config.py # Pygame color themes, FPS, and grid layout settings
-└── renderer.py      # Main renderer class
+└── renderer.py      # Main Renderer class (render & close)
 ```
 
----
+## 🖥️ Rendering Modes
 
-## Detailed Components
+* **Pygame Mode (`render_mode="human"`):** Color-coded kitchen grid, directional agent circles, held item & plate icons, plus a dedicated HUD displaying step count, rewards, and pending recipe orders.
+* **ASCII Mode (`render_mode="ascii"`):** Lightweight terminal output ideal for headless server training (`_`/`|` walls, `#` counters, lowercase chopped ingredients `t/l/c/o`, scores, and order queue).
 
-### `renderer.py`
-Provides high-level rendering capabilities.
+## 🧪 Testing & Visual Demos
 
-#### Renderer Class
-* `__init__(item_manager, render_mode: Optional[str] = "human")`
-  Instantiates the renderer.
-  - `item_manager`: Reference to resolve tile names and codes.
-  - `render_mode`: `"human"` (Pygame window) or `"ascii"` (console printout).
-
-#### Render Invocation
-* `render(game_state: dict, map_size: tuple, agents: list, recipe_order: list)`
-  Redraws the frame based on the current state.
-* `close()`
-  Terminates display buffers and shuts down Pygame.
-
----
-
-## Rendering Modes
-
-### 1. ASCII Mode (`render_mode="ascii"`)
-Fast and lightweight printout, perfect for remote execution or headless server cluster training.
-* **Layout details:** Renders border walls (`_`, `|`), tables (`#`), dispensers, agents, and lowercase characters for chopped ingredients (`t`, `l`, `c`, `o`).
-* Prints active steps, score metrics, and expected recipe orders.
-
-### 2. Pygame Mode (`render_mode="human"`)
-Interactive visual mode:
-* Draws a structured color-coded grid representing the kitchen counters, tables, and walls.
-* Renders agents as colored circles showing their current orientation direction.
-* Shows held item icons (e.g. plate container showing ingredients inside).
-* Renders a dedicated HUD displaying step count, individual rewards, and active expected orders.
-
----
-
-## Verification & Testing
-
-Verify visual outputs:
 ```bash
+# Unit tests
 python -m unittest overcooked_marl_env/tests/test_renderer.py
-```
-To visually test ASCII output, run:
-```bash
+
+# ASCII console demo
 python example/default_map_test.py
-```
-To test Pygame graphical interactive gameplay, run:
-```bash
+
+# Interactive Pygame keyboard play
 python example/keyboard_play.py
 ```
+
+<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+⬅️ **[Back to Package Documentation](../README.md)**

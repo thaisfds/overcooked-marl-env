@@ -1,82 +1,78 @@
-# Reinforcement Learning Experiments
+<div align="center">
 
-This directory contains the reinforcement learning experiments for the Overcooked MARL environment, implemented using Ray RLlib (PPO).
+![Experiments](https://img.shields.io/badge/🧪_RL_Experiments-Ray_RLlib_%2B_PyTorch-9333ea?style=for-the-badge&labelColor=1e1b4b)
+![Algorithms](https://img.shields.io/badge/🧠_Algorithms-PPO_|_DQN_|_IMPALA_|_APPO_|_BC-3b82f6?style=for-the-badge&labelColor=1e1b4b)
+
+# 🧪 Reinforcement Learning Experiments
+
+Training, hyperparameter sweeps, quantitative evaluation, and rollout visualization pipelines for the **Overcooked MARL Environment** using **Ray RLlib**.
+
+</div>
+
+<img src="../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="../resultados_experimentos/01_visao_geral_e_evolucao/comparacao_algoritmos_marl.png" alt="Algorithm Benchmark" width="100%" />
+      <br/><sub><b>Multi-Algorithm Benchmark:</b> IMPALA, APPO, DQN, and PPO.</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="../resultados_experimentos/assets/gameplay_4_agentes_equipe.gif" alt="4-Agent Rollout Preview" width="100%" />
+      <br/><sub><b>Trained Policy Rollout:</b> 4-agent brigade in <code>tutorial.txt</code>.</sub>
+    </td>
+  </tr>
+</table>
+</div>
+
+> [!TIP]
+> Browse all generated plots, learning curves, and benchmark reports in **[`resultados_experimentos/`](../resultados_experimentos/README.md)**.
 
 ## 📁 Directory Structure
 
 ```text
 experiments/
-├── training/                                # 🧪 Model training scripts & automated cycles
-│   ├── train_ppo.py                         # Parameterized PPO training script (RLlib + PyTorch)
-│   └── run_experiment_cycle.sh              # 1-command automated pipeline (train + evaluate)
-│
-├── analysis/                                # 🔬 Model analysis & quantitative evaluation
-│   ├── evaluate_ppo.py                      # Multi-episode deterministic evaluator with seed control
-│   └── find_best_params.py                  # Checkpoint discovery tool for ray_results
-│
-├── visualization/                           # 🎨 Visualization notebooks & plotting tools
-│   ├── visualize_model.py                   # Pygame graphical rollout simulation script
-│   └── curves_and_performance.ipynb         # Unified performance suite (curves, ranking, logs, vision)
-│
-├── utils/                                   # 🛠️ Persistent results logging & metrics utilities
-│   └── results_tracker.py                   # Appends training + eval metrics to CSV/JSON
-│
-├── ray_results/                             # 📦 Ray Tune checkpoints & training event logs
-│
-└── logs/                                    # 📊 Unified metrics, CSV summaries & vision logs
-    ├── experiments_summary.csv              # Global accumulative results table (CSV)
-    ├── experiments_summary.json             # Global accumulative results history (JSON)
-    ├── latest_summary.md                    # Markdown summary report of the latest run
-    └── vision_analysis/                     # Step-by-step vision log files (.log)
+├── training/        # Training scripts (PPO, DQN, IMPALA, APPO, BC) & automated cycles
+├── analysis/        # Deterministic multi-episode evaluation & checkpoint discovery
+├── visualization/   # Pygame graphical rollouts & Jupyter performance notebooks
+├── utils/           # Persistent CSV/JSON results tracking & post-processing
+├── ray_results/     # Ray Tune checkpoints & training event logs
+└── logs/            # Unified metrics, summary tables & step-by-step vision logs
 ```
 
----
-
-## 🛠️ Prerequisites & Installation
-
-To install all dependencies required to train models and visualize results via Jupyter Notebook:
+## 🛠️ Prerequisites
 
 ```bash
-# Install Ray RLlib (PPO engine) and Jupyter Notebook
 venv/bin/pip install "ray[rllib]" notebook seaborn
 ```
 
----
-
 ## 🚀 How to Run
 
-### 1. Training New Models (`experiments/training/`)
-
-Execute an automated training + evaluation cycle:
+### 1. Training (`experiments/training/`)
 ```bash
+# Automated training + evaluation cycle
 ./experiments/training/run_experiment_cycle.sh
-```
 
-Or run `train_ppo.py` directly with custom CLI parameters:
-```bash
+# Direct parameterized training
 venv/bin/python experiments/training/train_ppo.py --map default_map.txt --num-agents 1 --workers 2
 ```
 
----
-
-### 2. Model Analysis & Evaluation (`experiments/analysis/`)
-
-Run multi-episode statistical evaluation on the latest checkpoint:
+### 2. Evaluation (`experiments/analysis/`)
 ```bash
+# Multi-episode deterministic evaluation on the latest checkpoint
 venv/bin/python experiments/analysis/evaluate_ppo.py --num-episodes 5
-```
 
-Enable step-by-step vision analysis logging during evaluation:
-```bash
+# With step-by-step vision analysis logging
 venv/bin/python experiments/analysis/evaluate_ppo.py --num-episodes 5 --log-vision
 ```
 
----
-
-### 3. Model Visualization (`experiments/visualization/`)
-
-Render real-time Pygame graphical rollouts of any checkpoint (or automatically load the latest model):
+### 3. Visualization (`experiments/visualization/`)
 ```bash
+# Real-time Pygame rollout (auto-loads latest checkpoint if omitted)
 python3 experiments/visualization/visualize_model.py [checkpoint_path]
 ```
 
+<img src="../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+⬅️ **[Back to Main Repository README](../README.md)**

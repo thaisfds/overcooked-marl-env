@@ -1,69 +1,61 @@
-# Map System - Loading, Parsing, and Validation
+<div align="center">
 
-The `map` module handles loading, parsing, and validating kitchen layouts from text configurations.
+![Map](https://img.shields.io/badge/🗺️_Module-map-9333ea?style=for-the-badge&labelColor=1e1b4b)
+![Pattern](https://img.shields.io/badge/Pattern-Facade_Loader_%2B_CLI-3b82f6?style=for-the-badge&labelColor=1e1b4b)
 
-## Sub-package Contents
+# 🗺️ Map System — Loading, Parsing, and Validation
 
-```
+Loads, parses, and validates `.txt` kitchen layouts using a **Facade** (`MapLoader`), with automatic discovery of adjacent `recipes.json` files.
+
+</div>
+
+<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="../../resultados_experimentos/02_experimento_1_agente_cozinha_aberta/env_hud_default_map_1_agente.png" alt="default_map.txt" width="100%" />
+      <br/><sub><b><code>default_map.txt</code> (7×7):</b> Open kitchen layout.</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="../../resultados_experimentos/03_experimento_2_agentes_cooperacao/env_hud_tutorial_2_agentes.png" alt="tutorial.txt" width="100%" />
+      <br/><sub><b><code>tutorial.txt</code> (15×11):</b> Divided multi-agent kitchen (up to 4 agents).</sub>
+    </td>
+  </tr>
+</table>
+</div>
+
+## 📁 Sub-package Contents
+
+```text
 map/
 ├── __init__.py          # Module exports
-├── map_config.py        # Map headers and validation dimensions constants
-├── map_parser.py        # Converts plain text maps into structured grids
-├── map_validator.py     # Structural validation (perimeter wall, agents spawn)
-├── map_loader.py        # Facade loader that coordinates parsing & validation
-└── maps/                # Pre-defined map layout text files
+├── map_config.py        # Map headers and dimension limits
+├── map_parser.py        # Parses .txt layouts (# Grid Map, # Dispensers, # Recipes)
+├── map_validator.py     # Structural & semantic validation (3x3 to 50x50, spawns, recipes)
+├── map_loader.py        # Facade loader + CLI validation utility
+└── maps/                # Included layouts (default_map.txt, tutorial.txt)
 ```
 
----
+## 🔧 Architecture
 
-## Component Architecture
+* **Parser (`map_parser.py`):** `parse_file(map_path)` extracts grid arrays, agent spawns, dispenser mappings, and recipe lists.
+* **Validator (`map_validator.py`):** `validate_map(map_data)` checks required keys, 2D `uint8` grid, dimensions (`3×3` to `50×50`), in-bounds non-overlapping agent spawns, dispenser coordinates/names, and recipe validity against [`RecipeManager`](../core/recipes.py).
+* **Facade Loader (`map_loader.py`):** `load_map(map_path)` coordinates parsing, validation, fallback maps, dependency injection (`RecipeManager`, `ItemManager`), and auto-loading adjacent `recipes.json`.
 
-The module utilizes the **Facade** design pattern through `MapLoader`, shielding the caller from details about parsing and validation.
-
-### 1. Parser (`map_parser.py`)
-Parses `.txt` files containing `# Grid Map`, `# Dispensers`, and `# Recipes` sections:
-* `parse_file(map_path: str) -> dict`
-  Returns parsed data with grid array, agent starting locations, dispenser assignments, and recipe requests list.
-
-### 2. Validator (`map_validator.py`)
-Validates structural integrity and constraints:
-* `validate_map(map_data: dict) -> bool`
-  Returns `True` if map is valid, or prints validation errors.
-* **Rules checked:** Required dictionary keys, 2D `uint8` numpy grid, dimensions within limits (3×3 to 50×50), at least 1 agent defined, in-bounds positions with no overlaps (warns if starting on non-empty tile), valid in-bounds dispenser coordinates and ingredient names, and recipe validation against standard or injected [`RecipeManager`](file:///home/thaiswsl/NewOvercookedEnv/overcooked_marl_env/core/recipes.py) (case-insensitive).
-
-### 3. Facade Loader (`map_loader.py`)
-Coordinates parsing and validation:
-* `load_map(map_path: Optional[str] = None) -> MapData`
-  Loads map, resolving default fallback maps if the file fails or doesn't exist.
-* Supports dependency injection of `RecipeManager` and `ItemManager`.
-* Automatically discovers and loads adjacent `recipes.json` configuration files if present in the same directory as the map.
-
----
-
-## 🔍 Command-Line Map Validation Utility
-
-We added a terminal script capability directly inside `map_loader.py`. You can validate any map file and see visual error reports from your shell:
+## 🔍 CLI Validation & Unit Tests
 
 ```bash
+# Validate any map file (auto-loads adjacent recipes.json if present)
 python -m overcooked_marl_env.map.map_loader example/custom_map_template.txt
-```
 
-> [!TIP]
-> If a `recipes.json` config exists in the same directory as the map file, it is automatically parsed to register custom ingredients/recipes before running validation.
-
----
-
-## Included Maps
-* **`default_map.txt` (7×7):** Standard kitchen layout with 2 agents, cutting board, plate dispenser, delivery station, and 3 ingredient dispensers (tomato, lettuce, cucumber).
-* **`tutorial.txt` (15×11):** Physically divided multi-agent kitchen (up to 4 agents) with transfer counters, multiple cutting boards, and shared delivery stations.
-
----
-
-## Verification & Testing
-
-Run map subsystem unit tests:
-```bash
+# Run map subsystem tests
 python -m unittest overcooked_marl_env/tests/unit/test_map_parser.py
 python -m unittest overcooked_marl_env/tests/unit/test_map_validator.py
 python -m unittest overcooked_marl_env/tests/unit/test_map_loader.py
 ```
+
+<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+⬅️ **[Back to Package Documentation](../README.md)**

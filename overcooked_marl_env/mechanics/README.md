@@ -1,109 +1,75 @@
-# Mechanics System - Movement, Collision, and Modular Interactions
+<div align="center">
 
-The `mechanics` module implements the environment physics, agent collisions, reward shaping, and workstation interactions.
+![Mechanics](https://img.shields.io/badge/⚙️_Module-mechanics-9333ea?style=for-the-badge&labelColor=1e1b4b)
+![Pattern](https://img.shields.io/badge/Pattern-Station_Strategy_%2B_PBRS-3b82f6?style=for-the-badge&labelColor=1e1b4b)
 
-## Sub-package Contents
+# ⚙️ Mechanics System — Physics, Interactions & Reward Shaping
 
-```
+Implements movement, multi-agent collision resolution, Potential-Based Reward Shaping (PBRS), and modular workstation interactions via the **Station Strategy Pattern**.
+
+</div>
+
+<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+## 📁 Sub-package Contents
+
+```text
 mechanics/
 ├── __init__.py              # Module exports
-├── movement_system.py       # Agent walking and orientation updates
-├── collision_resolver.py    # Multi-agent collision resolution
-├── reward_shaper.py         # Potential-based shaping and intermediate bonuses
-├── interaction_handler.py   # Interaction coordinator and backward compatibility adapter
-└── interactions/            # Station Strategy Pattern implementations
-    ├── __init__.py          # Strategy exports
-    ├── base_station.py      # Abstract StationHandler base class
-    ├── station_registry.py  # StationRegistry dynamic strategy lookup
-    ├── chopping_handler.py  # Universal processing station ('C', 'S', etc.)
+├── movement_system.py       # Directional walking (0:U, 1:D, 2:L, 3:R) & orientation
+├── collision_resolver.py    # Multi-agent position conflict resolution
+├── reward_shaper.py         # Potential-based shaping, milestones & delivery multipliers
+├── interaction_handler.py   # High-level interaction coordinator
+└── interactions/            # Station Strategy Pattern handlers
+    ├── base_station.py      # Abstract StationHandler
+    ├── station_registry.py  # Dynamic station lookup
+    ├── chopping_handler.py  # Universal processing appliance ('C', 'S', etc.)
     ├── dispenser_handler.py # Plate ('P') & Ingredient ('I') dispensers
     ├── counter_handler.py   # General counters/tables ('#')
-    ├── trash_handler.py     # Waste and reward clawback ('T')
-    └── delivery_handler.py  # Recipe validation, HUD matching, and victory ('D')
+    ├── trash_handler.py     # Waste & shaping reward clawback ('T')
+    └── delivery_handler.py  # OrderQueue matching, multipliers & victory ('D')
 ```
 
----
+## 🔧 Core Systems
 
-## Detailed Components
+* **Movement & Collisions:** `process_movement_actions` updates orientation and computes candidate moves (`0` Up, `1` Down, `2` Left, `3` Right). `resolve_collisions` blocks overlapping moves (configurable penalty, default `0.0`).
+* **Station Strategy Pattern (`interactions/`):** Action `4` (Interact) dispatches dynamically through `StationRegistry` to isolated `StationHandler` classes (`C`, `P`, `I`, `#`, `T`, `D`), supporting multi-stage pipelines (e.g., chop on `C` → cook on `S` → plate).
+* **Reward Shaper (`reward_shaper.py`):**
+  * Living cost: `-0.005/step`
+  * Milestones: Pick up needed (`+5.0`), Place on station (`+5.0`), Processing step (`+1.0`), Complete stage (`+8.0`), Combine on plate (`+10.0` + bonus), Complete plate (`+15.0`).
+  * Dynamic Delivery Multiplier: `1.0 + 0.5 × (k - 1)` for the *k*-th delivery.
+  * Episode Victory Bonus: `+5,000.0 pts` when all pending orders are delivered.
 
-### 1. Movement System (`movement_system.py`)
-Computes new coordinates and updates orientation based on action directions:
-* **Directions Mapping:**
-  - `0`: Move UP (North, `(0, -1)`)
-  - `1`: Move DOWN (South, `(0, 1)`)
-  - `2`: Move LEFT (West, `(-1, 0)`)
-  - `3`: Move RIGHT (East, `(1, 0)`)
-* **Processing:** `process_movement_actions(actions: dict, game_state: dict, map_size: tuple, item_manager)` computes candidate moves. The agent's orientation always reflects the intended movement direction, ensuring consistent facing-tile interactions.
+<details>
+<summary><b>🔌 Extending with Custom Stations (Code Examples)</b></summary>
 
-### 2. Collision Resolver (`collision_resolver.py`)
-Resolves multi-agent position conflicts at each step:
-* `resolve_collisions(intended_positions: dict, current_positions: dict, verbose: bool)`
-  - Blocks movement if the candidate square is occupied by a stationary agent.
-  - Blocks both agents if they attempt to enter the same coordinate simultaneously.
-* **Penalty:** Configurable collision penalty (default: `0.0`).
-
-### 3. Interaction Handler & Station Strategy Pattern (`interaction_handler.py` & `interactions/`)
-Coordinates all interact actions (Action 4) when agents face adjacent workstations:
-* **Station Strategy Pattern:** Instead of a monolithic `if/elif` block, each station type is an isolated `StationHandler` subclass managed by `StationRegistry`.
-* **Handlers:**
-  * `ChoppingBoardHandler ('C')`: Placing raw items, progressive chopping, picking ready items, and direct plate assembly. Can also be parameterized for any appliance char (e.g. `'S'`).
-  * `PlateDispenserHandler ('P')`: Dispensing clean plates and instant combination with held ready items.
-  * `IngredientDispenserHandler ('I')`: Taking fresh ingredients from dispensers.
-  * `CounterHandler ('#')`: Placing items, picking up items, direct combinations on counter, and anti-clutter / useless cycle penalty checks.
-  * `TrashHandler ('T')`: Discarding items with strict shaping reward clawback.
-  * `DeliveryHandler ('D')`: Validating plate contents against `OrderQueue`, calculating sequence order bonuses, dynamic delivery multipliers, and episode victory rewards.
-
-### 4. Multi-Stage Ingredient Processing Across Stations
-Ingredients can have multi-stage pipelines (e.g. Patty: chop on `'C'` $\to$ cook on `'S'` $\to$ combine onto plate):
-1. **Station Matching:** `can_process(item, station)` verifies if the current stage of the item targets this specific station.
-2. **Intermediate Pickups:** When an item completes its steps for station `'C'`, it transitions to the next stage (e.g., `'S'`). Because it can no longer be processed at `'C'`, the agent can pick it up to transport it to `'S'`.
-3. **Completion Milestone:** When a processing stage finishes, agents receive the `chop_completed` milestone reward (+8.0 pts). When the final stage completes, the item transitions to `ItemState.READY`.
-
-### 5. Extending with Custom Stations
-To add a new station (e.g. `'S'` for Stove or `'F'` for Fryer):
-
-**Option A: Universal Processing Appliance (Reuse `ChoppingBoardHandler`)**
-If the new station processes multi-stage items through progress steps:
+**Option A — Reuse Universal Processing Appliance (`ChoppingBoardHandler`):**
 ```python
 from overcooked_marl_env.mechanics.interactions.chopping_handler import ChoppingBoardHandler
 
-env.item_manager.register_tile('S', code=20, name="Stove", color=(255, 120, 50))
-env.interaction_handler.register_station_handler('S', ChoppingBoardHandler(env.interaction_handler, station_char='S'))
+env.item_manager.register_tile("S", code=20, name="Stove", color=(255, 120, 50))
+env.interaction_handler.register_station_handler("S", ChoppingBoardHandler(env.interaction_handler, station_char="S"))
 ```
 
-**Option B: Custom Strategy Subclass**
-For stations with entirely custom logic:
+**Option B — Custom `StationHandler` Subclass:**
 ```python
 from overcooked_marl_env.mechanics.interactions.base_station import StationHandler
 
 class CustomMachineHandler(StationHandler):
     def handle(self, agent_id, tile_pos, carrying_item, carrying_instance_id,
                ground_item, ground_instance_id, game_state, verbose=False):
-        # Custom logic here
         return step_reward, global_bonus
 
-env.interaction_handler.register_station_handler('M', CustomMachineHandler(env.interaction_handler))
+env.interaction_handler.register_station_handler("M", CustomMachineHandler(env.interaction_handler))
 ```
+</details>
 
-### 6. Reward Shaper (`reward_shaper.py`)
-Computes potential-based milestone rewards and delivery multipliers:
-* **Living Cost:** -0.005 per step.
-* **Milestone Progression:**
-  - Pick up needed ingredient: +5.0 pts
-  - Place ingredient on station: +5.0 pts
-  - Station processing cut/step: +1.0 pt
-  - Complete station stage: +8.0 pts milestone
-  - Combine ready ingredient with plate: +10.0 pts base + plate composition bonus
-  - Complete plate assembly: +15.0 pts milestone
-* **Dynamic Delivery Multipliers:**
-  $$\text{Multiplier} = 1.0 + 0.5 \times (k - 1) \quad \text{for the } k\text{-th delivery}$$
-* **Episode Victory Bonus:** +5000.0 pts when all pending orders are delivered.
+## 🧪 Testing
 
----
-
-## Verification & Testing
-
-Run unit tests to verify physics and interaction mechanics:
 ```bash
 ./venv/bin/python -m unittest discover -s overcooked_marl_env/tests
 ```
+
+<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+
+⬅️ **[Back to Package Documentation](../README.md)**
