@@ -240,7 +240,7 @@ python -m unittest discover -s overcooked_marl_env/tests
 ## 📁 Project Structure
 
 ```text
-NewOvercookedEnv/
+overcooked-marl-env/
 ├── resultados_experimentos/ # ★ Experiment results, plots, and gameplay GIFs
 │   ├── 01_visao_geral_e_evolucao/
 │   ├── 02_experimento_1_agente_cozinha_aberta/
