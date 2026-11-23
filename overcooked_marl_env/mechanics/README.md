@@ -1,17 +1,10 @@
-<div align="center">
-
-![Mechanics](https://img.shields.io/badge/⚙️_Module-mechanics-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Pattern](https://img.shields.io/badge/Pattern-Station_Strategy_%2B_PBRS-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-# ⚙️ Mechanics System — Physics, Interactions & Reward Shaping
+# Mechanics System — Physics, Interactions & Reward Shaping
 
 Implements movement, multi-agent collision resolution, Potential-Based Reward Shaping (PBRS), and modular workstation interactions via the **Station Strategy Pattern**.
 
-</div>
+---
 
-<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
-
-## 📁 Sub-package Contents
+## Sub-package Contents
 
 ```text
 mechanics/
@@ -30,7 +23,7 @@ mechanics/
     └── delivery_handler.py  # OrderQueue matching, multipliers & victory ('D')
 ```
 
-## 🔧 Core Systems
+## Core Systems
 
 * **Movement & Collisions:** `process_movement_actions` updates orientation and computes candidate moves (`0` Up, `1` Down, `2` Left, `3` Right). `resolve_collisions` blocks overlapping moves (configurable penalty, default `0.0`).
 * **Station Strategy Pattern (`interactions/`):** Action `4` (Interact) dispatches dynamically through `StationRegistry` to isolated `StationHandler` classes (`C`, `P`, `I`, `#`, `T`, `D`), supporting multi-stage pipelines (e.g., chop on `C` → cook on `S` → plate).
@@ -41,7 +34,7 @@ mechanics/
   * Episode Victory Bonus: `+5,000.0 pts` when all pending orders are delivered.
 
 <details>
-<summary><b>🔌 Extending with Custom Stations (Code Examples)</b></summary>
+<summary><b>Extending with Custom Stations (Code Examples)</b></summary>
 
 **Option A — Reuse Universal Processing Appliance (`ChoppingBoardHandler`):**
 ```python
@@ -64,12 +57,12 @@ env.interaction_handler.register_station_handler("M", CustomMachineHandler(env.i
 ```
 </details>
 
-## 🧪 Testing
+## Testing
 
 ```bash
 ./venv/bin/python -m unittest discover -s overcooked_marl_env/tests
 ```
 
-<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Package Documentation](../README.md)**
+⬅**[Back to Package Documentation](../README.md)**

@@ -1,17 +1,10 @@
-<div align="center">
-
-![Environment](https://img.shields.io/badge/🌐_Module-environment-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Obs](https://img.shields.io/badge/Observations-150D_Vector_|_9Ch_Grid-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-# 🌐 Environment System — Game State & Observations
+# Environment System — Game State & Observations
 
 Manages the internal kitchen state (`MapData`, `GameState`) and builds multi-agent RL observations in either dense 150D vector or 9-channel spatial grid format.
 
-</div>
+---
 
-<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
-
-## 📁 Sub-package Contents
+## Sub-package Contents
 
 ```text
 environment/
@@ -22,12 +15,12 @@ environment/
 └── featurized_observation_builder.py  # 150D scale-invariant vector (default for RL)
 ```
 
-## 🧠 Game State (`game_state.py`)
+## Game State (`game_state.py`)
 
 * **`MapData`:** Stores parsed static map layout (`static_map`, `agent_positions`, `dispensers`, `recipes`, `size`).
 * **`GameState`:** Tracks agent positions, orientations, inventories, and ground items, delegating order queue queries to [`OrderQueue`](../core/recipes.py).
 
-## 👁️ Observation Builders
+## Observation Builders
 
 ### A. Featurized Observation Vector (`150D`) — Default
 `FeaturizedObservationBuilder` produces a normalized 1D vector `(150,)` invariant to map size and grid scale:
@@ -43,7 +36,7 @@ environment/
 | `[132:150]` | 18 | **Counters & Transfers** | Nearest 2 empty counters (4), 2 with plates (4), 2 with ready food (4), 2 transfer counters (4), transfer occupancy flags (2). |
 
 <details>
-<summary><b>🖼️ B. Spatial Grid Observation (9 Channels) — Convolutional</b></summary>
+<summary><b>B. Spatial Grid Observation (9 Channels) — Convolutional</b></summary>
 
 `ObservationBuilder` produces a `(height, width, 9)` tensor:
 
@@ -58,12 +51,12 @@ environment/
 | **6–8** | **Processing States** | Remaining cuts (`1/3`, `2/3`, `3/3`, or instant readiness). |
 </details>
 
-## 🧪 Testing
+## Testing
 
 ```bash
 ./venv/bin/python -m unittest discover -s overcooked_marl_env/tests
 ```
 
-<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Package Documentation](../README.md)**
+⬅**[Back to Package Documentation](../README.md)**

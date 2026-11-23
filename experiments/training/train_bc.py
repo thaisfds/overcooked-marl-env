@@ -1,33 +1,7 @@
 #!/usr/bin/env python3
 """
-====================================================================================================
-🎓 OVERCOOKED MARL - TREINAMENTO POR IMITAÇÃO (BEHAVIORAL CLONING / BC + WARM-START)
-====================================================================================================
-
-📌 POR QUE ESTE TREINAMENTO É EXCELENTE PARA O PROJETO OVERCOOKED:
-----------------------------------------------------------------------------------------------------
-1. ELIMINA A BARREIRA DA EXPLORAÇÃO ALEATÓRIA:
-   No aprendizado por reforço puro (RL), a probabilidade de dois agentes executarem aleatoriamente
-   a sequência exata de uma salada composta (Agente 1 pegar tomate -> passar no balcão T -> Agente 0
-   picar tomate -> Agente 0 picar alface -> colocar ambos no mesmo prato -> entregar) é ínfima.
-   O Behavioral Cloning (BC) resolve isso convertendo o problema em Aprendizado Supervisionado:
-   a rede aprende diretamente imitando transições de sucesso (estado -> ação ideal).
-
-2. QUEBRA DEFINITIVA DO PLATÔ DE 3 SALADAS SIMPLES:
-   Ao alimentar demonstrações que contêm entregas de GARDEN_SALAD e FRESH_SALAD, a política
-   assimila imediatamente que pratos com múltiplos ingredientes são válidos e prioritários,
-   eliminando o vício ganancioso de fazer apenas alface simples.
-
-3. INICIALIZADOR UNIVERSAL (WARM-START PARA RL):
-   O checkpoint treinado via BC serve como semente de inicialização de alta qualidade.
-   Você pode carregar os pesos deste modelo no PPO, DQN ou IMPALA usando a flag:
-   `--restore-checkpoint <caminho_do_checkpoint_bc>`
-   Dessa forma, o RL não parte do zero; ele apenas refina a velocidade e a coordenação fina.
-
-4. SUPORTE A DEMONSTRAÇÕES HEURÍSTICAS E HUMANAS:
-   Suporta dados gerados pelo modo player (`example/keyboard_play.py`), gravações de rollouts
-   anteriores de modelos campeões ou demonstrações guiadas por heurística.
-====================================================================================================
+Behavioral Cloning (BC) imitation learning script for Overcooked MARL.
+Trains policies from recorded demonstrations and exports checkpoints usable as RL warm-start.
 """
 
 import os

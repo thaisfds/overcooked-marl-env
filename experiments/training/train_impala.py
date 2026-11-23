@@ -1,31 +1,7 @@
 #!/usr/bin/env python3
 """
-====================================================================================================
-⚡ OVERCOOKED MARL - TREINAMENTO MULTIAGENTE COM IMPALA (V-TRACE DISTRIBUÍDO)
-====================================================================================================
-
-📌 POR QUE ESTE TREINAMENTO É EXCELENTE PARA O PROJETO OVERCOOKED:
-----------------------------------------------------------------------------------------------------
-1. VAZÃO MASSIVA DE EXPERIÊNCIA (5x A 10x MAIS PASSOS POR SEGUNDO):
-   O PPO padrão é estritamente síncrono: todos os workers precisam parar e esperar o fim da coleta
-   do lote para que o modelo calcule os gradientes. Se um worker se atrasar, todos os outros ficam ociosos.
-   O IMPALA (Importance Weighted Actor-Learner Architecture) desacopla completamente os Workers do Learner:
-   os workers enviam trajetórias sem parar e o learner processa em fila contínua, permitindo gerar
-   20M a 50M de passos no servidor no mesmo tempo que o PPO levaria para fazer 3M.
-
-2. EXPLORAÇÃO RÁPIDA DE ÁRVORES DE ESTADOS COMPLEXAS:
-   Com uma taxa de amostragem tão superior, a chance estatística de os agentes tropeçarem na montagem
-   de saladas compostas (GARDEN_SALAD e FRESH_SALAD) por exploração estocástica cresce exponencialmente.
-
-3. ESTABILIDADE MATEMÁTICA VIA V-TRACE:
-   Como os dados chegam de múltiplos workers rodando em paralelo, algumas trajetórias podem ter sido
-   coletadas com uma política ligeiramente anterior à atual. O algoritmo V-Trace corrige o desvio
-   de importância (off-policy correction) com corte de pesos, garantindo convergência estável sem
-   divergência de gradiente.
-
-4. SINERGIA COM COORDENAÇÃO MULTIAGENTE:
-   Permite treinar tanto 2 quanto 4 agentes mantendo políticas independentes com altíssimo paralelismo.
-====================================================================================================
+Multi-agent distributed IMPALA (V-trace) training script using Ray RLlib.
+Runs independent policies per agent on the Overcooked MARL environment.
 """
 
 import os

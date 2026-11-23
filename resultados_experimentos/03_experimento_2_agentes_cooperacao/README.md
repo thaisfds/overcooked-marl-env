@@ -1,17 +1,14 @@
 <div align="center">
 
-![Experiment 03](https://img.shields.io/badge/👯‍♀️_03_Experiment-2_Agent_Cooperation-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Champion](https://img.shields.io/badge/🏆_Champion-+3,023.9_pts_(+322%25)-3b82f6?style=for-the-badge&labelColor=1e1b4b)
+![Champion](https://img.shields.io/badge/_Champion-+3,023.9_pts_(+322%25)-3b82f6?style=for-the-badge&labelColor=1e1b4b)
 
-# 👯‍♀️ 03 — 2-Agent Experiment (Divided Kitchen)
+# 03 — 2-Agent Experiment (Divided Kitchen)
 
 Two independent neural policies (`policy_agent_0` and `policy_agent_1`) cooperating across the central counter in `tutorial.txt`.
 
-</div>
+---
 
-<img src="../assets/divider_gamer.svg" width="100%" />
-
-* 🏆 **Champion Model:** `Trial 34733_00000` (`LR = 1e-4`, `γ = 0.98`, `Entropy = 0.015`, Warm-Start) — **`+3,023.87 pts`** in training and **`+1,911.59 pts`** in the 20s rollout (**+322%** over POC I, **4.0 dishes/episode**, cooperative `GARDEN_SALAD` delivery).
+* **Champion Model:** `Trial 34733_00000` (`LR = 1e-4`, `γ = 0.98`, `Entropy = 0.015`, Warm-Start) — **`+3,023.87 pts`** in training and **`+1,911.59 pts`** in the 20s rollout (**+322%** over POC I, **4.0 dishes/episode**, cooperative `GARDEN_SALAD` delivery).
 
 <div align="center">
   <img src="../assets/gameplay_2_agentes_cooperacao.gif" alt="2-Agent Cooperative Gameplay" width="65%" />
@@ -43,7 +40,7 @@ Two independent neural policies (`policy_agent_0` and `policy_agent_1`) cooperat
 </div>
 
 <details>
-<summary><b>📑 All Plots in this Folder (14 files)</b></summary>
+<summary><b>All Plots in this Folder (14 files)</b></summary>
 
 * [`env_hud_tutorial_2_agentes.png`](./env_hud_tutorial_2_agentes.png) — Divided kitchen (`tutorial.txt`) with 2 agents.
 * [`fig_executive_dashboard_2x2_tutorial_2_agentes.png`](./fig_executive_dashboard_2x2_tutorial_2_agentes.png) — 2x2 executive dashboard.
@@ -61,6 +58,6 @@ Two independent neural policies (`policy_agent_0` and `policy_agent_1`) cooperat
 * [`fig_loss_convergence_tutorial_2_agentes.png`](./fig_loss_convergence_tutorial_2_agentes.png) — Actor and critic loss convergence.
 </details>
 
-<img src="../assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Results Index](../README.md)**
+⬅**[Back to Results Index](../README.md)**

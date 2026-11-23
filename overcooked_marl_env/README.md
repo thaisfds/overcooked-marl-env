@@ -1,33 +1,26 @@
-<div align="center">
-
-![Package](https://img.shields.io/badge/📦_Package-overcooked__marl__env-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![API](https://img.shields.io/badge/🎮_API-PettingZoo_%26_Gymnasium-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-# 📦 Overcooked MARL Environment — Package Documentation
+# Overcooked MARL Environment — Package Documentation
 
 Modular Multi-Agent Reinforcement Learning (MARL) environment package featuring declarative JSON recipes, scale-invariant 150D observations, and a Station Strategy Pattern architecture.
 
-</div>
-
-<img src="../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+---
 
 <div align="center">
   <img src="../resultados_experimentos/01_visao_geral_e_evolucao/evolucao_ambiente_poc1_vs_poc2.png" alt="Environment Architecture Evolution" width="90%" />
 </div>
 
-## 🗂️ Sub-Packages
+## Sub-Packages
 
 | Module | Responsibility | Docs |
 | :--- | :--- | :---: |
-| **`core/`** | Items, multi-stage pipelines, `IngredientRegistry`, `RecipeManager`, `OrderQueue`, and constants | [📖 README](./core/README.md) |
-| **`environment/`** | `GameState`, `MapData`, 150D featurized vector & 9-channel spatial grid observation builders | [📖 README](./environment/README.md) |
-| **`map/`** | `.txt` map parsing, structural validation, and `MapLoader` facade with auto `recipes.json` discovery | [📖 README](./map/README.md) |
-| **`mechanics/`** | Movement, multi-agent collision resolution, PBRS `RewardShaper`, and Station Strategy Pattern handlers | [📖 README](./mechanics/README.md) |
-| **`rendering/`** | Pygame (`human`) graphical HUD and lightweight console (`ascii`) visualizers | [📖 README](./rendering/README.md) |
-| **`utils/`** | Shared utility module (reserved for cross-component helpers) | [📖 README](./utils/README.md) |
+| **`core/`** | Items, multi-stage pipelines, `IngredientRegistry`, `RecipeManager`, `OrderQueue`, and constants | [README](./core/README.md) |
+| **`environment/`** | `GameState`, `MapData`, 150D featurized vector & 9-channel spatial grid observation builders | [README](./environment/README.md) |
+| **`map/`** | `.txt` map parsing, structural validation, and `MapLoader` facade with auto `recipes.json` discovery | [README](./map/README.md) |
+| **`mechanics/`** | Movement, multi-agent collision resolution, PBRS `RewardShaper`, and Station Strategy Pattern handlers | [README](./mechanics/README.md) |
+| **`rendering/`** | Pygame (`human`) graphical HUD and lightweight console (`ascii`) visualizers | [README](./rendering/README.md) |
+| **`utils/`** | Shared utility module (reserved for cross-component helpers) | [README](./utils/README.md) |
 
 <details>
-<summary><b>📁 Full Package Tree</b></summary>
+<summary><b>Full Package Tree</b></summary>
 
 ```text
 overcooked_marl_env/
@@ -44,7 +37,7 @@ overcooked_marl_env/
 ```
 </details>
 
-## ⚙️ Core Architecture Highlights
+## Core Architecture Highlights
 
 * **Core (`core/`):** Multi-stage processing pipelines (`stages`), instant-ready ingredients (`cuts_needed: 0`), character-less ingredient IDs, deterministic FIFO `OrderQueue`, and declarative JSON recipe loading.
 * **Observations (`environment/`):**
@@ -52,12 +45,12 @@ overcooked_marl_env/
   * **9-Channel Spatial Grid:** Tensor representation `(H, W, 9)` for convolutional policies.
 * **Mechanics (`mechanics/`):** Every kitchen station (`C`, `P`, `I`, `#`, `T`, `D`) is an isolated `StationHandler` dynamically dispatched via `StationRegistry`, paired with Potential-Based Reward Shaping (`RewardShaper`).
 
-## 🧪 Testing & Verification
+## Testing & Verification
 
 ```bash
 ./venv/bin/python -m unittest discover -s overcooked_marl_env/tests
 ```
 
-<img src="../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Main Repository README](../README.md)**
+⬅**[Back to Main Repository README](../README.md)**

@@ -1,15 +1,8 @@
-<div align="center">
-
-![Overview](https://img.shields.io/badge/🌟_01_Overview-POC_I_vs_POC_II-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Benchmark](https://img.shields.io/badge/🧠_Benchmarks-PPO_|_DQN_|_IMPALA_|_APPO-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-# 🌟 01 — Overview & Environment Evolution
+# 01 — Overview & Environment Evolution
 
 Visual comparison between **POC I** (open kitchen + CNN observation) and **POC II** (divided kitchen + 150D featurized observation with focus rays), alongside multi-algorithm and scaling benchmarks.
 
-</div>
-
-<img src="../assets/divider_gamer.svg" width="100%" />
+---
 
 <div align="center">
   <img src="./evolucao_ambiente_poc1_vs_poc2.png" alt="POC I vs POC II Evolution" width="95%" />
@@ -33,7 +26,7 @@ Visual comparison between **POC I** (open kitchen + CNN observation) and **POC I
 </div>
 
 <details>
-<summary><b>📑 All Figures in this Folder (9 files)</b></summary>
+<summary><b>All Figures in this Folder (9 files)</b></summary>
 
 * [`evolucao_ambiente_poc1_vs_poc2.png`](./evolucao_ambiente_poc1_vs_poc2.png) — Side-by-side comparison of POC I vs. POC II.
 * [`cozinha_aberta_poc1.png`](./cozinha_aberta_poc1.png) — POC I open kitchen screenshot.
@@ -46,6 +39,6 @@ Visual comparison between **POC I** (open kitchen + CNN observation) and **POC I
 * [`comparacao_geral_hiperparametros.png`](./comparacao_geral_hiperparametros.png) — Global hyperparameter sensitivity (LR, Entropy, Gamma).
 </details>
 
-<img src="../assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Results Index](../README.md)**
+⬅**[Back to Results Index](../README.md)**

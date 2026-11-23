@@ -1,17 +1,10 @@
-<div align="center">
-
-![Core](https://img.shields.io/badge/🧩_Module-core-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Scope](https://img.shields.io/badge/Domain-Items_|_Recipes_|_OrderQueue-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-# 🧩 Core System — Items, Recipes, and Constants
+# Core System — Items, Recipes, and Constants
 
 Domain model of the Overcooked MARL environment: item states, multi-stage processing pipelines, declarative ingredient/recipe registries, FIFO order queue, and constants.
 
-</div>
+---
 
-<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
-
-## 📁 Sub-package Contents
+## Sub-package Contents
 
 ```text
 core/
@@ -23,7 +16,7 @@ core/
 └── default_recipes.json        # Declarative default recipes config
 ```
 
-## 🔧 Key Components
+## Key Components
 
 * **Constants (`constants.py`):** Centralizes `TOTAL_CHANNELS = 9`, actions (`0: Up`, `1: Down`, `2: Left`, `3: Right`, `4: Interact`), `MAX_EPISODE_STEPS = 3000`, `STEPS_PER_SECOND = 8`, and `DEFAULT_CUTS_NEEDED = 3`. Milestone rewards live in [`reward_shaper.py`](../mechanics/reward_shaper.py) and recipe rewards in [`default_recipes.json`](./default_recipes.json).
 * **Items & Ingredients (`items.py`):**
@@ -35,7 +28,7 @@ core/
   * `RecipeManager` loads default recipes (`SIMPLE_SALAD`, `GARDEN_SALAD`, `FRESH_SALAD`) from [`default_recipes.json`](./default_recipes.json) or custom JSON files.
 
 <details>
-<summary><b>🐍 Usage & Extension Examples</b></summary>
+<summary><b>Usage & Extension Examples</b></summary>
 
 ```python
 from overcooked_marl_env.core import (
@@ -68,12 +61,12 @@ recipe_manager.load_recipes_from_json("custom_map_recipes.json")
 ```
 </details>
 
-## 🧪 Testing
+## Testing
 
 ```bash
 ./venv/bin/python -m unittest discover -s overcooked_marl_env/tests
 ```
 
-<img src="../../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Package Documentation](../README.md)**
+⬅**[Back to Package Documentation](../README.md)**

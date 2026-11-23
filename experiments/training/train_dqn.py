@@ -1,33 +1,7 @@
 #!/usr/bin/env python3
 """
-====================================================================================================
-🍳 OVERCOOKED MARL - TREINAMENTO MULTIAGENTE COM DQN / RAINBOW (OFF-POLICY)
-====================================================================================================
-
-📌 POR QUE ESTE TREINAMENTO É EXCELENTE PARA O PROJETO OVERCOOKED:
-----------------------------------------------------------------------------------------------------
-1. OFF-POLICY COM REPLAY BUFFER PRIORITIZADO (PER):
-   O PPO (on-policy) descarta trajetórias logo após a atualização de gradientes. Se os agentes
-   descobrem por acaso a sequência complexa de uma GARDEN_SALAD ou FRESH_SALAD (pegar, passar pelo
-   balcão, picar, empratar e entregar), o PPO pode esquecer esse evento raro se a amostragem for descartada.
-   No DQN, TODAS as transições bem-sucedidas são armazenadas em um Replay Buffer e reamostradas
-   centenas de vezes, solidificando a política de receitas compostas sem esquecimento catastrófico.
-
-2. ESPAÇO DE AÇÕES DISCRETO IDEAL:
-   O Overcooked possui um conjunto pequeno de 5 ações discretas (Mover Cima, Baixo, Esquerda, Direita e
-   Interagir). Q-Learning é matematicamente comprovado e altamente eficiente para estimar Q(s, a)
-   em espaços discretos bem delimitados.
-
-3. DOUBLE DQN + DUELING ARCHITECTURE:
-   - Double Q-Learning evita a superestimação sistemática de valores de recompensa.
-   - Dueling Networks decompõem o valor do estado V(s) e a vantagem A(s, a), permitindo ao agente
-     reconhecer se um estado é promissor (ex: prato quase pronto no balcão) independentemente de qual
-     movimento imediato for executado.
-
-4. N-STEP BOOTSTRAPPING (n=3):
-   Propaga o retorno futuro de 3 passos para trás, acelerando dramaticamente a atribuição de crédito
-   para sequências encadeadas (ex: pegar ingrediente -> colocar na bancada -> picar).
-====================================================================================================
+Multi-agent DQN (Double/Dueling + prioritized replay) training script using Ray RLlib.
+Runs independent policies per agent on the Overcooked MARL environment.
 """
 
 import os

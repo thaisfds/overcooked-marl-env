@@ -1,15 +1,8 @@
-<div align="center">
-
-![Experiments](https://img.shields.io/badge/🧪_RL_Experiments-Ray_RLlib_%2B_PyTorch-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Algorithms](https://img.shields.io/badge/🧠_Algorithms-PPO_|_DQN_|_IMPALA_|_APPO_|_BC-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-# 🧪 Reinforcement Learning Experiments
+# Reinforcement Learning Experiments
 
 Training, hyperparameter sweeps, quantitative evaluation, and rollout visualization pipelines for the **Overcooked MARL Environment** using **Ray RLlib**.
 
-</div>
-
-<img src="../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+---
 
 <div align="center">
 <table>
@@ -29,7 +22,7 @@ Training, hyperparameter sweeps, quantitative evaluation, and rollout visualizat
 > [!TIP]
 > Browse all generated plots, learning curves, and benchmark reports in **[`resultados_experimentos/`](../resultados_experimentos/README.md)**.
 
-## 📁 Directory Structure
+## Directory Structure
 
 ```text
 experiments/
@@ -41,13 +34,13 @@ experiments/
 └── logs/            # Unified metrics, summary tables & step-by-step vision logs
 ```
 
-## 🛠️ Prerequisites
+## Prerequisites
 
 ```bash
 venv/bin/pip install "ray[rllib]" notebook seaborn
 ```
 
-## 🚀 How to Run
+## How to Run
 
 ### 1. Training (`experiments/training/`)
 ```bash
@@ -73,6 +66,6 @@ venv/bin/python experiments/analysis/evaluate_ppo.py --num-episodes 5 --log-visi
 python3 experiments/visualization/visualize_model.py [checkpoint_path]
 ```
 
-<img src="../resultados_experimentos/assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Main Repository README](../README.md)**
+⬅**[Back to Main Repository README](../README.md)**

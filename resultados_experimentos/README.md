@@ -1,41 +1,30 @@
-<div align="center">
+<p align="center">
+  <img src="./assets/banner_header.png" alt="Overcooked MARL Environment" width="100%" />
+</p>
 
-<img src="./assets/banner_header.svg" alt="Overcooked MARL Banner" width="100%" />
+# Experiment Results & Analyses
 
-<br/>
-
-![Results](https://img.shields.io/badge/✨_Results_Gallery-POC_I_%26_POC_II-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Agents](https://img.shields.io/badge/👾_Scales-1,_2_%26_4_Agents-6366f1?style=for-the-badge&labelColor=1e1b4b)
-![Algorithms](https://img.shields.io/badge/🧠_Algorithms-PPO_|_DQN_|_IMPALA_|_APPO_|_BC-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-</div>
-
-<img src="./assets/divider_gamer.svg" width="100%" />
-
-# 💜 Experiment Results & Analyses
-
-This directory contains all visual results, learning curves, algorithm benchmarks, and behavioral analyses for the **Overcooked MARL Environment**, organized by experiment scale for easy browsing.
+This directory contains visual results, learning curves, algorithm benchmarks, and behavioral analyses for the Overcooked MARL environment, organized by experiment scale.
 
 ---
 
-## 🗂️ Folders by Experiment
+## Experiments
 
-| Folder | Experiment / Scope | Key Highlight |
+| Folder | Scope | Summary |
 | :--- | :--- | :--- |
-| 📁 **[`01_visao_geral_e_evolucao/`](./01_visao_geral_e_evolucao/)** | **Overview & Environment Evolution** (POC I vs. POC II) + cross-algorithm comparisons. | **88.6% faster inference** (`150D` vector vs. `CNN`) & new divided kitchen HUD. |
-| 📁 **[`02_experimento_1_agente_cozinha_aberta/`](./02_experimento_1_agente_cozinha_aberta/)** | **1-Agent Baseline Validation** in the open kitchen (`default_map.txt`). | **100% convergence** across trials; champion reached **`+11,281.0 pts`**. |
-| 📁 **[`03_experimento_2_agentes_cooperacao/`](./03_experimento_2_agentes_cooperacao/)** | **2-Agent Mandatory Cooperation** in the divided kitchen (`tutorial.txt`). | **+322% score jump** (`+1,911 pts` in 20s), **4 dishes/episode**, and solved *Counter Farming* & *Lazy Agent*. |
-| 📁 **[`04_experimento_4_agentes_e_algoritmos/`](./04_experimento_4_agentes_e_algoritmos/)** | **4-Agent Brigade & Multi-Algorithm Benchmark** (`IMPALA`, `APPO`, `DQN`, `PPO`, `BC`). | **IMPALA** achieved the global record (**`+3,990.6 pts` in `1.72h`**), **5x–7x faster** than DQN/PPO. |
+| [`01_visao_geral_e_evolucao/`](./01_visao_geral_e_evolucao/) | Overview & environment evolution (POC I vs. POC II) | ~90% faster decision time (`150D` featurized vector vs. `CNN`) and updated divided-kitchen HUD. |
+| [`02_experimento_1_agente_cozinha_aberta/`](./02_experimento_1_agente_cozinha_aberta/) | 1-agent baseline in open kitchen (`default_map.txt`) | Consistent convergence across trials. |
+| [`03_experimento_2_agentes_cooperacao/`](./03_experimento_2_agentes_cooperacao/) | 2-agent cooperation in divided kitchen (`tutorial.txt`) | Independent policies achieved 4 dishes/episode, including multi-ingredient salads. |
+| [`04_experimento_4_agentes_e_algoritmos/`](./04_experimento_4_agentes_e_algoritmos/) | 4-agent multi-algorithm benchmark (`IMPALA`, `APPO`, `DQN`, `PPO`, `BC`) | Asynchronous methods (`IMPALA`, `APPO`) achieved 5x–7x higher throughput; visual inspection highlighted non-stationarity and counter reward-shaping exploits. |
 
-<img src="./assets/divider_gamer.svg" width="100%" />
+---
 
-## 🎬 Gameplay Previews
+## Gameplay Previews
 
-<div align="center">
 <table>
   <tr>
-    <th align="center">👯‍♀️ 2-Agent Cooperation (`tutorial.txt`)</th>
-    <th align="center">👩‍🍳👨‍🍳 4-Agent Team (`tutorial.txt`)</th>
+    <th align="center">2-Agent Cooperation (<code>tutorial.txt</code>)</th>
+    <th align="center">4-Agent Team (<code>tutorial.txt</code>)</th>
   </tr>
   <tr>
     <td align="center" width="50%">
@@ -46,27 +35,24 @@ This directory contains all visual results, learning curves, algorithm benchmark
     </td>
   </tr>
 </table>
-</div>
-
-<img src="./assets/divider_gamer.svg" width="100%" />
-
-## 🏆 Key Visual Highlights
-
-<div align="center">
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="./04_experimento_4_agentes_e_algoritmos/fig_agent_workload_distribution_tutorial_4_agentes.png" alt="4-Agent Workload Distribution" width="100%" />
-      <br/><sub><b>Emergent Division of Labor (4 Agents):</b> 2 agents specialize in chopping (44% & 46%), 1 in plating (48%), and 1 in delivery (52%).</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="./04_experimento_4_agentes_e_algoritmos/fig_executive_dashboard_2x2_tutorial_4_agentes.png" alt="4-Agent Executive Dashboard" width="100%" />
-      <br/><sub><b>4-Agent Multi-Algorithm Dashboard:</b> Convergence, training time vs. reward, Top 10 models, and throughput (steps/s).</sub>
-    </td>
-  </tr>
-</table>
-</div>
 
 ---
 
-⬅️ **[Back to Main Repository README](../README.md)**
+## Key Charts
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="./04_experimento_4_agentes_e_algoritmos/fig_training_time_and_efficiency_tutorial_4_agentes.png" alt="Training Time and Throughput" width="100%" />
+      <br/><sub>Training duration (hours) and sampling throughput (steps/s) across algorithms.</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="./04_experimento_4_agentes_e_algoritmos/fig_radar_performance_profile_tutorial_4_agentes.png" alt="4-Agent Radar Comparison" width="100%" />
+      <br/><sub>Multi-criteria comparison across IMPALA, APPO, DQN, and PPO.</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
+[Back to main README](../README.md)

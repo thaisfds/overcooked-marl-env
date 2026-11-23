@@ -1,31 +1,7 @@
 #!/usr/bin/env python3
 """
-====================================================================================================
-🚀 OVERCOOKED MARL - TREINAMENTO MULTIAGENTE COM APPO (ASYNCHRONOUS PPO)
-====================================================================================================
-
-📌 POR QUE ESTE TREINAMENTO É EXCELENTE PARA O PROJETO OVERCOOKED:
-----------------------------------------------------------------------------------------------------
-1. O MELHOR DO PPO COM EXECUÇÃO ASSÍNCRONA DESACOPLADA:
-   O APPO mantém a função objetivo de política proximal com clipping (que garante passos de atualização
-   estáveis e previne colapsos da rede), mas elimina completamente a barreira de sincronização
-   dos workers. No PPO comum, todos os workers precisam parar e esperar o fim da coleta do batch.
-   No APPO, a coleta e a otimização ocorrem em threads/processos separados em paralelo contínuo.
-
-2. UTILIZAÇÃO MÁXIMA DE GPU E CPU NO SERVIDOR:
-   Em servidores dedicados (como a máquina Magritte), a GPU frequentemente fica ociosa enquanto
-   os workers de CPU executam passos de simulação do Overcooked. O APPO mantém o Learner na GPU
-   constantemente alimentado com novos fragmentos de trajetória, maximizando o throughput de treino.
-
-3. CORREÇÃO DE V-TRACE PARA POLÍTICAS DESATUALIZADAS (STALENESS):
-   Permite que as amostras coletadas por atores com versões ligeiramente anteriores da política
-   sejam aproveitadas com rigor matemático através de pesos de corte V-Trace, mantendo a estabilidade.
-
-4. COMPARAÇÃO CIENTÍFICA DIRETA 1:1 COM O PPO PADRÃO:
-   Utiliza a mesma formulação matemática e os mesmos hiperparâmetros (LR, Gamma, Entropy, Clipping),
-   permitindo ao pesquisador isolar e demonstrar cientificamente no relatório final o ganho de eficiência
-   decorrente do paralelismo assíncrono.
-====================================================================================================
+Multi-agent Asynchronous PPO (APPO) training script using Ray RLlib.
+Runs independent policies per agent on the Overcooked MARL environment.
 """
 
 import os

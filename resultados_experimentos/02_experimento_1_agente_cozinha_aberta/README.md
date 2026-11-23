@@ -1,17 +1,10 @@
-<div align="center">
-
-![Experiment 02](https://img.shields.io/badge/🧑‍🍳_02_Experiment-1_Agent_Baseline-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Champion](https://img.shields.io/badge/🏆_Champion-+11,281.0_pts-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-
-# 🧑‍🍳 02 — 1-Agent Experiment (Open Kitchen Baseline)
+# 02 — 1-Agent Experiment (Open Kitchen Baseline)
 
 Baseline validation of the **150D featurized observation space** and **Potential-Based Reward Shaping (PBRS)** with a single agent in `default_map.txt`.
 
-</div>
+---
 
-<img src="../assets/divider_gamer.svg" width="100%" />
-
-* 🏆 **Champion Model:** `Trial eb6e7_00002` (`LR = 1e-4`, `γ = 0.98`, `Entropy = 0.025`) — **`+11,281.00 pts`** (**100%** of trials converged).
+* **Champion Model:** `Trial eb6e7_00002` (`LR = 1e-4`, `γ = 0.98`, `Entropy = 0.025`) — **`+11,281.00 pts`** (**100%** of trials converged).
 
 <div align="center">
 <table>
@@ -35,7 +28,7 @@ Baseline validation of the **150D featurized observation space** and **Potential
 </div>
 
 <details>
-<summary><b>📑 All Plots in this Folder (14 files)</b></summary>
+<summary><b>All Plots in this Folder (14 files)</b></summary>
 
 * [`env_hud_default_map_1_agente.png`](./env_hud_default_map_1_agente.png) — Environment screenshot (`default_map.txt`).
 * [`fig_executive_dashboard_2x2_default_map_1_agente.png`](./fig_executive_dashboard_2x2_default_map_1_agente.png) — 2x2 executive performance dashboard.
@@ -53,6 +46,6 @@ Baseline validation of the **150D featurized observation space** and **Potential
 * [`fig_loss_convergence_default_map_1_agente.png`](./fig_loss_convergence_default_map_1_agente.png) — Actor and critic loss convergence.
 </details>
 
-<img src="../assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Results Index](../README.md)**
+⬅**[Back to Results Index](../README.md)**

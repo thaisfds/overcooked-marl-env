@@ -1,17 +1,14 @@
 <div align="center">
 
-![Experiment 04](https://img.shields.io/badge/👩‍🍳_04_Experiment-4_Agents_%26_Algorithms-9333ea?style=for-the-badge&labelColor=1e1b4b)
-![Champion](https://img.shields.io/badge/🥇_IMPALA-+3,990.6_pts_(1.72h)-3b82f6?style=for-the-badge&labelColor=1e1b4b)
+![Champion](https://img.shields.io/badge/_IMPALA-+3,990.6_pts_(1.72h)-3b82f6?style=for-the-badge&labelColor=1e1b4b)
 
-# 👩‍🍳👨‍🍳 04 — 4-Agent Brigade & Multi-Algorithm Benchmark
+# 04 — 4-Agent Brigade & Multi-Algorithm Benchmark
 
 Four independent policies operating simultaneously in `tutorial.txt` (2 chopping in the top zone, 2 fetching/plating/delivering in the bottom zone), comparing **IMPALA**, **APPO**, **DQN/Rainbow**, **PPO**, and **Behavioral Cloning (BC)**.
 
-</div>
+---
 
-<img src="../assets/divider_gamer.svg" width="100%" />
-
-* 🥇 **Global Champion:** `IMPALA 145a4_00001` (`LR = 3e-4`, `γ = 0.98`, `Entropy = 0.020`) — **`+3,990.62 pts`** in **`1.72h`** (`486 steps/s`, **5x–7x faster** than DQN and synchronous PPO).
+* **Global Champion:** `IMPALA 145a4_00001` (`LR = 3e-4`, `γ = 0.98`, `Entropy = 0.020`) — **`+3,990.62 pts`** in **`1.72h`** (`486 steps/s`, **5x–7x faster** than DQN and synchronous PPO).
 
 <div align="center">
   <img src="../assets/gameplay_4_agentes_equipe.gif" alt="4-Agent Cooperative Gameplay" width="65%" />
@@ -41,7 +38,7 @@ Four independent policies operating simultaneously in `tutorial.txt` (2 chopping
 </div>
 
 <details>
-<summary><b>📑 All Plots in this Folder (16 files)</b></summary>
+<summary><b>All Plots in this Folder (16 files)</b></summary>
 
 * [`env_hud_tutorial_4_agentes.png`](./env_hud_tutorial_4_agentes.png) — 4-agent simulator HUD in `tutorial.txt`.
 * [`fig_executive_dashboard_2x2_tutorial_4_agentes.png`](./fig_executive_dashboard_2x2_tutorial_4_agentes.png) — 2x2 executive benchmark dashboard.
@@ -61,6 +58,6 @@ Four independent policies operating simultaneously in `tutorial.txt` (2 chopping
 * [`fig_loss_convergence_tutorial_4_agentes.png`](./fig_loss_convergence_tutorial_4_agentes.png) — Gradient and loss convergence.
 </details>
 
-<img src="../assets/divider_gamer.svg" width="100%" />
+---
 
-⬅️ **[Back to Results Index](../README.md)**
+⬅**[Back to Results Index](../README.md)**
