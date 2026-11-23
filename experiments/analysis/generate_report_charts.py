@@ -988,7 +988,6 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
             name = f"★ [REFERÊNCIA] {t['trial_tag']} ({t['param_summary']})"
         else:
             name = f"Rank {i+1}: {t['trial_tag']} ({t['param_summary']})"
-        model_names.append(name)
         tid_short = t['trial_id'].split('_')[-1] if '_' in t['trial_id'] else t['trial_id']
         found_eval = None
         for k, v in eval_map.items():
@@ -996,55 +995,78 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
                 found_eval = v
                 break
 
-        deliv = found_eval if found_eval is not None else min(4.0, max(0.0, t['max_reward'] / 350.0))
-        deliveries_est.append(deliv)
-        colors_bars.append("#00509d" if i == 0 else ("#2ca02c" if deliv >= 3.0 else ("#ff7f0e" if deliv >= 1.0 else "#d62728")))
+        if found_eval is None:
+            model_names.append(f"{name} [não avaliado]")
+            deliveries_est.append(0.0)
+            colors_bars.append("#9e9e9e")
+        else:
+            model_names.append(name)
+            deliveries_est.append(found_eval)
+            colors_bars.append("#00509d" if i == 0 else ("#2ca02c" if found_eval >= 3.0 else ("#ff7f0e" if found_eval >= 1.0 else "#d62728")))
 
     bars = axes[0].barh(model_names[::-1], deliveries_est[::-1], color=colors_bars[::-1], edgecolor="black", height=0.55)
-    axes[0].set_xlabel("Média de Pratos Entregues por Episódio", fontweight="bold")
-    axes[0].set_title("(a) Média de Entregas por Modelo Avaliado", fontweight="bold", fontsize=10.5)
-    axes[0].set_xlim(0, 5.0)
-    for bar in bars:
+    axes[0].set_xlabel("Média REAL de Pratos Entregues por Episódio (Avaliação)", fontweight="bold")
+    axes[0].set_title("(a) Média de Entregas Reais por Modelo Avaliado", fontweight="bold", fontsize=10.5)
+    max_deliv_val = max(deliveries_est) if deliveries_est else 0.0
+    axes[0].set_xlim(0, max(1.0, max_deliv_val + 1.0))
+    for bar, lbl in zip(bars, model_names[::-1]):
         w = bar.get_width()
-        axes[0].text(w + 0.1, bar.get_y() + bar.get_height()/2, f"{w:.1f} pratos", va="center", fontweight="bold", fontsize=9)
+        txt = "N/A" if "[não avaliado]" in lbl else f"{w:.2f} pratos"
+        axes[0].text(w + 0.05, bar.get_y() + bar.get_height()/2, txt, va="center", fontweight="bold", fontsize=9)
 
     recipe_counts = {}
+    total_eval_eps = len(episodes_eval)
+    total_eval_deliveries = 0
     if episodes_eval:
         for ep in episodes_eval:
-            for rec in ep.get("delivered_recipes", []):
+            delivered_list = ep.get("delivered_recipes", [])
+            total_eval_deliveries += len(delivered_list)
+            for rec in delivered_list:
                 recipe_counts[rec] = recipe_counts.get(rec, 0) + 1
 
-    if not recipe_counts:
-        recipe_counts = {"SIMPLE_SALAD (1 ing.)": 60, "GARDEN_SALAD (2 ing.)": 20}
+    if recipe_counts:
+        labels = list(recipe_counts.keys())
+        sizes = list(recipe_counts.values())
+        colors_donut = ["#00509d", "#2ca02c", "#ff7f0e", "#d62728"][:len(labels)]
 
-    labels = list(recipe_counts.keys())
-    sizes = list(recipe_counts.values())
-    colors_donut = ["#00509d", "#2ca02c", "#ff7f0e", "#d62728"][:len(labels)]
+        wedges, texts, autotexts = axes[1].pie(
+            sizes, labels=labels, autopct="%1.1f%%", startangle=140,
+            colors=colors_donut, pctdistance=0.75,
+            wedgeprops=dict(width=0.45, edgecolor="black", linewidth=1.2)
+        )
+        for at in autotexts:
+            at.set_color("white")
+            at.set_fontweight("bold")
+        avg_deliv = total_eval_deliveries / max(1, total_eval_eps)
+        summary_line = f"• Desempenho Real: {avg_deliv:.2f} pratos/episódio ({total_eval_deliveries} em {total_eval_eps} eps)"
+        badge_edge = "#2ca02c"
+    else:
+        axes[1].axis("off")
+        axes[1].text(
+            0.5, 0.55,
+            "0 PRATOS ENTREGUES\n\nNenhum prato foi concluído nos episódios\nde evaluation_results.json.",
+            transform=axes[1].transAxes, ha="center", va="center",
+            fontsize=11, fontweight="bold", color="#b71c1c",
+            bbox=dict(boxstyle="round,pad=0.6", facecolor="#ffebee", edgecolor="#d62728", lw=1.5)
+        )
+        summary_line = f"• Desempenho Real: 0.00 pratos/episódio ({total_eval_eps} eps avaliados)"
+        badge_edge = "#d62728"
 
-    wedges, texts, autotexts = axes[1].pie(
-        sizes, labels=labels, autopct="%1.1f%%", startangle=140,
-        colors=colors_donut, pctdistance=0.75,
-        wedgeprops=dict(width=0.45, edgecolor="black", linewidth=1.2)
-    )
-    for at in autotexts:
-        at.set_color("white")
-        at.set_fontweight("bold")
     axes[1].set_title(
-        f"(b) Diversidade de Cardápio Atendida\n[Modelo de Referência: {best_trial['trial_tag']}]",
+        f"(b) Diversidade Real de Cardápio Atendida\n[Modelo de Referência: {best_trial['trial_tag']}]",
         fontweight="bold", fontsize=10.5
     )
 
     ref_badge = (
-        f"★ MODELO DE REFERÊNCIA EM TESTE:\n"
+        f"★ MODELO DE REFERÊNCIA (DADOS REAIS):\n"
         f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
         f"• Hiperparâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-        f"• Desempenho: 4.0 pratos/episódio (3 Simple + 1 Garden Salad)\n"
-        f"• Sucesso: 100% dos pedidos atendidos no tempo limite"
+        f"{summary_line}"
     )
     axes[1].text(
         0.5, -0.15, ref_badge,
         transform=axes[1].transAxes, fontsize=8, fontweight="bold", ha="center",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#2ca02c", alpha=0.92, lw=1.2)
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor=badge_edge, alpha=0.92, lw=1.2)
     )
 
     env_tag = get_env_tag(trials_data)
@@ -1059,7 +1081,7 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
 # 10. CORRELAÇÃO RECOMPENSA X PRATOS ENTREGUES COM INDICAÇÃO FORMAL
 # ==============================================================================
 def plot_reward_vs_deliveries_correlation(trials_data: List[Dict[str, Any]], out_dir: Path):
-    """Scatter e regressão com indicação clara do modelo avaliado."""
+    """Scatter e regressão usando exclusivamente dados reais de avaliação."""
     if not trials_data:
         return
 
@@ -1074,59 +1096,60 @@ def plot_reward_vs_deliveries_correlation(trials_data: List[Dict[str, Any]], out
         except Exception:
             pass
 
-    fig, ax = plt.subplots(figsize=(10.5, 5.4), dpi=300)
-    rewards_list = []
-    deliveries_list = []
+    if not episodes_eval:
+        print("  ⚠️ [fig_reward_vs_deliveries]: Pulando gráfico (sem episódios reais em evaluation_results.json).")
+        return
 
-    if episodes_eval:
-        for ep in episodes_eval:
-            rewards_list.append(ep.get("total_raw_reward", 0.0))
-            deliveries_list.append(ep.get("delivered_count", 0))
-    else:
-        for t in trials_data:
-            rw = t["max_reward"]
-            deliv = min(4, max(0, int(rw / 350.0)))
-            rewards_list.append(rw)
-            deliveries_list.append(deliv)
+    fig, ax = plt.subplots(figsize=(10.5, 5.4), dpi=300)
+    rewards_list = [ep.get("total_raw_reward", 0.0) for ep in episodes_eval]
+    deliveries_list = [ep.get("delivered_count", 0) for ep in episodes_eval]
 
     df_corr = pd.DataFrame({"Pratos Entregues": deliveries_list, "Recompensa": rewards_list})
+    mean_deliv = float(np.mean(deliveries_list))
+    mean_rw = float(np.mean(rewards_list))
 
-    if len(df_corr["Pratos Entregues"].unique()) == 1:
-        np.random.seed(42)
-        syn_deliv = np.array([0, 0, 1, 1, 1, 2, 2, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4])
-        syn_rw = syn_deliv * 380.0 + np.random.normal(loc=120.0, scale=45.0, size=len(syn_deliv))
-        syn_rw[syn_deliv == 4] = 1877.13 + np.random.normal(0, 30.0, size=np.sum(syn_deliv == 4))
-        df_corr = pd.DataFrame({"Pratos Entregues": syn_deliv, "Recompensa": syn_rw})
-
-    sns.regplot(
-        data=df_corr, x="Pratos Entregues", y="Recompensa", ax=ax,
-        scatter_kws={"s": 75, "alpha": 0.85, "color": "#00509d", "edgecolor": "black"},
-        line_kws={"color": "#d62728", "lw": 2.2, "label": "Regressão Linear (R² = 0.984 - Prova Anti-Reward Hacking)"}
-    )
+    if len(df_corr["Pratos Entregues"].unique()) >= 2:
+        r_val = float(np.corrcoef(deliveries_list, rewards_list)[0, 1])
+        r2_val = r_val ** 2 if not np.isnan(r_val) else 0.0
+        sns.regplot(
+            data=df_corr, x="Pratos Entregues", y="Recompensa", ax=ax,
+            scatter_kws={"s": 75, "alpha": 0.85, "color": "#00509d", "edgecolor": "black"},
+            line_kws={"color": "#d62728", "lw": 2.2, "label": f"Regressão Linear Real (R² = {r2_val:.3f})"}
+        )
+        corr_line = f"• Regressão Linear Real: R² = {r2_val:.3f}"
+        box_edge = "#00509d"
+    else:
+        ax.scatter(
+            df_corr["Pratos Entregues"], df_corr["Recompensa"],
+            s=75, alpha=0.85, color="#d62728", edgecolor="black",
+            label="Episódios Avaliados (sem variação de entregas)"
+        )
+        corr_line = "• Regressão Indefinida: todos os episódios tiveram o mesmo nº de entregas (possível reward hacking se recompensa > 0)"
+        box_edge = "#d62728"
 
     ref_text = (
-        f"★ MODELO DE REFERÊNCIA EM AVALIAÇÃO:\n"
-        f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Hiperparâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-        f"• Avaliação Empírica: 4.0 pratos/episódio (+1877.13 pts médios)\n"
-        f"• Regressão Linear: R² = 0.984 (Recompensa estritamente atrelada a entregas)"
+        f"★ DADOS REAIS DE AVALIAÇÃO ({len(episodes_eval)} episódios):\n"
+        f"• Referência Treino: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
+        f"• Média Empírica: {mean_deliv:.2f} pratos/episódio ({mean_rw:+.2f} pts médios)\n"
+        f"{corr_line}"
     )
     ax.text(
         0.03, 0.92, ref_text,
         transform=ax.transAxes, fontsize=8.5, fontweight="bold",
         verticalalignment="top",
-        bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f8ff", edgecolor="#00509d", alpha=0.95, lw=1.3)
+        bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f8ff", edgecolor=box_edge, alpha=0.95, lw=1.3)
     )
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Correlação entre Volume de Entregas e Recompensa Acumulada [{env_tag}]\n"
+        f"Correlação Real entre Volume de Entregas e Recompensa Acumulada [{env_tag}]\n"
         f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12, fontweight="bold", pad=12
     )
     ax.set_xlabel("Número de Pratos Concluídos no Episódio", fontweight="bold")
     ax.set_ylabel("Recompensa Total Obtida (pts)", fontweight="bold")
-    ax.set_xticks([0, 1, 2, 3, 4, 5])
+    max_x = max(5, int(max(deliveries_list)) + 1)
+    ax.set_xticks(range(0, max_x + 1))
     ax.legend(loc="lower right", frameon=True, framealpha=0.9)
 
     save_plot(fig, out_dir, "fig_reward_vs_deliveries", env_suffix=get_env_file_suffix(trials_data))
@@ -1136,66 +1159,25 @@ def plot_reward_vs_deliveries_correlation(trials_data: List[Dict[str, Any]], out
 # 11. REDUÇÃO DO TEMPO OCIOSO E INATIVIDADE COM IDENTIFICAÇÃO FORMAL
 # ==============================================================================
 def plot_idle_time_and_inactivity(trials_data: List[Dict[str, Any]], out_dir: Path):
-    """Queda de inatividade ao longo do treino com identificação formal do modelo."""
+    """Plota ociosidade apenas se houver telemetria real nos logs (sem dados sintéticos)."""
     if not trials_data:
         return
 
     best_trial = trials_data[0]
     df = best_trial["df"]
+    idle_cols = [c for c in df.columns if "idle" in c.lower() or "inactiv" in c.lower()]
+    if not idle_cols:
+        print("  ⚠️ [fig_idle_time_and_inactivity]: Pulando gráfico (sem telemetria real de ociosidade no progress.csv).")
+        return
+
     x = df["training_iteration"]
-    r_col = best_trial["reward_col"]
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.2), dpi=300)
-
-    rw_norm = (df[r_col] - df[r_col].min()) / (df[r_col].max() - df[r_col].min() + 1e-5)
-    idle_agent_0 = np.clip(78.0 - rw_norm * 66.0 + np.random.normal(0, 1.5, len(x)), 8.0, 85.0)
-    idle_agent_1 = np.clip(82.0 - rw_norm * 70.0 + np.random.normal(0, 1.8, len(x)), 10.0, 90.0)
-
-    axes[0].plot(x, pd.Series(idle_agent_0).rolling(window=5, min_periods=1).mean(), label=f"Agente 0 (policy_agent_0: Corte | {best_trial['trial_tag']})", color="#1f77b4", lw=2.2)
-    axes[0].plot(x, pd.Series(idle_agent_1).rolling(window=5, min_periods=1).mean(), label=f"Agente 1 (policy_agent_1: Montagem | {best_trial['trial_tag']})", color="#ff7f0e", lw=2.2)
-    axes[0].axhline(15.0, color="green", linestyle="--", alpha=0.7, label="Patamar Ótimo de Alta Eficiência (< 15%)")
-    axes[0].set_title(f"(a) Redução de Ociosidade por Agente [{best_trial['trial_tag']}]", fontweight="bold", fontsize=10.5)
-    axes[0].set_xlabel("Iterações de Treinamento", fontweight="bold")
-    axes[0].set_ylabel("Tempo Ocioso Estimado (% do episódio)", fontweight="bold")
-    axes[0].set_ylim(0, 100)
-    axes[0].legend(loc="upper right", fontsize=8.0)
-
-    ref_text = (
-        f"★ MODELO DE REFERÊNCIA:\n"
-        f"• {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-        f"• Ociosidade cai de ~80% para <10%"
-    )
-    axes[0].text(
-        0.03, 0.95, ref_text,
-        transform=axes[0].transAxes, fontsize=8, fontweight="bold", va="top",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#1f77b4", alpha=0.92, lw=1.2)
-    )
-
-    stages = ["Regime Inicial (Iter 10)", "Regime Convergido (Iter 1500)"]
-    ag0_vals = [float(pd.Series(idle_agent_0).iloc[min(10, len(idle_agent_0)-1)]), float(pd.Series(idle_agent_0).iloc[-1])]
-    ag1_vals = [float(pd.Series(idle_agent_1).iloc[min(10, len(idle_agent_1)-1)]), float(pd.Series(idle_agent_1).iloc[-1])]
-
-    x_pos = np.arange(len(stages))
-    width = 0.35
-    axes[1].bar(x_pos - width/2, ag0_vals, width, label="Agente 0", color="#1f77b4", edgecolor="black")
-    axes[1].bar(x_pos + width/2, ag1_vals, width, label="Agente 1", color="#ff7f0e", edgecolor="black")
-    axes[1].set_title(f"(b) Comparativo Início vs. Maturidade [{best_trial['trial_tag']}]", fontweight="bold", fontsize=10.5)
-    axes[1].set_xticks(x_pos)
-    axes[1].set_xticklabels(stages, fontweight="bold")
-    axes[1].set_ylabel("Inatividade (% de passos)", fontweight="bold")
-    axes[1].set_ylim(0, 100)
-    for i in range(len(stages)):
-        axes[1].text(i - width/2, ag0_vals[i] + 2, f"{ag0_vals[i]:.1f}%", ha="center", fontweight="bold", fontsize=9)
-        axes[1].text(i + width/2, ag1_vals[i] + 2, f"{ag1_vals[i]:.1f}%", ha="center", fontweight="bold", fontsize=9)
-    axes[1].legend(loc="upper right")
-
-    env_tag = get_env_tag(trials_data)
-    fig.suptitle(
-        f"Erradicação de Ociosidade e Inatividade Operacional [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
-        fontsize=12.5, fontweight="bold", y=1.03
-    )
+    fig, ax = plt.subplots(figsize=(10.5, 5.2), dpi=300)
+    for col in idle_cols:
+        ax.plot(x, df[col].rolling(window=5, min_periods=1).mean(), label=col, lw=2.2)
+    ax.set_title(f"Telemetria Real de Ociosidade [{best_trial['trial_tag']}]", fontweight="bold", fontsize=11.5)
+    ax.set_xlabel("Iterações de Treinamento", fontweight="bold")
+    ax.set_ylabel("Ociosidade Medida", fontweight="bold")
+    ax.legend(loc="upper right", fontsize=8.5)
     save_plot(fig, out_dir, "fig_idle_time_and_inactivity", env_suffix=get_env_file_suffix(trials_data))
 
 
@@ -1203,61 +1185,31 @@ def plot_idle_time_and_inactivity(trials_data: List[Dict[str, Any]], out_dir: Pa
 # 12. EVOLUÇÃO TEMPORAL DAS ENTREGAS COM IDENTIFICAÇÃO FORMAL
 # ==============================================================================
 def plot_delivery_timeline_growth(trials_data: List[Dict[str, Any]], out_dir: Path):
-    """Linha do tempo de marcos com o nome e hiperparâmetros do modelo."""
+    """Linha do tempo de entregas reais (apenas se a métrica existir no progress.csv)."""
     if not trials_data:
         return
 
     best_trial = trials_data[0]
     df = best_trial["df"]
-    x = df["training_iteration"]
-    r_col = best_trial["reward_col"]
-    y_r = df[r_col].rolling(window=5, min_periods=1).mean()
+    deliv_col = next((c for c in df.columns if "deliver" in c.lower() and "mean" in c.lower()), None)
+    if not deliv_col:
+        print("  ⚠️ [fig_delivery_timeline_growth]: Pulando gráfico (sem coluna real de entregas no progress.csv).")
+        return
 
-    dishes_curve = np.zeros(len(y_r))
-    for idx, val in enumerate(y_r):
-        if val < 50:
-            dishes_curve[idx] = 0.0
-        elif val < 400:
-            dishes_curve[idx] = 1.0
-        elif val < 800:
-            dishes_curve[idx] = 2.0
-        elif val < 1300:
-            dishes_curve[idx] = 3.0
-        else:
-            dishes_curve[idx] = 4.0
+    x = df["training_iteration"]
+    y_d = df[deliv_col].rolling(window=5, min_periods=1).mean()
 
     fig, ax = plt.subplots(figsize=(10.5, 5.4), dpi=300)
-    ax.step(x, dishes_curve, color="#2ca02c", lw=2.6, where="mid", label=f"Cadência Média de Entregas ({best_trial['trial_tag']})")
-
-    ax.axhspan(0, 1, color="#d62728", alpha=0.08, label="Fase 1: Exploração e Navegação Básica (0 entregas)")
-    ax.axhspan(1, 2, color="#ff7f0e", alpha=0.08, label="Fase 2: Domínio da 1ª Salada Simples (+300 pts)")
-    ax.axhspan(2, 3, color="#bcbd22", alpha=0.08, label="Fase 3: Multi-Entregas Simples (Platô de 3 Saladas / ~1080 pts)")
-    ax.axhspan(3, 4.5, color="#2ca02c", alpha=0.10, label="Fase 4: Desbloqueio da 4ª Entrega / Garden Salad (+1800 pts)")
-
-    ref_tag_text = (
-        f"★ MODELO DE REFERÊNCIA MONITORADO:\n"
-        f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Hiperparâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, Coef. H={best_trial['entropy']:.3f}\n"
-        f"• Treinamento: 1500 Iterações (6.000.000 de passos no ambiente)\n"
-        f"• Cadência Final: 4 pratos por episódio no regime convergido"
-    )
-    ax.text(
-        0.02, 0.94, ref_tag_text,
-        transform=ax.transAxes, fontsize=8.5, fontweight="bold",
-        verticalalignment="top",
-        bbox=dict(boxstyle="round,pad=0.45", facecolor="#f0f8ff", edgecolor="#2ca02c", alpha=0.95, lw=1.3)
-    )
+    ax.plot(x, y_d, color="#2ca02c", lw=2.4, label=f"Entregas Reais ({best_trial['trial_tag']})")
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Evolução Temporal das Entregas ao Longo das Iterações de Treinamento [{env_tag}]\n"
+        f"Evolução Temporal Real das Entregas [{env_tag}]\n"
         f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12, fontweight="bold", pad=12
     )
     ax.set_xlabel("Iterações de Treinamento", fontweight="bold")
-    ax.set_ylabel("Pratos Entregues por Episódio", fontweight="bold")
-    ax.set_yticks([0, 1, 2, 3, 4])
-    ax.set_ylim(-0.2, 4.5)
+    ax.set_ylabel("Pratos Entregues por Episódio (Real)", fontweight="bold")
     ax.legend(loc="lower right", frameon=True, framealpha=0.92, fontsize=8.5)
 
     save_plot(fig, out_dir, "fig_delivery_timeline_growth", env_suffix=get_env_file_suffix(trials_data))
@@ -1267,67 +1219,46 @@ def plot_delivery_timeline_growth(trials_data: List[Dict[str, Any]], out_dir: Pa
 # 13. DIVISÃO DE CARGA OPERACIONAL E PIPELINE ENTRE OS AGENTES
 # ==============================================================================
 def plot_agent_workload_distribution(trials_data: List[Dict[str, Any]], out_dir: Path):
-    """Partição do pipeline com identificação formal do modelo avaliado."""
-    best_trial = trials_data[0] if trials_data else None
-    ref_tag = best_trial['trial_tag'] if best_trial else "PPO MARL Tutorial"
+    """Plota divisão real de recompensas por agente a partir de evaluation_results.json (sem valores fixos)."""
+    if not trials_data:
+        return
 
-    categories = [
-        "Fatiamento (Tábuas)",
-        "Passagem no Balcão (Handoff)",
-        "Montagem no Prato",
-        "Transporte para Entrega",
-        "Locomoção e Navegação",
-        "Espera / Ociosidade"
-    ]
-    agent_0_shares = [48.0, 26.0, 2.0, 0.0, 14.0, 10.0]
-    agent_1_shares = [0.0, 24.0, 36.0, 22.0, 8.0, 10.0]
+    eval_json_path = DEFAULT_LOGS_DIR / "evaluation_results.json"
+    agent_rewards = {}
+    if eval_json_path.exists():
+        try:
+            with open(eval_json_path, "r", encoding="utf-8") as f:
+                eval_data = json.load(f)
+                agent_rewards = eval_data.get("agent_rewards", {})
+        except Exception:
+            pass
 
-    fig, ax = plt.subplots(figsize=(11.5, 5.2), dpi=300)
-    x = np.arange(len(categories))
-    width = 0.35
+    if not agent_rewards:
+        print("  ⚠️ [fig_agent_workload_distribution]: Pulando gráfico (sem métricas reais por agente em evaluation_results.json).")
+        return
 
-    n_ag = best_trial.get("num_agents", 2) if best_trial else 2
-    if n_ag == 1:
-        shares_1ag = [32.0, 0.0, 28.0, 20.0, 15.0, 5.0]
-        rects1 = ax.bar(x, shares_1ag, width=0.5, label=f"Agente Único (Pipeline Completo | {ref_tag})", color="#1f77b4", edgecolor="black")
-        rects2 = []
-    else:
-        rects1 = ax.bar(x - width/2, agent_0_shares, width, label=f"Agente 0 (Superior - Cortes & Handoff | {ref_tag})", color="#1f77b4", edgecolor="black")
-        rects2 = ax.bar(x + width/2, agent_1_shares, width, label=f"Agente 1 (Inferior - Montagem & Delivery | {ref_tag})", color="#ff7f0e", edgecolor="black")
+    best_trial = trials_data[0]
+    agents = sorted(agent_rewards.keys())
+    means = [float(agent_rewards[a].get("mean", 0.0)) for a in agents]
+    stds = [float(agent_rewards[a].get("std", 0.0)) for a in agents]
+
+    fig, ax = plt.subplots(figsize=(10.5, 5.2), dpi=300)
+    colors = sns.color_palette("tab10", len(agents))
+    bars = ax.bar(agents, means, yerr=stds, capsize=5, color=colors, edgecolor="black", width=0.5)
+    ax.axhline(0.0, color="black", lw=0.9, ls="--")
+
+    for bar, m_val in zip(bars, means):
+        offset = 0.5 if m_val >= 0 else -1.5
+        ax.text(bar.get_x() + bar.get_width()/2, m_val + offset, f"{m_val:+.2f}", ha="center", va="bottom", fontsize=9, fontweight="bold")
 
     env_tag = get_env_tag(trials_data)
-    ax.set_ylabel("Fração de Esforço Operacional (%)", fontweight="bold")
+    ax.set_ylabel("Recompensa Média na Avaliação (pts)", fontweight="bold")
+    ax.set_xlabel("Agente", fontweight="bold")
     ax.set_title(
-        f"Especialização Funcional e Divisão do Pipeline Culinário [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
+        f"Contribuição Real por Agente na Avaliação [{env_tag}]\n"
+        f"[Dados de evaluation_results.json | Referência Treino: ★ {best_trial['trial_tag']}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_xticks(x)
-    ax.set_xticklabels(categories, rotation=12, ha="right", fontweight="bold")
-    ax.set_ylim(0, 68)
-    ax.legend(loc="upper right", frameon=True, framealpha=0.9)
-
-    ref_badge = (
-        f"★ MODELO DE REFERÊNCIA AVALIADO:\n"
-        f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Hiperparâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-        f"• Especialização Emergente: Divisão ótima sem congestionamento"
-    )
-    ax.text(
-        0.03, 0.95, ref_badge,
-        transform=ax.transAxes, fontsize=8.5, fontweight="bold", va="top",
-        bbox=dict(boxstyle="round,pad=0.45", facecolor="#f0f8ff", edgecolor="#1f77b4", alpha=0.95, lw=1.3)
-    )
-
-    for r in rects1:
-        h = r.get_height()
-        if h > 0:
-            ax.text(r.get_x() + r.get_width()/2, h + 1.0, f"{h:.0f}%", ha="center", va="bottom", fontsize=8.5, fontweight="bold")
-    for r in rects2:
-        h = r.get_height()
-        if h > 0:
-            ax.text(r.get_x() + r.get_width()/2, h + 1.0, f"{h:.0f}%", ha="center", va="bottom", fontsize=8.5, fontweight="bold")
-
     save_plot(fig, out_dir, "fig_agent_workload_distribution", env_suffix=get_env_file_suffix(trials_data))
 
 

@@ -139,7 +139,21 @@ class CounterHandler(StationHandler):
 
             reward = self.rewards.place
             if not is_useless_cycle:
-                reward += getattr(self.rewards, "handoff_place", 1.0)
+                # Stage identification to allow legitimate handoff placement once per item stage
+                # without enabling infinite place/pickup reward farming loops
+                if is_carrying_dish:
+                    place_stage = ("plate", tuple(sorted(carrying_item.get("ingredients", []))))
+                else:
+                    place_stage = (
+                        carrying_item.get("name"),
+                        carrying_item.get("state"),
+                        carrying_item.get("cuts_completed", carrying_item.get("cuts_done", 0))
+                    )
+                placed_stages = carrying_item.setdefault("place_stages_awarded", set())
+                if place_stage not in placed_stages:
+                    placed_stages.add(place_stage)
+                    reward += getattr(self.rewards, "handoff_place", 1.0)
+                    self.update_item(carrying_instance_id, carrying_item, game_state)
             else:
                 reward += self.rewards.useless_cycle_penalty
                 if verbose:
