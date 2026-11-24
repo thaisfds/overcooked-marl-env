@@ -41,12 +41,20 @@ class ChoppingBoardHandler(StationHandler):
             game_state["ground_instances"][(ix, iy)] = carrying_instance_id
             del game_state["agent_holding_instance"][agent_id]
 
-            # Calculate progress reward
-            place_action = 'place_on_chop' if self.station_char == 'C' else 'place_on_station'
-            progress_reward = self.reward_shaper._calculate_progress_reward(
-                place_action, carrying_item, None, game_state
-            )
-            total_reward = self.rewards.place_on_chop + progress_reward
+            # Calculate progress reward (awarded once per (station, stage) to prevent farming while supporting multi-stage pipelines)
+            station_stage_key = (self.station_char, carrying_item.get("current_stage", 0))
+            awarded_stations = carrying_item.setdefault("place_on_station_awarded", set())
+            if station_stage_key not in awarded_stations:
+                place_action = 'place_on_chop' if self.station_char == 'C' else 'place_on_station'
+                progress_reward = self.reward_shaper._calculate_progress_reward(
+                    place_action, carrying_item, None, game_state
+                )
+                total_reward = self.rewards.place_on_chop + progress_reward
+                awarded_stations.add(station_stage_key)
+                self.update_item(carrying_instance_id, carrying_item, game_state)
+            else:
+                progress_reward = 0.0
+                total_reward = 0.0
             if total_reward > 0:
                 carrying_item["shaping_reward_accumulated"] = (
                     carrying_item.get("shaping_reward_accumulated", 0.0) + total_reward
@@ -118,10 +126,13 @@ class ChoppingBoardHandler(StationHandler):
             ground_item["last_placed_by"] = None
 
             progress_reward = 0.0
-            if is_ready(ground_item):
+            if is_ready(ground_item) and not ground_item.get("pickup_ready_awarded", False):
                 progress_reward = self.reward_shaper._calculate_progress_reward(
                     'pickup_ready', ground_item, None, game_state
                 )
+                if progress_reward > 0:
+                    ground_item["pickup_ready_awarded"] = True
+                    self.update_item(ground_instance_id, ground_item, game_state)
 
             game_state["agent_holding_instance"][agent_id] = ground_instance_id
             del game_state["ground_instances"][(ix, iy)]

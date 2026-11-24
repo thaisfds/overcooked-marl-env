@@ -223,10 +223,13 @@ class CounterHandler(StationHandler):
                 ground_item.setdefault("contributors", []).append(agent_id)
             ground_item["last_placed_by"] = None
 
-            if is_ready(ground_item):
+            if is_ready(ground_item) and not ground_item.get("pickup_ready_awarded", False):
                 progress_reward = self.reward_shaper._calculate_progress_reward(
                     'pickup_ready', ground_item, None, game_state
                 )
+                if progress_reward > 0:
+                    ground_item["pickup_ready_awarded"] = True
+                    self.update_item(ground_instance_id, ground_item, game_state)
             elif is_plate(ground_item):
                 current_combo = tuple(sorted(ground_item.get("ingredients", [])))
                 last_awarded_combo = ground_item.get("pickup_awarded_combo", None)
