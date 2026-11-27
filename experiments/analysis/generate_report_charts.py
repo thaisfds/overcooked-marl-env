@@ -2,7 +2,7 @@
 """
 ==============================================================================
 Script Avançado de Análise e Visualização Científica para a POC 2
-Destino padrão das figuras: documentos POC/imgs/
+Destino padrão das figuras: resultados_experimentos/
 ==============================================================================
 
 Gera uma suíte completa de gráficos e diagnósticos estatísticos com identificação
@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_REPORT_IMG_DIR = PROJECT_ROOT / "documentos POC" / "imgs"
+DEFAULT_REPORT_IMG_DIR = PROJECT_ROOT / "resultados_experimentos"
 DEFAULT_RAY_RESULTS = PROJECT_ROOT / "experiments" / "ray_results"
 DEFAULT_LOGS_DIR = PROJECT_ROOT / "experiments" / "logs"
 DEFAULT_BACKUP_DIR = PROJECT_ROOT / "Modelos Backup"
@@ -72,7 +72,7 @@ sns.set_theme(style="whitegrid", palette="deep")
 def parse_args():
     parser = argparse.ArgumentParser(description="Gera gráficos avançados de análise com identificação explícita do modelo de referência.")
     parser.add_argument("--sync", action="store_true", help="Sincroniza automaticamente os resultados do servidor magritte via rsync antes de gerar.")
-    parser.add_argument("--output-dir", type=str, default=str(DEFAULT_REPORT_IMG_DIR), help="Diretório de saída para salvar os gráficos (default: documentos POC/imgs)")
+    parser.add_argument("--output-dir", type=str, default=str(DEFAULT_REPORT_IMG_DIR), help="Diretório de saída para salvar os gráficos (default: resultados_experimentos)")
     parser.add_argument("--exp-id", type=str, default=None, help="Filtrar por ID específico de experimento (default: todos)")
     parser.add_argument("--window", type=int, default=5, help="Tamanho da janela para média móvel nas curvas (default: 5)")
     parser.add_argument("--include-backups", action="store_true", help="Inclui modelos e experimentos arquivados na pasta 'Modelos Backup' na análise.")
@@ -113,15 +113,29 @@ def sync_from_server():
         print(f"⚠️ Aviso: Falha ao sincronizar via rsync ({e}). Usando dados locais existentes.\n")
 
 
-def extract_clean_trial_tag(folder_name: str) -> str:
-    """Extrai uma etiqueta limpa como 'Trial 34733_00000' ou 'Trial fd4e3_00001'."""
-    m = re.search(r"parallel_([a-zA-Z0-9]+_\d{5})", folder_name)
+def extract_algorithm_name(folder_name: str, exp_name: str = "") -> str:
+    """Identifica o nome do algoritmo (PPO, DQN, IMPALA, APPO, BC) a partir do nome da pasta."""
+    for source in (folder_name, exp_name):
+        upper = source.upper()
+        for algo in ("IMPALA", "APPO", "PPO", "DQN", "BC"):
+            if upper.startswith(f"{algo}_") or f"_{algo}_" in upper:
+                return algo
+    return "MARL"
+
+
+def extract_clean_trial_tag(folder_name: str, exp_name: str = "") -> str:
+    """Extrai uma etiqueta legível com o algoritmo e o ID, como 'DQN df92c_00002' ou 'PPO c62b5_00003'."""
+    algo = extract_algorithm_name(folder_name, exp_name)
+    m = re.search(r"([a-fA-F0-9]{5}_\d{5})", folder_name)
     if m:
-        return f"Trial {m.group(1)}"
-    m2 = re.search(r"([a-zA-Z0-9]+_\d{5})", folder_name)
+        return f"{algo} {m.group(1)}"
+    m2 = re.search(r"parallel_(?:[a-zA-Z]+_)?([a-zA-Z0-9]+_\d{5})", folder_name)
     if m2:
-        return f"Trial {m2.group(1)}"
-    return folder_name[:18]
+        return f"{algo} {m2.group(1)}"
+    m3 = re.search(r"([a-zA-Z0-9]+_\d{5})", folder_name)
+    if m3:
+        return f"{algo} {m3.group(1)}"
+    return f"{algo} {folder_name[:14]}"
 
 
 def load_experiment_data(
@@ -293,9 +307,14 @@ def load_experiment_data(
                 batch_size = params.get("train_batch_size", 4000)
 
                 trial_name = trial_folder.name
-                trial_tag = extract_clean_trial_tag(trial_name)
+                algo_name = extract_algorithm_name(trial_name, exp_folder.name)
+                trial_tag = extract_clean_trial_tag(trial_name, exp_folder.name)
                 lr_str = f"{lr:.0e}" if lr < 0.001 else str(lr)
-                param_summary = f"LR={lr_str}, γ={gamma:.2f}, H={entropy:.3f}"
+                if algo_name == "DQN":
+                    n_step = params.get("n_step", 5)
+                    param_summary = f"LR={lr_str}, γ={gamma:.2f}, n={n_step}"
+                else:
+                    param_summary = f"LR={lr_str}, γ={gamma:.2f}, H={entropy:.3f}"
                 full_spec = f"{trial_tag} ({param_summary})"
                 short_name = full_spec
 
@@ -389,6 +408,53 @@ def get_env_tag(trials_data: List[Dict[str, Any]]) -> str:
 
 
 # ==============================================================================
+# 0. CARTÃO DEDICADO DO MODELO DE REFERÊNCIA (CAMPEÃO)
+# ==============================================================================
+def plot_reference_model_card(trials_data: List[Dict[str, Any]], out_dir: Path):
+    """Gera uma imagem dedicada e limpa com a ficha técnica do Modelo de Referência (Campeão)."""
+    if not trials_data:
+        return
+
+    best_trial = trials_data[0]
+    env_tag = get_env_tag(trials_data)
+    env_suffix = get_env_file_suffix(trials_data)
+
+    fig, ax = plt.subplots(figsize=(9.5, 4.6), dpi=300)
+    ax.axis("off")
+
+    header_text = f"★ MODELO DE REFERÊNCIA (CAMPEÃO) — {env_tag}"
+    body_lines = [
+        f"• Identificador:         {best_trial['trial_tag']}",
+        f"• Experimento:           {best_trial['exp_id']}",
+        f"• Checkpoint:            {best_trial['checkpoint_name']}",
+        f"• Hiperparâmetros:       {best_trial['param_summary']}  |  Batch Size: {best_trial['batch_size']}",
+        f"• Duração do Treino:     {best_trial['total_iterations']} iterações  ({best_trial['total_timesteps']:,} steps)",
+        f"• Recompensa Máxima:     {best_trial['max_reward']:+.2f} pts",
+        f"• Recompensa Final:      {best_trial['final_reward']:+.2f} pts",
+        f"• Total de Modelos:      {len(trials_data)} ensaios avaliados neste grupo",
+    ]
+    card_text = f"{header_text}\n\n" + "\n".join(body_lines)
+
+    ax.text(
+        0.5, 0.5, card_text,
+        transform=ax.transAxes,
+        fontsize=10.5,
+        family="monospace",
+        va="center",
+        ha="center",
+        linespacing=1.55,
+        bbox=dict(
+            boxstyle="round,pad=1.0",
+            facecolor="#f0f8ff",
+            edgecolor="#00509d",
+            linewidth=2.0,
+        ),
+    )
+
+    save_plot(fig, out_dir, "fig_reference_model_card", env_suffix=env_suffix)
+
+
+# ==============================================================================
 # 1. CURVAS DE APRENDIZADO PRINCIPAIS COM IDENTIFICAÇÃO FORMAL DO MODELO CAMPEÃO
 # ==============================================================================
 def plot_learning_curves(trials_data: List[Dict[str, Any]], out_dir: Path, window: int = 5):
@@ -435,30 +501,24 @@ def plot_learning_curves(trials_data: List[Dict[str, Any]], out_dir: Path, windo
         ax.axhline(900, color="#2ca02c", linestyle="--", linewidth=1.1, alpha=0.6, label="Marco: 3 Saladas Simples (+900 pts)")
         ax.axhline(1500, color="#1f77b4", linestyle="--", linewidth=1.1, alpha=0.6, label="Marco: Transição Receita Composta (+1500 pts)")
 
-    # Caixa destacada anotando o modelo de referência campeão
-    ref_box_text = (
-        f"★ MODELO DE REFERÊNCIA (CAMPEÃO):\n"
-        f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Hiperparâmetros: LR={best_trial['lr']:.0e} | γ={best_trial['gamma']:.2f} | H={best_trial['entropy']:.3f}\n"
-        f"• Batch Size: {best_trial['batch_size']} | Épocas SGD: 12\n"
-        f"• Recompensa Máxima: {best_trial['max_reward']:+.1f} pts"
-    )
-    ax.text(
-        0.02, 0.96, ref_box_text,
-        transform=ax.transAxes, fontsize=8.5, fontweight="bold",
-        verticalalignment="top",
-        bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f8ff", edgecolor="#00509d", alpha=0.95, lw=1.3)
-    )
-
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Curvas de Aprendizado Comparativas - Ray Tune Grid Search (PPO MARL) [{env_tag}]\n"
+        f"Curvas de Aprendizado Comparativas - Ray Tune Grid Search (MARL) [{env_tag}]\n"
         f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12, fontweight="bold", pad=12
     )
     ax.set_xlabel("Iterações de Treinamento", fontsize=11, fontweight="bold")
     ax.set_ylabel("Recompensa Média por Episódio (Scaled)", fontsize=11, fontweight="bold")
-    ax.legend(loc="lower right", frameon=True, framealpha=0.92, fontsize=8, ncol=1)
+    n_legend_items = len(trials_data) + (3 if best_trial["max_reward"] > 500 else 0)
+    legend_cols = 2 if n_legend_items <= 12 else 3
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        frameon=True,
+        framealpha=0.95,
+        fontsize=7.5,
+        ncol=legend_cols,
+    )
     ax.set_xlim(left=0)
 
     save_plot(fig, out_dir, "learning_curves_tune", env_suffix=get_env_file_suffix(trials_data))
@@ -559,18 +619,6 @@ def plot_agent_cooperation_balance(trials_data: List[Dict[str, Any]], out_dir: P
         axes[0].set_ylabel("Recompensa da Política")
         axes[0].legend(loc="lower right", fontsize=8.5)
 
-        badge_text = (
-            f"★ MODELO DE REFERÊNCIA:\n"
-            f"• ID: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-            f"• Parâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-            f"• Arquitetura: 2 Políticas Independentes"
-        )
-        axes[0].text(
-            0.03, 0.95, badge_text,
-            transform=axes[0].transAxes, fontsize=8, fontweight="bold", va="top",
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#1f77b4", alpha=0.92, lw=1.2)
-        )
-
         safe_total = (y0.abs() + y1.abs()).replace(0, np.nan)
         ratio_0 = (y0.abs() / safe_total).fillna(0.5) * 100.0
         ratio_1 = (y1.abs() / safe_total).fillna(0.5) * 100.0
@@ -642,18 +690,6 @@ def plot_episode_length_and_efficiency(trials_data: List[Dict[str, Any]], out_di
     else:
         line2 = []
 
-    ref_text = (
-        f"★ MODELO DE REFERÊNCIA:\n"
-        f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Hiperparâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-        f"• Eficiência Máxima: ~3.5 pontos / passo (4 entregas / 500 passos)"
-    )
-    ax1.text(
-        0.03, 0.72, ref_text,
-        transform=ax1.transAxes, fontsize=8.5, fontweight="bold", va="top",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#9467bd", alpha=0.92, lw=1.2)
-    )
-
     lines = line1 + line2
     labels = [l.get_label() for l in lines]
     ax1.legend(lines, labels, loc="upper left", frameon=True, framealpha=0.9)
@@ -692,18 +728,6 @@ def plot_policy_entropy_dynamics(trials_data: List[Dict[str, Any]], out_dir: Pat
         for t in trials_data[:4]:
             r_col = t["reward_col"]
             ax.plot(t["df"]["training_iteration"], t["df"][r_col].rolling(window=5, min_periods=1).mean(), label=f"{t['full_spec']}", lw=1.8)
-
-    ref_text = (
-        f"★ MODELO DE REFERÊNCIA:\n"
-        f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Coeficiente de Entropia: H={best_trial['entropy']:.3f} | LR={best_trial['lr']:.0e}\n"
-        f"• Dinâmica: Decaimento suave sem perda prematura de variância"
-    )
-    ax.text(
-        0.02, 0.05, ref_text,
-        transform=ax.transAxes, fontsize=8.5, fontweight="bold", va="bottom",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#1f77b4", alpha=0.92, lw=1.2)
-    )
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
@@ -756,18 +780,6 @@ def plot_loss_convergence(trials_data: List[Dict[str, Any]], out_dir: Path):
         axes[1].set_ylabel("Policy Loss")
     else:
         axes[1].text(0.5, 0.5, "Policy Loss não disponível", ha="center")
-
-    badge_text = (
-        f"★ MODELO DE REFERÊNCIA:\n"
-        f"• ID: {best_trial['trial_tag']}\n"
-        f"• Mini-batch: 256 | Épocas: 12\n"
-        f"• LR: {best_trial['lr']:.0e} | γ: {best_trial['gamma']:.2f}"
-    )
-    axes[0].text(
-        0.03, 0.95, badge_text,
-        transform=axes[0].transAxes, fontsize=8, fontweight="bold", va="top",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#d62728", alpha=0.92, lw=1.2)
-    )
 
     env_tag = get_env_tag(trials_data)
     fig.suptitle(
@@ -852,97 +864,87 @@ def plot_radar_profile(trials_data: List[Dict[str, Any]], out_dir: Path):
         f"[Modelo de Referência Campeão: ★ {best_trial['trial_tag']} (LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f})]",
         size=12, weight='bold', pad=22
     )
-    plt.legend(loc='upper right', bbox_to_anchor=(0.15, 0.08), fontsize=8.5)
-
-    ref_text = (
-        f"★ MODELO DE REFERÊNCIA:\n"
-        f"• {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Hiperparâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-        f"• Score Máximo: {best_trial['max_reward']:+.1f} pts"
-    )
-    fig.text(
-        0.02, 0.02, ref_text,
-        fontsize=8.5, fontweight="bold",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#00509d", alpha=0.95, lw=1.2)
-    )
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08), fontsize=8.5, ncol=2)
 
     save_plot(fig, out_dir, "fig_radar_performance_profile", env_suffix=get_env_file_suffix(trials_data))
 
 
 # ==============================================================================
-# 8. PAINEL EXECUTIVO INTEGRADO 2x2 (DASHBOARD CIENTÍFICO)
+# 8. GRÁFICOS EXECUTIVOS INDIVIDUAIS (SEPARADOS PARA MELHOR LEGIBILIDADE)
 # ==============================================================================
 def plot_executive_dashboard(trials_data: List[Dict[str, Any]], out_dir: Path, window: int = 5):
-    """Painel executivo com a tag formal do modelo de referência no topo."""
+    """Gera os 4 gráficos executivos em imagens separadas para aproveitar todo o espaço."""
     if not trials_data:
         return
 
     best_trial = trials_data[0]
     df_best = best_trial["df"]
     r_col = best_trial["reward_col"]
+    env_tag = get_env_tag(trials_data)
+    env_suffix = get_env_file_suffix(trials_data)
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10.8), dpi=300)
-
-    # (a) Curvas de Aprendizado
     x_b = df_best["training_iteration"]
     y_b = df_best[r_col].rolling(window=window, min_periods=1).mean()
-    axes[0, 0].plot(x_b, y_b, color="#00509d", lw=2.6, label=f"★ [REFERÊNCIA] {best_trial['trial_tag']} ({best_trial['param_summary']})")
+
+    # 8a. Convergência: Campeão vs. Média dos Demais Modelos
+    fig, ax = plt.subplots(figsize=(10, 5.6), dpi=300)
+    ax.plot(x_b, y_b, color="#00509d", lw=2.6, label=f"★ [REFERÊNCIA] {best_trial['trial_tag']} ({best_trial['param_summary']})")
     if len(trials_data) > 1:
         other_ys = [t["df"][t["reward_col"]].rolling(window=window, min_periods=1).mean() for t in trials_data[1:] if t["reward_col"] in t["df"].columns]
         if other_ys:
             min_len = min(len(y) for y in other_ys)
             stacked = np.array([y.iloc[:min_len].values for y in other_ys])
             mean_others = np.nanmean(stacked, axis=0)
-            axes[0, 0].plot(x_b.iloc[:min_len], mean_others, color="gray", linestyle="--", lw=1.8, label="Média dos Demais Trials")
-    axes[0, 0].set_title(f"(a) Convergência: ★ {best_trial['trial_tag']} vs. Demais Trials", fontweight="bold", fontsize=10.5)
-    axes[0, 0].set_xlabel("Iterações")
-    axes[0, 0].set_ylabel("Recompensa Média")
-    axes[0, 0].legend(loc="lower right", fontsize=8.0)
+            ax.plot(x_b.iloc[:min_len], mean_others, color="gray", linestyle="--", lw=1.8, label="Média dos Demais Modelos")
+    ax.set_title(f"Convergência: ★ {best_trial['trial_tag']} vs. Demais Modelos [{env_tag}]", fontweight="bold", fontsize=11.5)
+    ax.set_xlabel("Iterações", fontweight="bold")
+    ax.set_ylabel("Recompensa Média", fontweight="bold")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=9, ncol=2)
+    save_plot(fig, out_dir, "fig_convergence_best_vs_others", env_suffix=env_suffix)
 
-    # (b) Coordenação dos Agentes
+    # 8b. Coordenação de Políticas
+    fig, ax = plt.subplots(figsize=(10, 5.6), dpi=300)
     p0_col = next((c for c in df_best.columns if "policy_reward_mean/policy_agent_0" in c), None)
     p1_col = next((c for c in df_best.columns if "policy_reward_mean/policy_agent_1" in c), None)
     if p0_col and p1_col:
-        axes[0, 1].plot(x_b, df_best[p0_col].rolling(window=window, min_periods=1).mean(), label=f"Agente 0 (Superior: Corte | {best_trial['trial_tag']})", color="#2b5c8f", lw=2.0)
-        axes[0, 1].plot(x_b, df_best[p1_col].rolling(window=window, min_periods=1).mean(), label=f"Agente 1 (Inferior: Entrega | {best_trial['trial_tag']})", color="#d95f02", lw=2.0)
-        axes[0, 1].set_ylabel("Recompensa por Política")
-        axes[0, 1].legend(loc="lower right", fontsize=8.0)
+        ax.plot(x_b, df_best[p0_col].rolling(window=window, min_periods=1).mean(), label=f"Agente 0 (Superior: Corte | {best_trial['trial_tag']})", color="#2b5c8f", lw=2.2)
+        ax.plot(x_b, df_best[p1_col].rolling(window=window, min_periods=1).mean(), label=f"Agente 1 (Inferior: Entrega | {best_trial['trial_tag']})", color="#d95f02", lw=2.2)
+        ax.set_ylabel("Recompensa por Política", fontweight="bold")
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=9, ncol=2)
     else:
-        axes[0, 1].plot(x_b, y_b, color="#2b5c8f", lw=2.0)
-        axes[0, 1].set_ylabel("Recompensa de Equipe")
-    axes[0, 1].set_title(f"(b) Coordenação de Políticas: {best_trial['trial_tag']} (Agente 0 vs. 1)", fontweight="bold", fontsize=10.5)
-    axes[0, 1].set_xlabel("Iterações")
+        ax.plot(x_b, y_b, color="#2b5c8f", lw=2.2, label=f"{best_trial['trial_tag']} (Recompensa de Equipe)")
+        ax.set_ylabel("Recompensa de Equipe", fontweight="bold")
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=9)
+    ax.set_title(f"Coordenação de Políticas: {best_trial['trial_tag']} [{env_tag}]", fontweight="bold", fontsize=11.5)
+    ax.set_xlabel("Iterações", fontweight="bold")
+    save_plot(fig, out_dir, "fig_policy_coordination", env_suffix=env_suffix)
 
-    # (c) Duração do Episódio
+    # 8c. Otimização Temporal de Ciclos (Passos/Episódio)
     len_col = next((c for c in df_best.columns if "episode_len_mean" in c), None)
     if len_col:
-        axes[1, 0].plot(x_b, df_best[len_col].rolling(window=window, min_periods=1).mean(), color="#7570b3", lw=2.2)
-        axes[1, 0].set_ylabel("Passos Médios por Episódio")
-    axes[1, 0].set_title(f"(c) Otimização Temporal de Ciclos: {best_trial['trial_tag']} (Passos/Episódio)", fontweight="bold", fontsize=10.5)
-    axes[1, 0].set_xlabel("Iterações")
+        fig, ax = plt.subplots(figsize=(10, 5.2), dpi=300)
+        ax.plot(x_b, df_best[len_col].rolling(window=window, min_periods=1).mean(), color="#7570b3", lw=2.2)
+        ax.set_ylabel("Passos Médios por Episódio", fontweight="bold")
+        ax.set_title(f"Otimização Temporal de Ciclos: {best_trial['trial_tag']} [{env_tag}]", fontweight="bold", fontsize=11.5)
+        ax.set_xlabel("Iterações", fontweight="bold")
+        save_plot(fig, out_dir, "fig_cycle_temporal_optimization", env_suffix=env_suffix)
 
-    # (d) Ranking Comparativo
-    top_5 = trials_data[:min(5, len(trials_data))]
+    # 8d. Ranking de Recompensa Máxima por Modelo (Top 10)
+    top_n = trials_data[:min(10, len(trials_data))]
     names_short = []
-    for i, t in enumerate(top_5):
+    for i, t in enumerate(top_n):
         if i == 0:
             names_short.append(f"★ [REFERÊNCIA] {t['trial_tag']} ({t['param_summary']})")
         else:
             names_short.append(f"Rank {i+1}: {t['trial_tag']} ({t['param_summary']})")
-    rewards_top = [t["max_reward"] for t in top_5]
-    colors_bar = ["#00509d" if i == 0 else "#a0c4e2" for i in range(len(top_5))]
-    edge_colors = ["#ffd166" if i == 0 else "black" for i in range(len(top_5))]
-    axes[1, 1].barh(names_short[::-1], rewards_top[::-1], color=colors_bar[::-1], edgecolor=edge_colors[::-1], linewidth=1.2, height=0.6)
-    axes[1, 1].set_title("(d) Ranking de Recompensa Máxima por Modelo", fontweight="bold", fontsize=10.5)
-    axes[1, 1].set_xlabel("Recompensa Máxima (pts)")
-
-    env_tag = get_env_tag(trials_data)
-    fig.suptitle(
-        f"Painel Executivo de Desempenho MARL - Overcooked POC 2 [{env_tag}]\n"
-        f"[Modelo de Referência Campeão: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f} | Score Máx: {best_trial['max_reward']:+.1f} pts]",
-        fontsize=12.5, fontweight="bold", y=1.02
-    )
-    save_plot(fig, out_dir, "fig_executive_dashboard_2x2", env_suffix=get_env_file_suffix(trials_data))
+    rewards_top = [t["max_reward"] for t in top_n]
+    colors_bar = ["#00509d" if i == 0 else "#a0c4e2" for i in range(len(top_n))]
+    edge_colors = ["#ffd166" if i == 0 else "black" for i in range(len(top_n))]
+    fig, ax = plt.subplots(figsize=(11, max(5.2, 0.55 * len(top_n))), dpi=300)
+    ax.barh(names_short[::-1], rewards_top[::-1], color=colors_bar[::-1], edgecolor=edge_colors[::-1], linewidth=1.2, height=0.65)
+    ax.set_title(f"Ranking de Recompensa Máxima por Modelo (Top {len(top_n)}) [{env_tag}]", fontweight="bold", fontsize=11.5)
+    ax.set_xlabel("Recompensa Máxima (pts)", fontweight="bold")
+    save_plot(fig, out_dir, "fig_ranking_top_models", env_suffix=env_suffix)
 
 
 # ==============================================================================
@@ -1057,18 +1059,6 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
         fontweight="bold", fontsize=10.5
     )
 
-    ref_badge = (
-        f"★ MODELO DE REFERÊNCIA (DADOS REAIS):\n"
-        f"• Identificador: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Hiperparâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}\n"
-        f"{summary_line}"
-    )
-    axes[1].text(
-        0.5, -0.15, ref_badge,
-        transform=axes[1].transAxes, fontsize=8, fontweight="bold", ha="center",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor=badge_edge, alpha=0.92, lw=1.2)
-    )
-
     env_tag = get_env_tag(trials_data)
     fig.suptitle(
         f"Volume e Diversidade de Pratos Entregues [{env_tag}]\n[Modelo de Referência Campeão: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
@@ -1124,21 +1114,6 @@ def plot_reward_vs_deliveries_correlation(trials_data: List[Dict[str, Any]], out
             s=75, alpha=0.85, color="#d62728", edgecolor="black",
             label="Episódios Avaliados (sem variação de entregas)"
         )
-        corr_line = "• Regressão Indefinida: todos os episódios tiveram o mesmo nº de entregas (possível reward hacking se recompensa > 0)"
-        box_edge = "#d62728"
-
-    ref_text = (
-        f"★ DADOS REAIS DE AVALIAÇÃO ({len(episodes_eval)} episódios):\n"
-        f"• Referência Treino: {best_trial['trial_tag']} ({best_trial['checkpoint_name']})\n"
-        f"• Média Empírica: {mean_deliv:.2f} pratos/episódio ({mean_rw:+.2f} pts médios)\n"
-        f"{corr_line}"
-    )
-    ax.text(
-        0.03, 0.92, ref_text,
-        transform=ax.transAxes, fontsize=8.5, fontweight="bold",
-        verticalalignment="top",
-        bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f8ff", edgecolor=box_edge, alpha=0.95, lw=1.3)
-    )
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
@@ -1322,12 +1297,12 @@ def generate_latex_table(trials_data: List[Dict[str, Any]], out_dir: Path):
     table_lines = [
         r"\begin{table*}[t]",
         r"\centering",
-        f"\\caption{{Resultados Empíricos Detalhados do Grid Search PPO na POC 2 [{env_tag}]. O Modelo de Referência Campeão marcado com $\\bigstar$ (\\textbf{{{best_trial['trial_tag'].replace('_', r'\_')}}}, LR={best_trial['lr']:.0e}, $\\gamma$={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}) obteve a maior recompensa média global e fundamenta todos os diagnósticos comportamentais.}}",
+        f"\\caption{{Resultados Empíricos Detalhados do Grid Search MARL na POC 2 [{env_tag}]. O Modelo de Referência Campeão marcado com $\\bigstar$ (\\textbf{{{best_trial['trial_tag'].replace('_', r'\_')}}}, LR={best_trial['lr']:.0e}, $\\gamma$={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}) obteve a maior recompensa média global e fundamenta todos os diagnósticos comportamentais.}}",
         r"\label{tab:grid_search_completo_poc2}",
         r"\resizebox{\textwidth}{!}{%",
         r"\begin{tabular}{cccccccc}",
         r"\toprule",
-        r"\textbf{Rank} & \textbf{Identificador do Modelo (Trial ID)} & \textbf{LR} & \textbf{Fator $\gamma$} & \textbf{Entropia} & \textbf{Iterações} & \textbf{Recompensa Máx.} & \textbf{Recompensa Final} \\",
+        r"\textbf{Rank} & \textbf{Modelo (Algoritmo / Trial)} & \textbf{LR} & \textbf{Fator $\gamma$} & \textbf{Entropia} & \textbf{Iterações} & \textbf{Recompensa Máx.} & \textbf{Recompensa Final} \\",
         r"\midrule"
     ]
 
@@ -1453,7 +1428,7 @@ def plot_general_performance_comparison(trials_data: List[Dict[str, Any]], out_d
     axes[0].barh(top_models["Modelo"][::-1], top_models["Recompensa Máxima"][::-1], color=colors[::-1], edgecolor="black", height=0.6)
     axes[0].set_title("(a) Ranking Global dos Melhores Modelos por Configuração", fontweight="bold", fontsize=11)
     axes[0].set_xlabel("Recompensa Máxima Atingida (pts)", fontweight="bold")
-    axes[0].set_ylabel("Identificador do Modelo (Trial ID)", fontweight="bold")
+    axes[0].set_ylabel("Modelo (Algoritmo / Trial)", fontweight="bold")
 
     # Legenda customizada de configurações
     for c, col in config_color_map.items():
@@ -1514,6 +1489,405 @@ def plot_general_hyperparameter_landscape(trials_data: List[Dict[str, Any]], out
     save_plot(fig, out_dir, "comparacao_geral_hiperparametros")
 
 
+# ==============================================================================
+# 16. NOVOS GRÁFICOS DIAGNÓSTICOS PÓS-FIX (100% DADOS REAIS)
+# ==============================================================================
+def _is_prefix_hacking_exp(exp_id: str) -> bool:
+    """Identifica o experimento pré-fix de reward hacking (IMPALA_Marl_20261123_*)."""
+    return "20261123" in str(exp_id)
+
+
+def _get_timesteps_series(df: pd.DataFrame) -> pd.Series:
+    """Retorna a série de timesteps em milhões."""
+    for col in ("num_env_steps_sampled_lifetime", "timesteps_total"):
+        if col in df.columns and not df[col].dropna().empty:
+            return df[col] / 1e6
+    return df["training_iteration"] / 1000.0
+
+
+def _parse_postfix_summaries() -> Dict[str, Dict[str, Any]]:
+    """Lê os arquivos *_summary.md pós-fix em experiments/logs/ para extrair métricas reais de treino e avaliação."""
+    algo_data: Dict[str, Dict[str, Any]] = {}
+    if not DEFAULT_LOGS_DIR.exists():
+        return algo_data
+
+    for md_path in sorted(DEFAULT_LOGS_DIR.glob("*_Marl_*_summary.md")):
+        if _is_prefix_hacking_exp(md_path.name):
+            continue
+        algo = extract_algorithm_name(md_path.name)
+        if algo not in ("PPO", "DQN", "APPO", "IMPALA"):
+            continue
+        text = md_path.read_text(encoding="utf-8", errors="ignore")
+
+        m_train = re.search(r"Melhor Recompensa de Treino:\*\*\s*([+-]?\d+(?:\.\d+)?)\s*\(Trial\s*`([^`]+)`\)", text)
+        m_eval = re.search(r"Recompensa Média Global:\*\*\s*([+-]?\d+(?:\.\d+)?)", text)
+        agent_scores = {}
+        for m_ag in re.finditer(r"\*\*(agent_\d+):\*\*\s*([+-]?\d+(?:\.\d+)?)", text):
+            agent_scores[m_ag.group(1)] = float(m_ag.group(2))
+
+        if m_train:
+            algo_data[algo] = {
+                "trial_short": m_train.group(2),
+                "train_max": float(m_train.group(1)),
+                "eval_mean": float(m_eval.group(1)) if m_eval else np.nan,
+                "agent_scores": agent_scores,
+                "summary_path": md_path,
+            }
+    return algo_data
+
+
+def _parse_visual_20s_rollouts() -> Dict[str, Dict[str, Any]]:
+    """Lê os logs reais de rollout visual de 20s em experiments/logs/vision_analysis/models_20s/."""
+    models_dir = DEFAULT_LOGS_DIR / "vision_analysis" / "models_20s"
+    rollouts: Dict[str, Dict[str, Any]] = {}
+    if not models_dir.exists():
+        return rollouts
+
+    for log_path in sorted(models_dir.glob("*.log")):
+        tag = extract_clean_trial_tag(log_path.name)
+        steps, totals = [], []
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if "Actions:" not in line:
+                    continue
+                m = re.search(r"\[Step (\d+)\].*Total Rwd:\s*([+-]?\d+\.\d+)", line)
+                if m:
+                    steps.append(int(m.group(1)))
+                    totals.append(float(m.group(2)))
+        if steps:
+            rollouts[tag] = {
+                "steps": steps,
+                "totals": totals,
+                "final_reward": totals[-1],
+                "path": log_path,
+            }
+    return rollouts
+
+
+def plot_antihacking_before_after(trials_data: List[Dict[str, Any]], out_dir: Path, window: int = 10):
+    """1. Antes vs. Depois das Travas Anti-Hacking (IMPALA Pré-Fix vs. Pós-Fix: Recompensa e Entropia)."""
+    pre_trials = [t for t in trials_data if extract_algorithm_name(t["trial_id"], t["exp_id"]) == "IMPALA" and _is_prefix_hacking_exp(t["exp_id"])]
+    post_trials = [t for t in trials_data if extract_algorithm_name(t["trial_id"], t["exp_id"]) == "IMPALA" and not _is_prefix_hacking_exp(t["exp_id"])]
+    if not pre_trials or not post_trials:
+        return
+
+    env_tag = get_env_tag(trials_data)
+    env_suffix = get_env_file_suffix(trials_data)
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.4), dpi=300)
+
+    # Painel (a): Recompensa Média
+    for i, t in enumerate(pre_trials):
+        df = t["df"]
+        x = _get_timesteps_series(df)
+        y = df[t["reward_col"]].rolling(window=window, min_periods=1).mean()
+        lbl = f"Pré-Fix: {t['trial_tag']} [Máx: {t['max_reward']:+.0f}]" if i < 2 else None
+        axes[0].plot(x, y, color="#d62728", linestyle="--", lw=2.0 if i == 0 else 1.2, alpha=0.85 if i == 0 else 0.45, label=lbl)
+    for i, t in enumerate(post_trials):
+        df = t["df"]
+        x = _get_timesteps_series(df)
+        y = df[t["reward_col"]].rolling(window=window, min_periods=1).mean()
+        lbl = f"Pós-Fix: {t['trial_tag']} [Máx: {t['max_reward']:+.1f}]" if i < 2 else None
+        axes[0].plot(x, y, color="#00509d", linestyle="-", lw=2.4 if i == 0 else 1.3, alpha=0.95 if i == 0 else 0.55, label=lbl)
+    axes[0].axhline(0, color="gray", linestyle=":", lw=1.0)
+    axes[0].set_title("(a) Recompensa Média: Explosão Artificial vs. Curva Honesta", fontweight="bold", fontsize=11)
+    axes[0].set_xlabel("Passos de Ambiente (Milhões)", fontweight="bold")
+    axes[0].set_ylabel("Recompensa Média por Episódio", fontweight="bold")
+    axes[0].legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), frameon=True, fontsize=8, ncol=2)
+
+    # Painel (b): Entropia da Política (agent_0)
+    for i, t in enumerate(pre_trials):
+        df = t["df"]
+        ent_col = next((c for c in df.columns if "policy_agent_0/learner_stats/entropy" in c), None)
+        if ent_col:
+            x = _get_timesteps_series(df)
+            y = df[ent_col].rolling(window=window, min_periods=1).mean()
+            lbl = f"Pré-Fix: {t['trial_tag']} (H final: {df[ent_col].dropna().iloc[-1]:.3f})" if i < 2 else None
+            axes[1].plot(x, y, color="#d62728", linestyle="--", lw=2.0 if i == 0 else 1.2, alpha=0.85 if i == 0 else 0.45, label=lbl)
+    for i, t in enumerate(post_trials):
+        df = t["df"]
+        ent_col = next((c for c in df.columns if "policy_agent_0/learner_stats/entropy" in c), None)
+        if ent_col:
+            x = _get_timesteps_series(df)
+            y = df[ent_col].rolling(window=window, min_periods=1).mean()
+            lbl = f"Pós-Fix: {t['trial_tag']} (H final: {df[ent_col].dropna().iloc[-1]:.3f})" if i < 2 else None
+            axes[1].plot(x, y, color="#00509d", linestyle="-", lw=2.4 if i == 0 else 1.3, alpha=0.95 if i == 0 else 0.55, label=lbl)
+    axes[1].axhline(np.log(5), color="gray", linestyle=":", lw=1.0, label="Entropia Máxima Uniforme (ln 5 ≈ 1,61)")
+    axes[1].set_title("(b) Entropia: Colapso em Loop vs. Exploração Saudável", fontweight="bold", fontsize=11)
+    axes[1].set_xlabel("Passos de Ambiente (Milhões)", fontweight="bold")
+    axes[1].set_ylabel("Entropia da Política (Agente 0)", fontweight="bold")
+    axes[1].set_ylim(-0.05, 1.75)
+    axes[1].legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), frameon=True, fontsize=8, ncol=2)
+
+    fig.suptitle(
+        f"Impacto das Travas Anti-Hacking: IMPALA Pré-Fix vs. Pós-Fix [{env_tag}]",
+        fontsize=12.5, fontweight="bold", y=1.02
+    )
+    save_plot(fig, out_dir, "fig_antihacking_before_after", env_suffix=env_suffix)
+
+
+def plot_postfix_learning_curves_by_algo(trials_data: List[Dict[str, Any]], out_dir: Path, window: int = 15):
+    """2. Curvas de aprendizado exclusivamente pós-fix por algoritmo (eixo Timesteps, sem distorção de escala)."""
+    post_trials = [t for t in trials_data if not _is_prefix_hacking_exp(t["exp_id"])]
+    if not post_trials:
+        return
+
+    algo_colors = {
+        "PPO": "#1f77b4",
+        "DQN": "#2ca02c",
+        "APPO": "#ff7f0e",
+        "IMPALA": "#9467bd",
+    }
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for t in post_trials:
+        algo = extract_algorithm_name(t["trial_id"], t["exp_id"])
+        grouped.setdefault(algo, []).append(t)
+
+    env_tag = get_env_tag(post_trials)
+    env_suffix = get_env_file_suffix(post_trials)
+    fig, ax = plt.subplots(figsize=(11, 5.8), dpi=300)
+
+    for algo in ("PPO", "DQN", "APPO", "IMPALA"):
+        alist = grouped.get(algo, [])
+        if not alist:
+            continue
+        alist.sort(key=lambda x: x["max_reward"], reverse=True)
+        color = algo_colors.get(algo, "#333333")
+        for idx, t in enumerate(alist):
+            df = t["df"]
+            x = _get_timesteps_series(df)
+            y = df[t["reward_col"]].rolling(window=window, min_periods=1).mean()
+            if idx == 0:
+                ax.plot(
+                    x, y, color=color, lw=2.6, alpha=0.98,
+                    label=f"★ {t['trial_tag']} ({t['param_summary']}) [Máx: {t['max_reward']:+.1f}]"
+                )
+            else:
+                ax.plot(x, y, color=color, lw=1.0, alpha=0.25)
+
+    ax.axhline(0, color="gray", linestyle=":", lw=1.1)
+    ax.set_title(
+        f"Curvas de Aprendizado Pós-Correção por Algoritmo (Escala Limpa) [{env_tag}]",
+        fontsize=12, fontweight="bold", pad=12
+    )
+    ax.set_xlabel("Passos de Ambiente (Milhões)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Recompensa Média por Episódio", fontsize=11, fontweight="bold")
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=-300)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=8.5, ncol=2)
+    save_plot(fig, out_dir, "fig_postfix_learning_curves_by_algo", env_suffix=env_suffix)
+
+
+def plot_train_vs_eval_vs_visual_gap(trials_data: List[Dict[str, Any]], out_dir: Path):
+    """3. Comparativo Treino Estocástico vs. Avaliação Determinística (20 eps) vs. Rollout Visual 20s."""
+    summaries = _parse_postfix_summaries()
+    rollouts = _parse_visual_20s_rollouts()
+    algos = [a for a in ("DQN", "PPO", "APPO", "IMPALA") if a in summaries]
+    if not algos:
+        return
+
+    train_vals, eval_vals, vis_vals, x_labels = [], [], [], []
+    for algo in algos:
+        info = summaries[algo]
+        tag = f"{algo} {info['trial_short']}"
+        train_vals.append(info["train_max"])
+        eval_vals.append(info["eval_mean"] if not np.isnan(info["eval_mean"]) else 0.0)
+        vis_vals.append(rollouts[tag]["final_reward"] if tag in rollouts else 0.0)
+        x_labels.append(f"{algo}\n({info['trial_short']})")
+
+    x = np.arange(len(algos))
+    width = 0.26
+    fig, ax = plt.subplots(figsize=(10.5, 5.6), dpi=300)
+
+    b1 = ax.bar(x - width, train_vals, width, label="Treino Estocástico (Máx. Média)", color="#1f77b4", edgecolor="black", lw=0.8)
+    b2 = ax.bar(x, eval_vals, width, label="Avaliação Determinística (20 eps, 800 passos)", color="#2ca02c", edgecolor="black", lw=0.8)
+    b3 = ax.bar(x + width, vis_vals, width, label="Rollout Visual (20s, 400 passos)", color="#ff7f0e", edgecolor="black", lw=0.8)
+
+    for bars in (b1, b2, b3):
+        for bar in bars:
+            h = bar.get_height()
+            offset = 4 if h >= 0 else -11
+            ax.annotate(
+                f"{h:+.1f}",
+                xy=(bar.get_x() + bar.get_width() / 2, h),
+                xytext=(0, offset),
+                textcoords="offset points",
+                ha="center", va="bottom" if h >= 0 else "top",
+                fontsize=8.5, fontweight="bold"
+            )
+
+    ax.axhline(0, color="black", lw=1.0)
+    env_tag = get_env_tag(trials_data)
+    ax.set_title(
+        f"Gap Treino vs. Avaliação Determinística vs. Rollout Visual (Pós-Fix) [{env_tag}]",
+        fontsize=12, fontweight="bold", pad=12
+    )
+    ax.set_ylabel("Recompensa Média (pts)", fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(x_labels, fontweight="bold")
+    ax.set_ylim(min(eval_vals + [0]) - 28, max(train_vals + vis_vals) + 28)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, fontsize=9, ncol=3)
+    save_plot(fig, out_dir, "fig_train_vs_eval_vs_visual_gap", env_suffix=get_env_file_suffix(trials_data))
+
+
+def plot_eval_agent_breakdown_by_algo(trials_data: List[Dict[str, Any]], out_dir: Path):
+    """4. Contribuição individual dos 4 agentes (agent_0..3) na avaliação determinística pós-fix."""
+    summaries = _parse_postfix_summaries()
+    algos = [a for a in ("DQN", "PPO", "IMPALA", "APPO") if a in summaries and summaries[a]["agent_scores"]]
+    if not algos:
+        return
+
+    agents = ["agent_0", "agent_1", "agent_2", "agent_3"]
+    agent_labels = ["Agente 0 (Sup.)", "Agente 1 (Inf.)", "Agente 2 (Sup.)", "Agente 3 (Inf.)"]
+    agent_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
+
+    x = np.arange(len(algos))
+    width = 0.19
+    fig, ax = plt.subplots(figsize=(10.5, 5.4), dpi=300)
+
+    for idx, (ag, lbl, col) in enumerate(zip(agents, agent_labels, agent_colors)):
+        vals = [summaries[a]["agent_scores"].get(ag, 0.0) for a in algos]
+        bars = ax.bar(x + (idx - 1.5) * width, vals, width, label=lbl, color=col, edgecolor="black", lw=0.7)
+        for bar in bars:
+            h = bar.get_height()
+            ax.annotate(
+                f"{h:+.1f}",
+                xy=(bar.get_x() + bar.get_width() / 2, h),
+                xytext=(0, 3 if h >= 0 else -10),
+                textcoords="offset points",
+                ha="center", va="bottom" if h >= 0 else "top",
+                fontsize=7.5, fontweight="bold"
+            )
+
+    ax.axhline(0, color="black", lw=1.0)
+    env_tag = get_env_tag(trials_data)
+    ax.set_title(
+        f"Desempenho Individual por Agente na Avaliação Determinística (Pós-Fix) [{env_tag}]",
+        fontsize=12, fontweight="bold", pad=12
+    )
+    ax.set_ylabel("Recompensa Média do Agente (pts)", fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{a}\n({summaries[a]['trial_short']})" for a in algos], fontweight="bold")
+    all_v = [v for a in algos for v in summaries[a]["agent_scores"].values()]
+    ax.set_ylim(min(all_v + [0]) - 12, max(all_v + [0]) + 14)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, fontsize=9, ncol=4)
+    save_plot(fig, out_dir, "fig_eval_agent_breakdown_by_algo", env_suffix=get_env_file_suffix(trials_data))
+
+
+def plot_bc_training_curve(out_dir: Path, env_tag: str, env_suffix: str):
+    """5. Curva de convergência do Behavioral Cloning (30 épocas) a partir de BC_Marl_*/model_info.json."""
+    bc_files = sorted(DEFAULT_RAY_RESULTS.glob("BC_Marl_*/model_info.json"))
+    if not bc_files:
+        return
+    try:
+        with open(bc_files[-1], "r", encoding="utf-8") as f:
+            bc_info = json.load(f)
+    except Exception:
+        return
+
+    curves = bc_info.get("learning_curves", [])
+    if not curves:
+        return
+
+    epochs = [c["iteration"] for c in curves]
+    losses = [-float(c["reward_mean"]) for c in curves]
+    acc = bc_info.get("imitation_accuracy", None)
+    cfg = bc_info.get("training_config", {})
+
+    fig, ax = plt.subplots(figsize=(9.5, 5.0), dpi=300)
+    ax.plot(epochs, losses, color="#00509d", marker="o", markersize=4.5, lw=2.3, label="Cross-Entropy Loss (Treino Supervisionado)")
+    ax.fill_between(epochs, losses, min(losses) * 0.9, color="#00509d", alpha=0.10)
+
+    acc_str = f"Acurácia de Imitação Final: {acc:.2f}%" if acc is not None else "Treino Concluído"
+    ax.annotate(
+        f"{acc_str}\n(Loss final: {losses[-1]:.3f} | {cfg.get('demo_steps', 5000):,} demos)",
+        xy=(epochs[-1], losses[-1]),
+        xytext=(epochs[-1] - 10, losses[-1] + 0.62),
+        fontsize=9, fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#00509d", lw=1.2),
+        arrowprops=dict(arrowstyle="->", color="#00509d", lw=1.5)
+    )
+    ax.set_title(
+        f"Convergência do Pré-Treino Supervisionado (Behavioral Cloning) [{env_tag}]",
+        fontsize=12, fontweight="bold", pad=12
+    )
+    ax.set_xlabel("Época de Treinamento", fontweight="bold")
+    ax.set_ylabel("Cross-Entropy Loss", fontweight="bold")
+    ax.set_xlim(1, max(epochs) + 0.5)
+    ax.legend(loc="upper right", frameon=True, fontsize=9)
+    save_plot(fig, out_dir, "fig_bc_training_curve", env_suffix=env_suffix)
+
+
+def plot_visual_rollout_20s_timeline(trials_data: List[Dict[str, Any]], out_dir: Path):
+    """6. Linha do tempo (Passo 0 -> 400) dos rollouts visuais de 20s dos campeões pós-fix."""
+    summaries = _parse_postfix_summaries()
+    rollouts = _parse_visual_20s_rollouts()
+    if not summaries or not rollouts:
+        return
+
+    algo_colors = {
+        "DQN": "#2ca02c",
+        "PPO": "#1f77b4",
+        "APPO": "#ff7f0e",
+        "IMPALA": "#9467bd",
+    }
+    fig, ax = plt.subplots(figsize=(11, 5.6), dpi=300)
+    plotted = 0
+    dqn_data = None
+
+    for algo in ("DQN", "PPO", "APPO", "IMPALA"):
+        if algo not in summaries:
+            continue
+        tag = f"{algo} {summaries[algo]['trial_short']}"
+        if tag not in rollouts:
+            continue
+        r = rollouts[tag]
+        ax.plot(
+            r["steps"], r["totals"],
+            color=algo_colors[algo],
+            lw=2.8 if algo == "DQN" else 2.0,
+            label=f"{tag} [Final 20s: {r['final_reward']:+.1f} pts]"
+        )
+        plotted += 1
+        if algo == "DQN":
+            dqn_data = r
+
+    if plotted == 0:
+        plt.close(fig)
+        return
+
+    # Destacar marcos reais verificados no replay do DQN df92c_00002 (passo 36 e passo 42)
+    if dqn_data and len(dqn_data["totals"]) >= 57:
+        y36 = dqn_data["totals"][35]
+        y42 = dqn_data["totals"][41]
+        ax.scatter([36, 42], [y36, y42], color="#d62728", s=55, zorder=5)
+        ax.annotate(
+            "Passo 36: Pepino no prato (+10,7)",
+            xy=(36, y36), xytext=(95, y36 + 6),
+            fontsize=8.2, fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.25", facecolor="#fff5f5", edgecolor="#d62728", lw=0.9),
+            arrowprops=dict(arrowstyle="->", color="#d62728", lw=1.2)
+        )
+        ax.annotate(
+            "Passo 42: Pepino + Tomate no prato (+23,5)\n(2/3 da FRESH_SALAD)",
+            xy=(42, y42), xytext=(95, y42 + 12),
+            fontsize=8.2, fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="#fff5f5", edgecolor="#d62728", lw=1.0),
+            arrowprops=dict(arrowstyle="->", color="#d62728", lw=1.2)
+        )
+        ax.axvspan(57, 400, color="gray", alpha=0.08, label="Platô pós-passo 57 (DQN segura prato sem entregar)")
+
+    env_tag = get_env_tag(trials_data)
+    ax.set_title(
+        f"Evolução Acumulada nos Rollouts Visuais de 20s (Campeões Pós-Fix) [{env_tag}]",
+        fontsize=12, fontweight="bold", pad=12
+    )
+    ax.set_xlabel("Passo do Episódio (20s = 400 passos)", fontweight="bold")
+    ax.set_ylabel("Recompensa Acumulada da Equipe (pts)", fontweight="bold")
+    ax.set_xlim(0, 405)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, fontsize=8.5, ncol=2)
+    save_plot(fig, out_dir, "fig_visual_rollout_20s_timeline", env_suffix=get_env_file_suffix(trials_data))
+
+
 def generate_full_suite(trials: List[Dict[str, Any]], target_dir: Path, window: int = 5, group_label: str = ""):
     """Gera a suíte completa de 15 gráficos, HUD e tabela LaTeX para um grupo de modelos."""
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -1522,6 +1896,7 @@ def generate_full_suite(trials: List[Dict[str, Any]], target_dir: Path, window: 
     print(f"\n📊 Gerando suíte completa de gráficos{lbl} para {len(trials)} modelo(s) em: {target_dir.name}/")
     print(f"   🏆 Modelo de Referência: {best_trial['full_spec']} (Score Máximo: {best_trial['max_reward']:+.2f} pts)")
 
+    plot_reference_model_card(trials, target_dir)
     plot_learning_curves(trials, target_dir, window=window)
     plot_hyperparameter_heatmaps(trials, target_dir)
     plot_agent_cooperation_balance(trials, target_dir)
@@ -1537,6 +1912,14 @@ def generate_full_suite(trials: List[Dict[str, Any]], target_dir: Path, window: 
     plot_idle_time_and_inactivity(trials, target_dir)
     plot_delivery_timeline_growth(trials, target_dir)
     plot_agent_workload_distribution(trials, target_dir)
+
+    # Novos gráficos diagnósticos pós-fix (dados reais dos logs e BC)
+    plot_antihacking_before_after(trials, target_dir, window=max(window, 10))
+    plot_postfix_learning_curves_by_algo(trials, target_dir, window=max(window, 15))
+    plot_train_vs_eval_vs_visual_gap(trials, target_dir)
+    plot_eval_agent_breakdown_by_algo(trials, target_dir)
+    plot_bc_training_curve(target_dir, get_env_tag(trials), get_env_file_suffix(trials))
+    plot_visual_rollout_20s_timeline(trials, target_dir)
 
     generate_latex_table(trials, target_dir)
 
@@ -1578,18 +1961,25 @@ def main():
         n_ag = t.get("num_agents", 2)
         agent_groups.setdefault(n_ag, []).append(t)
 
-    # Organizar gráficos em subpastas por agente se não desativado por flag
+    # Organizar gráficos em subpastas padronizadas por agente se não desativado por flag
     if not args.no_group:
+        agent_dir_map = {
+            1: "02_experimento_1_agente_cozinha_aberta",
+            2: "03_experimento_2_agentes_cooperacao",
+            4: "04_experimento_4_agentes_e_algoritmos",
+        }
         print(f"\n📂 Organizando gráficos em subpastas por agente ({sorted(list(agent_groups.keys()))}):")
         for n_ag, g_trials in sorted(agent_groups.items()):
-            sub_folder_name = f"{n_ag}_agente" if n_ag == 1 else f"{n_ag}_agentes"
+            sub_folder_name = agent_dir_map.get(n_ag, f"{n_ag}_agente" if n_ag == 1 else f"{n_ag}_agentes")
             sub_dir = out_dir / sub_folder_name
             generate_full_suite(g_trials, sub_dir, window=args.window, group_label=f"{n_ag} Agente{'s' if n_ag > 1 else ''}")
 
-        print(f"\n📈 Gerando análises macro de comparação geral na raiz ({out_dir.name}/)...")
-        plot_cross_agent_scaling(trials, out_dir)
-        plot_general_performance_comparison(trials, out_dir)
-        plot_general_hyperparameter_landscape(trials, out_dir)
+        macro_dir = out_dir / "01_visao_geral_e_evolucao"
+        macro_dir.mkdir(parents=True, exist_ok=True)
+        print(f"\n📈 Gerando análises macro de comparação geral em ({macro_dir.name}/)...")
+        plot_cross_agent_scaling(trials, macro_dir)
+        plot_general_performance_comparison(trials, macro_dir)
+        plot_general_hyperparameter_landscape(trials, macro_dir)
     else:
         n_ag = list(agent_groups.keys())[0] if agent_groups else 2
         generate_full_suite(trials, out_dir, window=args.window, group_label=f"{n_ag} Agente{'s' if n_ag > 1 else ''}")

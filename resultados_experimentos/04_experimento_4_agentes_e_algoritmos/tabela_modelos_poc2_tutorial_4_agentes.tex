@@ -1,0 +1,33 @@
+\begin{table*}[t]
+\centering
+\caption{Resultados Empíricos Detalhados do Grid Search MARL na POC 2 [Mapa: tutorial.txt | 4 Agentes]. O Modelo de Referência Campeão marcado com $\bigstar$ (\textbf{IMPALA 5e642\_00001}, LR=3e-04, $\gamma$=0.98, H=0.015) obteve a maior recompensa média global e fundamenta todos os diagnósticos comportamentais.}
+\label{tab:grid_search_completo_poc2}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{cccccccc}
+\toprule
+\textbf{Rank} & \textbf{Modelo (Algoritmo / Trial)} & \textbf{LR} & \textbf{Fator $\gamma$} & \textbf{Entropia} & \textbf{Iterações} & \textbf{Recompensa Máx.} & \textbf{Recompensa Final} \\
+\midrule
+1 $\bigstar$ [Referência] & \textbf{IMPALA 5e642\_00001} & 3e-04 & 0.98 & 0.015 & 1583 & \textbf{+3845.34} & +2537.57 \\
+2 & IMPALA 5e642\_00000 & 3e-04 & 0.98 & 0.015 & 1576 & +2618.60 & +2618.60 \\
+3 & IMPALA 5e642\_00002 & 5e-04 & 0.98 & 0.015 & 1586 & +2485.53 & +1755.55 \\
+4 & PPO c62b5\_00003 & 1e-04 & 0.99 & 0.020 & 2500 & +140.88 & +120.33 \\
+5 & DQN df92c\_00002 & 2e-04 & 0.98 & 0.015 & 2451 & +124.66 & +120.51 \\
+6 & APPO 743bb\_00001 & 3e-04 & 0.99 & 0.015 & 2100 & +110.87 & +94.18 \\
+7 & APPO 743bb\_00003 & 5e-04 & 0.99 & 0.015 & 2106 & +104.56 & +101.48 \\
+8 & PPO c62b5\_00002 & 5e-04 & 0.98 & 0.020 & 2500 & +101.81 & +76.57 \\
+9 & IMPALA 28d2f\_00002 & 5e-04 & 0.98 & 0.015 & 2035 & +101.32 & +101.32 \\
+10 & PPO c62b5\_00000 & 3e-04 & 0.98 & 0.020 & 2500 & +94.97 & +77.73 \\
+11 & IMPALA 28d2f\_00003 & 5e-04 & 0.98 & 0.015 & 2033 & +90.31 & +78.11 \\
+12 & PPO c62b5\_00001 & 3e-04 & 0.99 & 0.020 & 2500 & +78.73 & +17.23 \\
+13 & DQN df92c\_00001 & 1e-04 & 0.99 & 0.015 & 2451 & +70.05 & +70.05 \\
+14 & IMPALA 28d2f\_00001 & 3e-04 & 0.98 & 0.015 & 2017 & +68.88 & +62.67 \\
+15 & APPO 743bb\_00000 & 3e-04 & 0.98 & 0.015 & 2101 & +66.54 & +66.54 \\
+16 & IMPALA 28d2f\_00000 & 3e-04 & 0.98 & 0.015 & 2025 & +66.14 & +62.51 \\
+17 & DQN df92c\_00000 & 1e-04 & 0.98 & 0.015 & 2451 & +54.14 & +54.14 \\
+18 & APPO 743bb\_00002 & 5e-04 & 0.98 & 0.015 & 2112 & +51.13 & +46.82 \\
+19 & DQN df92c\_00003 & 2e-04 & 0.99 & 0.015 & 2451 & +50.90 & +48.53 \\
+20 & IMPALA 5e642\_00003 & 5e-04 & 0.98 & 0.015 & 1615 & +30.46 & +11.34 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table*}
