@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Execução local direta (sem Docker) utilizando o virtualenv do Python
-# Treina 4 agentes no mapa tutorial.txt com as 4 melhores combinações de hiperparâmetros
+# Direct Local Execution (Without Docker) Using Python Virtualenv
+# Trains 4 agents on tutorial.txt with the top-4 champion hyperparameter configs
 # ==============================================================================
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
 
-# Garante uso do Python correto (container Docker ou venv local)
+# Select the appropriate Python executable (Docker container or local venv)
 if [ -n "$PYTHON_CMD" ]; then
     :
 elif [ -f /.dockerenv ]; then
@@ -21,7 +22,7 @@ else
     export PYTHON_CMD="python"
 fi
 
-# Detecta memória e CPUs disponíveis para definir concorrência segura (evita OOM)
+# Detect available RAM and CPUs to configure safe concurrency (avoids OOM)
 TOTAL_RAM_GB=$(awk '/MemTotal/ { printf "%.0f", $2 / 1024 / 1024 }' /proc/meminfo 2>/dev/null || echo 16)
 CPU_COUNT=$($PYTHON_CMD -c "import os; print(os.cpu_count() or 4)" 2>/dev/null || echo 4)
 
@@ -47,13 +48,13 @@ export CONCURRENT=${CONCURRENT:-$DEFAULT_CONCURRENT}
 export EVAL_EPISODES=${EVAL_EPISODES:-20}
 
 echo "=================================================="
-echo "Iniciando Treinamento Local (Sem Docker)"
+echo "Starting Local Training (Without Docker)"
 echo "  Python:       $PYTHON_CMD"
-echo "  CPUs:         $CPU_COUNT (Workers: $WORKERS, Concorrentes: $CONCURRENT)"
-echo "  Agentes:      4"
-echo "  Mapa:         tutorial.txt"
-echo "  Modo:         TOP 4 Hiperparâmetros Campeões"
+echo "  CPUs:         $CPU_COUNT (Workers: $WORKERS, Concurrent: $CONCURRENT)"
+echo "  Agents:       4"
+echo "  Map:          tutorial.txt"
+echo "  Mode:         Top-4 Champion Hyperparameters"
 echo "=================================================="
 
-# Executa o ciclo completo de treinamento + avaliação pós-treino
+# Run the full training + post-training evaluation cycle
 bash experiments/training/run_experiment_cycle.sh "$@"

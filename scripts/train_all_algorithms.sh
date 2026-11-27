@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# TREINAMENTO COMPARATIVO MULTIAGENTE - TODOS OS 5 ALGORITMOS (LOCAL / PYTHON)
+# MULTI-AGENT COMPARATIVE TRAINING — ALL 5 ALGORITHMS (LOCAL / DOCKER)
 # ==============================================================================
-# Executa sequencialmente o treinamento dos 5 algoritmos disponíveis no Overcooked MARL:
-#   1. PPO    (Proximal Policy Optimization - Baseline Campeão com TOP-4 Hiperparâmetros)
-#   2. DQN    (Deep Q-Network com Prioritized Replay Buffer & Dueling Architecture)
-#   3. IMPALA (Importance Weighted Actor-Learner Architecture com V-trace)
+# Sequentially trains the 5 available algorithms in Overcooked MARL:
+#   1. PPO    (Proximal Policy Optimization — Top-4 Hyperparameter Baseline)
+#   2. DQN    (Deep Q-Network with Prioritized Replay Buffer & Dueling Architecture)
+#   3. IMPALA (Importance Weighted Actor-Learner Architecture with V-Trace)
 #   4. APPO   (Asynchronous Proximal Policy Optimization)
-#   5. BC     (Behavioral Cloning / Imitation Learning supervisionado)
+#   5. BC     (Behavioral Cloning / Supervised Imitation Learning)
 #
-# Configurações padrão: 4 agentes no mapa tutorial.txt
+# Default configuration: 4 agents on tutorial.txt
 # ==============================================================================
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
 
-# 1. Garante o uso do Python apropriado (container Docker ou venv local)
+# 1. Select the appropriate Python executable (Docker container or local venv)
 if [ -n "$PYTHON_CMD" ]; then
     :
 elif [ -f /.dockerenv ]; then
@@ -29,43 +30,43 @@ else
     export PYTHON_CMD="python"
 fi
 
-# Verifica se o ambiente Python possui as dependências necessárias
+# Verify that required Python dependencies are installed
 if ! $PYTHON_CMD -c "import numpy" &>/dev/null; then
-    echo "❌ Erro: O Python selecionado ($PYTHON_CMD) não possui as dependências instaladas (ex: numpy)."
+    echo "❌ Error: Selected Python ($PYTHON_CMD) is missing required dependencies (e.g., numpy)."
     echo ""
-    echo "💡 Como resolver:"
-    echo "  1. No servidor com Docker (recomendado, com GPU):"
-    echo "     ALGOS=\"${ALGOS:-dqn impala appo bc}\" ./iniciar_servidor.sh"
-    echo "     ou:"
-    echo "     ALGOS=\"${ALGOS:-dqn impala appo bc}\" ./run_server_docker.sh"
+    echo "💡 How to fix:"
+    echo "  1. On a GPU server with Docker (recommended):"
+    echo "     ALGOS=\"${ALGOS:-dqn impala appo bc}\" ./scripts/start_server.sh"
+    echo "     or:"
+    echo "     ALGOS=\"${ALGOS:-dqn impala appo bc}\" ./scripts/run_server_docker.sh"
     echo ""
-    echo "  2. Para rodar diretamente no host sem Docker:"
+    echo "  2. To run directly on the host without Docker:"
     echo "     python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
     echo ""
     exit 1
 fi
 
-# 2. Ajuda CLI
+# 2. CLI Help
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
-    echo "Uso: bash treinar_todos_algoritmos.sh [OPÇÕES]"
+    echo "Usage: bash scripts/train_all_algorithms.sh [OPTIONS]"
     echo ""
-    echo "Executa os 5 treinamentos (PPO, DQN, IMPALA, APPO, BC) com 4 agentes localmente."
+    echo "Runs all 5 training pipelines (PPO, DQN, IMPALA, APPO, BC) with 4 agents."
     echo ""
-    echo "Opções opcionais repassadas aos treinamentos:"
-    echo "  --episodes <N>       Sobrescreve o total de episódios de treino"
-    echo "  --map <mapa.txt>     Nome do mapa (padrão: tutorial.txt)"
-    echo "  --num-agents <N>     Quantidade de agentes (padrão: 4)"
-    echo "  --fail-fast          Interrompe a bateria de testes se algum algoritmo falhar"
+    echo "Optional flags forwarded to training scripts:"
+    echo "  --episodes <N>       Override total training episodes"
+    echo "  --map <map.txt>      Map name (default: tutorial.txt)"
+    echo "  --num-agents <N>     Number of agents (default: 4)"
+    echo "  --fail-fast          Stop immediately if any algorithm fails"
     echo ""
-    echo "Variáveis de ambiente suportadas:"
-    echo "  ALGOS=\"ppo dqn ...\"  Lista customizada de algoritmos a executar"
-    echo "  WORKERS=<N>          Quantidade de workers paralelos de rollout"
-    echo "  CONCURRENT=<N>       Quantidade de trials concorrentes no Ray Tune"
-    echo "  EVAL_EPISODES=<N>    Episódios de avaliação pós-treino (padrão: 20)"
+    echo "Supported environment variables:"
+    echo "  ALGOS=\"ppo dqn ...\"  Custom space-separated list of algorithms to run"
+    echo "  WORKERS=<N>          Number of parallel rollout workers"
+    echo "  CONCURRENT=<N>       Number of concurrent Ray Tune trials"
+    echo "  EVAL_EPISODES=<N>    Post-training evaluation episodes (default: 20)"
     exit 0
 fi
 
-# 3. Tratamento de flags globais
+# 3. Parse global flags
 FAIL_FAST=0
 PASSTHROUGH_ARGS=()
 for arg in "$@"; do
@@ -86,7 +87,7 @@ if [ "$HAS_EPISODES" -eq 0 ]; then
     PASSTHROUGH_ARGS+=("--episodes" "1000")
 fi
 
-# 4. Definição da lista de algoritmos
+# 4. Select algorithms list
 DEFAULT_ALGOS=("ppo" "dqn" "impala" "appo" "bc")
 if [ -n "$ALGOS" ]; then
     read -r -a SELECTED_ALGOS <<< "$ALGOS"
@@ -94,7 +95,7 @@ else
     SELECTED_ALGOS=("${DEFAULT_ALGOS[@]}")
 fi
 
-# 5. Otimização de recursos de CPU e Memória (evita crash por esgotamento de RAM / OOM)
+# 5. Auto-tune CPU/RAM concurrency to avoid OOM crashes
 TOTAL_RAM_GB=$(awk '/MemTotal/ { printf "%.0f", $2 / 1024 / 1024 }' /proc/meminfo 2>/dev/null || echo 16)
 CPU_COUNT=$($PYTHON_CMD -c "import os; print(os.cpu_count() or 4)" 2>/dev/null || echo 4)
 
@@ -123,17 +124,17 @@ TOTAL_ALGOS=${#SELECTED_ALGOS[@]}
 START_ALL_TIME=$(date +%s)
 
 echo "======================================================================"
-echo "🚀 INICIANDO BATERIA DE TREINAMENTO DOS 5 ALGORITMOS MULTIAGENTE"
+echo "🚀 STARTING MULTI-AGENT BENCHMARK SUITE (5 ALGORITHMS)"
 echo "======================================================================"
-echo "  Python Executável: $PYTHON_CMD"
-echo "  CPUs Detectadas:   $CPU_COUNT"
-echo "  Workers Rollout:   $WORKERS"
-echo "  Concorrência Ray:  $CONCURRENT"
-echo "  Agentes Padrão:    4"
-echo "  Mapa Padrão:       tutorial.txt"
-echo "  Algoritmos:        ${SELECTED_ALGOS[*]} (Total: $TOTAL_ALGOS)"
+echo "  Python Executable: $PYTHON_CMD"
+echo "  Detected CPUs:     $CPU_COUNT"
+echo "  Rollout Workers:   $WORKERS"
+echo "  Ray Concurrency:   $CONCURRENT"
+echo "  Default Agents:    4"
+echo "  Default Map:       tutorial.txt"
+echo "  Algorithms:        ${SELECTED_ALGOS[*]} (Total: $TOTAL_ALGOS)"
 if [ ${#PASSTHROUGH_ARGS[@]} -gt 0 ]; then
-    echo "  Argumentos Extras: ${PASSTHROUGH_ARGS[*]}"
+    echo "  Extra Arguments:   ${PASSTHROUGH_ARGS[*]}"
 fi
 echo "======================================================================"
 echo ""
@@ -146,7 +147,7 @@ for ALGO in "${SELECTED_ALGOS[@]}"; do
     ALGO_UPPER="$(echo "$ALGO" | tr '[:lower:]' '[:upper:]')"
     echo ""
     echo "======================================================================"
-    echo "▶ [$INDEX/$TOTAL_ALGOS] EXECUTANDO TREINAMENTO: $ALGO_UPPER"
+    echo "▶ [$INDEX/$TOTAL_ALGOS] RUNNING TRAINING: $ALGO_UPPER"
     echo "======================================================================"
     START_ALGO_TIME=$(date +%s)
 
@@ -160,13 +161,13 @@ for ALGO in "${SELECTED_ALGOS[@]}"; do
     ALGO_DURATION["$ALGO"]=$DURATION
 
     if [ $EXIT_CODE -eq 0 ]; then
-        ALGO_STATUS["$ALGO"]="✅ SUCESSO"
-        echo "🎉 [$INDEX/$TOTAL_ALGOS] Treinamento do $ALGO_UPPER concluído com sucesso em $((DURATION / 60))m $((DURATION % 60))s."
+        ALGO_STATUS["$ALGO"]="✅ SUCCESS"
+        echo "🎉 [$INDEX/$TOTAL_ALGOS] $ALGO_UPPER training completed successfully in $((DURATION / 60))m $((DURATION % 60))s."
     else
-        ALGO_STATUS["$ALGO"]="❌ FALHA (Código $EXIT_CODE)"
-        echo "⚠️ [$INDEX/$TOTAL_ALGOS] Treinamento do $ALGO_UPPER finalizou com código $EXIT_CODE."
+        ALGO_STATUS["$ALGO"]="❌ FAILED (Code $EXIT_CODE)"
+        echo "⚠️ [$INDEX/$TOTAL_ALGOS] $ALGO_UPPER training exited with code $EXIT_CODE."
         if [ "$FAIL_FAST" -eq 1 ]; then
-            echo "⛔ Flag --fail-fast ativa. Abortando bateria de treinamentos."
+            echo "⛔ --fail-fast flag enabled. Aborting training suite."
             exit $EXIT_CODE
         fi
     fi
@@ -178,11 +179,11 @@ TOTAL_DURATION=$((END_ALL_TIME - START_ALL_TIME))
 
 echo ""
 echo "======================================================================"
-echo "🏁 RELATÓRIO FINAL DA BATERIA DE TREINAMENTOS (5 ALGORITMOS)"
+echo "🏁 FINAL TRAINING SUITE REPORT (5 ALGORITHMS)"
 echo "======================================================================"
-echo "Duração Total: $((TOTAL_DURATION / 60))m $((TOTAL_DURATION % 60))s"
+echo "Total Duration: $((TOTAL_DURATION / 60))m $((TOTAL_DURATION % 60))s"
 echo ""
-echo "| Algoritmo | Status | Duração |"
+echo "| Algorithm | Status | Duration |"
 echo "| :--- | :--- | :--- |"
 for ALGO in "${SELECTED_ALGOS[@]}"; do
     ALGO_UPPER="$(echo "$ALGO" | tr '[:lower:]' '[:upper:]')"
@@ -191,12 +192,12 @@ for ALGO in "${SELECTED_ALGOS[@]}"; do
 done
 echo ""
 
-echo "📊 TABELA COMPARATIVA ATUALIZADA DOS MODELOS:"
+echo "📊 UPDATED MODEL COMPARISON TABLE:"
 $PYTHON_CMD -c "from experiments.utils.results_tracker import generate_markdown_summary_table; print(generate_markdown_summary_table())" 2>/dev/null || true
 
 echo ""
 echo "======================================================================"
-echo "💡 Visualização no Pygame de qualquer modelo treinado:"
+echo "💡 Visualize any trained model in Pygame:"
 echo "   $PYTHON_CMD experiments/visualization/visualize_best_model.py"
 echo "   $PYTHON_CMD experiments/visualization/visualize_all_models.py"
 echo "======================================================================"
