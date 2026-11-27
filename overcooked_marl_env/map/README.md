@@ -8,11 +8,11 @@ Loads, parses, and validates `.txt` kitchen layouts using a **Facade** (`MapLoad
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="../../resultados_experimentos/02_experimento_1_agente_cozinha_aberta/env_hud_default_map_1_agente.png" alt="default_map.txt" width="100%" />
+      <img src="../../experiment_results/02_experimento_1_agente_cozinha_aberta/env_hud_default_map_1_agente.png" alt="default_map.txt" width="100%" />
       <br/><sub><b><code>default_map.txt</code> (7×7):</b> Open kitchen layout.</sub>
     </td>
     <td align="center" width="50%">
-      <img src="../../resultados_experimentos/03_experimento_2_agentes_cooperacao/env_hud_tutorial_2_agentes.png" alt="tutorial.txt" width="100%" />
+      <img src="../../experiment_results/03_experimento_2_agentes_cooperacao/env_hud_tutorial_2_agentes.png" alt="tutorial.txt" width="100%" />
       <br/><sub><b><code>tutorial.txt</code> (15×11):</b> Divided multi-agent kitchen (up to 4 agents).</sub>
     </td>
   </tr>

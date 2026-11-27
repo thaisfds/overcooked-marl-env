@@ -5,7 +5,7 @@ Modular Multi-Agent Reinforcement Learning (MARL) environment package featuring 
 ---
 
 <div align="center">
-  <img src="../resultados_experimentos/01_visao_geral_e_evolucao/evolucao_ambiente_poc1_vs_poc2.png" alt="Environment Architecture Evolution" width="90%" />
+  <img src="../experiment_results/01_visao_geral_e_evolucao/evolucao_ambiente_poc1_vs_poc2.png" alt="Environment Architecture Evolution" width="90%" />
 </div>
 
 ## Sub-Packages

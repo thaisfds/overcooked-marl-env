@@ -8,11 +8,11 @@ Training, hyperparameter sweeps, quantitative evaluation, and rollout visualizat
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="../resultados_experimentos/01_visao_geral_e_evolucao/comparacao_algoritmos_marl.png" alt="Algorithm Benchmark" width="100%" />
+      <img src="../experiment_results/01_visao_geral_e_evolucao/comparacao_algoritmos_marl.png" alt="Algorithm Benchmark" width="100%" />
       <br/><sub><b>Multi-Algorithm Benchmark:</b> IMPALA, APPO, DQN, and PPO.</sub>
     </td>
     <td align="center" width="50%">
-      <img src="../resultados_experimentos/assets/gameplay_4_agentes_equipe.gif" alt="4-Agent Rollout Preview" width="100%" />
+      <img src="../experiment_results/assets/gameplay_4_agentes_equipe.gif" alt="4-Agent Rollout Preview" width="100%" />
       <br/><sub><b>Trained Policy Rollout:</b> 4-agent brigade in <code>tutorial.txt</code>.</sub>
     </td>
   </tr>
@@ -20,7 +20,7 @@ Training, hyperparameter sweeps, quantitative evaluation, and rollout visualizat
 </div>
 
 > [!TIP]
-> Browse all generated plots, learning curves, and benchmark reports in **[`resultados_experimentos/`](../resultados_experimentos/README.md)**.
+> Browse all generated plots, learning curves, and benchmark reports in **[`experiment_results/`](../experiment_results/README.md)**.
 
 ## Directory Structure
 

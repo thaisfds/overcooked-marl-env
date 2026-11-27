@@ -5,7 +5,7 @@ Dual visualization backend providing a real-time Pygame graphical HUD (`render_m
 ---
 
 <div align="center">
-  <img src="../../resultados_experimentos/03_experimento_2_agentes_cooperacao/env_hud_tutorial_2_agentes.png" alt="Pygame HUD Preview" width="70%" />
+  <img src="../../experiment_results/03_experimento_2_agentes_cooperacao/env_hud_tutorial_2_agentes.png" alt="Pygame HUD Preview" width="70%" />
 </div>
 
 ## Sub-package Contents

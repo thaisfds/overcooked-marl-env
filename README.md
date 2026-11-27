@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./resultados_experimentos/assets/banner_header.png" alt="Overcooked MARL Environment" width="100%" />
+  <img src="./experiment_results/assets/banner_header.png" alt="Overcooked MARL Environment" width="100%" />
 </p>
 
 # Overcooked MARL Environment
@@ -10,7 +10,7 @@
 
 A cooperative Multi-Agent Reinforcement Learning (MARL) environment inspired by Overcooked, developed as part of an undergraduate thesis (DCC/UFMG). Agents work together in a grid-based kitchen to collect ingredients, chop them, assemble plates, and deliver recipes in order.
 
-Experiment results, learning curves, and algorithm comparisons (`PPO`, `DQN`, `IMPALA`, `APPO`, `BC`) are organized in [`resultados_experimentos/`](./resultados_experimentos/README.md).
+Experiment results, learning curves, and algorithm comparisons (`PPO`, `DQN`, `IMPALA`, `APPO`, `BC`) are organized in [`experiment_results/`](./experiment_results/README.md).
 
 <table>
   <tr>
@@ -19,10 +19,10 @@ Experiment results, learning curves, and algorithm comparisons (`PPO`, `DQN`, `I
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="./resultados_experimentos/assets/gameplay_2_agentes_cooperacao.gif" alt="2-Agent Cooperative Gameplay" width="100%" />
+      <img src="./experiment_results/assets/gameplay_2_agentes_cooperacao.gif" alt="2-Agent Cooperative Gameplay" width="100%" />
     </td>
     <td align="center" width="50%">
-      <img src="./resultados_experimentos/assets/gameplay_4_agentes_equipe.gif" alt="4-Agent Cooperative Gameplay" width="100%" />
+      <img src="./experiment_results/assets/gameplay_4_agentes_equipe.gif" alt="4-Agent Cooperative Gameplay" width="100%" />
     </td>
   </tr>
 </table>
@@ -41,7 +41,7 @@ In this PettingZoo/Gymnasium environment, agents must cooperate to:
 Agents receive shared rewards upon successful deliveries, encouraging coordination strategies such as division of labor, passing items across counters, and parallel preparation.
 
 <div align="center">
-  <img src="./resultados_experimentos/01_visao_geral_e_evolucao/evolucao_ambiente_poc1_vs_poc2.png" alt="Environment Evolution" width="90%" />
+  <img src="./experiment_results/01_visao_geral_e_evolucao/evolucao_ambiente_poc1_vs_poc2.png" alt="Environment Evolution" width="90%" />
 </div>
 
 ---
@@ -202,9 +202,10 @@ python -m unittest discover -s overcooked_marl_env/tests
 
 ```text
 overcooked-marl-env/
-├── resultados_experimentos/ # Experiment plots, summaries, and gameplay GIFs
+├── experiment_results/      # Experiment plots, summaries, and gameplay GIFs
 ├── overcooked_marl_env/     # Environment package (core, environment, map, mechanics, rendering, tests)
 ├── experiments/             # RL training, evaluation, analysis, and visualization scripts
+├── scripts/                 # Server deployment, Docker, local runner, and multi-algorithm benchmark scripts
 └── example/                 # Example scripts and map templates
 ```
 
@@ -214,6 +215,6 @@ overcooked-marl-env/
 
 | Section | Links |
 | :--- | :--- |
-| **Experiment Results** | [Overview](./resultados_experimentos/README.md) · [01 — Evolution](./resultados_experimentos/01_visao_geral_e_evolucao/README.md) · [02 — 1-Agent](./resultados_experimentos/02_experimento_1_agente_cozinha_aberta/README.md) · [03 — 2-Agent](./resultados_experimentos/03_experimento_2_agentes_cooperacao/README.md) · [04 — 4-Agent](./resultados_experimentos/04_experimento_4_agentes_e_algoritmos/README.md) |
+| **Experiment Results** | [Overview](./experiment_results/README.md) · [01 — Evolution](./experiment_results/01_visao_geral_e_evolucao/README.md) · [02 — 1-Agent](./experiment_results/02_experimento_1_agente_cozinha_aberta/README.md) · [03 — 2-Agent](./experiment_results/03_experimento_2_agentes_cooperacao/README.md) · [04 — 4-Agent](./experiment_results/04_experimento_4_agentes_e_algoritmos/README.md) |
 | **Training & Evaluation** | [Experiments Pipeline](./experiments/README.md) |
 | **Environment Package** | [Package](./overcooked_marl_env/README.md) · [Core](./overcooked_marl_env/core/README.md) · [Environment](./overcooked_marl_env/environment/README.md) · [Map](./overcooked_marl_env/map/README.md) · [Mechanics](./overcooked_marl_env/mechanics/README.md) · [Rendering](./overcooked_marl_env/rendering/README.md) · [Utils](./overcooked_marl_env/utils/README.md) |
