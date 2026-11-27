@@ -248,7 +248,7 @@ def main():
             num_steps_sampled_before_learning_starts=2000,
             replay_buffer_config={
                 "type": SafeMAPRB,
-                "capacity": 100000,
+                "capacity": 300000,
                 "prioritized_replay_alpha": 0.6,
                 "prioritized_replay_beta": 0.4,
             },
@@ -266,8 +266,8 @@ def main():
             exploration_config={
                 "type": "EpsilonGreedy",
                 "initial_epsilon": 1.0,
-                "final_epsilon": 0.02,
-                "epsilon_timesteps": 150000,
+                "final_epsilon": 0.05,
+                "epsilon_timesteps": 1500000,
             },
         )
         .multi_agent(
@@ -283,8 +283,8 @@ def main():
         config = result.get("config", {})
         env_config_dict = config.get("env_config", {})
         episodes_limit = env_config_dict.get("num_episodes", 1000)
-        target_timesteps = episodes_limit * 1000
-        return result.get("timesteps_total", 0) >= target_timesteps or result.get("training_iteration", 0) >= episodes_limit
+        target_timesteps = episodes_limit * 2000
+        return result.get("timesteps_total", 0) >= target_timesteps
 
     exp_dir = Path(__file__).resolve().parent.parent
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
