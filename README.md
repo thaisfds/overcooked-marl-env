@@ -10,6 +10,8 @@
 
 A cooperative Multi-Agent Reinforcement Learning (MARL) environment inspired by Overcooked, developed as part of an undergraduate thesis (DCC/UFMG). Agents work together in a grid-based kitchen to collect ingredients, chop them, assemble plates, and deliver recipes in order.
 
+> 🎥 **Project Pitch:** Watch the partial thesis presentation on [YouTube](https://youtu.be/WyLkHqmYgBE).
+
 Experiment results, learning curves, and algorithm comparisons (`PPO`, `DQN`, `IMPALA`, `APPO`, `BC`) are organized in [`experiment_results/`](./experiment_results/README.md).
 
 <table>
