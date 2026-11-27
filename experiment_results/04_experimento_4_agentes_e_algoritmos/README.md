@@ -1,92 +1,228 @@
-<div align="center">
-
-![Post-Fix Best Eval](https://img.shields.io/badge/DQN_Eval-+114.87_pts_(20s:_+184.8)-2ca02c?style=for-the-badge&labelColor=1e1b4b)
-![Post-Fix Best Train](https://img.shields.io/badge/PPO_Train-+140.88_pts_(5M_steps)-3b82f6?style=for-the-badge&labelColor=1e1b4b)
-![BC Accuracy](https://img.shields.io/badge/BC_Imitation-81.58%25_acc-f59e0b?style=for-the-badge&labelColor=1e1b4b)
-
 # 04 — 4-Agent Brigade & Multi-Algorithm Benchmark
 
-Four independent policies operating simultaneously in `tutorial.txt` (2 chopping in the top zone, 2 fetching/plating/delivering in the bottom zone), comparing **IMPALA**, **APPO**, **DQN/Rainbow**, **PPO**, and **Behavioral Cloning (BC)** before and after stage-level anti-hacking locks.
-
----
-
-* **Best Post-Fix Overall (Eval & Visual Rollout):** `DQN df92c_00002` (`LR = 2e-4`, `γ = 0.98`, `n-step = 5`, `2.5M steps`) — **`+124.66` train**, **`+114.87` deterministic eval**, and **`+184.80` in 20s** (only model to combine 2 ingredients onto a plate: `cucumber + tomato`).
-* **Highest Post-Fix Training Mean:** `PPO c62b5_00003` (`LR = 1e-4`, `γ = 0.99`, `H = 0.02`, `5.0M steps`) — **`+140.88` train** (episode peak `+443.67`).
-* **Highest Single-Episode Peak (Post-Fix):** `APPO 743bb_00003` (`LR = 5e-4`, `γ = 0.99`) — **`+512.47` single-episode peak**.
-* **Anti-Hacking Verification:** Pre-fix `IMPALA 5e642_00001` reached `+3,845.34` via shaping loops (with entropy collapsing to `0.020` and `-16.00` eval); post-fix `IMPALA 28d2f_00002` eliminated all loops (`+101.32` honest train, `H = 1.479`).
+Four independent policies operating simultaneously in the divided kitchen (`tutorial.txt`, 2 agents chopping in the top zone and 2 agents fetching, plating, and delivering in the bottom zone), comparing **IMPALA**, **APPO**, **DQN/Rainbow**, **PPO**, and **Behavioral Cloning (BC)**.
 
 <div align="center">
   <img src="../assets/gameplay_4_agentes_equipe.gif" alt="4-Agent Cooperative Gameplay" width="65%" />
 </div>
 
-<br/>
+---
 
-<div align="center">
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="./fig_antihacking_before_after_tutorial_4_agentes.png" alt="Anti-Hacking Before vs After" width="100%" />
-      <br/><sub><b>Anti-Hacking Proof:</b> IMPALA reward &amp; entropy before vs. after stage locks.</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="./fig_postfix_learning_curves_by_algo_tutorial_4_agentes.png" alt="Post-Fix Learning Curves" width="100%" />
-      <br/><sub><b>Clean-Scale Post-Fix Curves:</b> DQN hits <code>+124.7</code> in half the steps (2.5M vs. 5M).</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="./fig_train_vs_eval_vs_visual_gap_tutorial_4_agentes.png" alt="Train vs Eval vs Visual Gap" width="100%" />
-      <br/><sub><b>Transfer Gap:</b> DQN preserves greedy eval performance; PG methods drop under <code>argmax</code>.</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="./fig_visual_rollout_20s_timeline_tutorial_4_agentes.png" alt="20s Visual Rollout Timeline" width="100%" />
-      <br/><sub><b>20s Rollout Timeline:</b> DQN plates cucumber (step 36) + tomato (step 42), then plateaus after step 57.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="./fig_eval_agent_breakdown_by_algo_tutorial_4_agentes.png" alt="Per-Agent Evaluation Breakdown" width="100%" />
-      <br/><sub><b>Per-Agent Breakdown:</b> All 4 agents positive in DQN (<code>agent_2 = +58.4</code>).</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="./fig_bc_training_curve_tutorial_4_agentes.png" alt="BC Training Curve" width="100%" />
-      <br/><sub><b>Behavioral Cloning:</b> Cross-entropy loss drops <code>1.603 → 0.558</code> (<code>81.58%</code> accuracy).</sub>
-    </td>
-  </tr>
-</table>
-</div>
+## Summary
 
-<details>
-<summary><b>All Plots in this Folder (26 files)</b></summary>
+Scaling decentralized cooperation from 2 to 4 independent policies expanded the joint action space ($5^4 = 625$) and introduced strong non-stationarity. Across iterative training and diagnostic cycles, the benchmark evolved through three main milestones:
 
-* [`fig_antihacking_before_after_tutorial_4_agentes.png`](./fig_antihacking_before_after_tutorial_4_agentes.png) — IMPALA reward &amp; entropy comparison before vs. after anti-hacking locks.
-* [`fig_postfix_learning_curves_by_algo_tutorial_4_agentes.png`](./fig_postfix_learning_curves_by_algo_tutorial_4_agentes.png) — Clean-scale post-fix learning curves by algorithm (PPO, DQN, APPO, IMPALA) over environment steps.
-* [`fig_train_vs_eval_vs_visual_gap_tutorial_4_agentes.png`](./fig_train_vs_eval_vs_visual_gap_tutorial_4_agentes.png) — Stochastic training vs. deterministic evaluation vs. 20s visual rollout comparison.
-* [`fig_eval_agent_breakdown_by_algo_tutorial_4_agentes.png`](./fig_eval_agent_breakdown_by_algo_tutorial_4_agentes.png) — Individual deterministic evaluation reward per agent (`agent_0`–`agent_3`).
-* [`fig_bc_training_curve_tutorial_4_agentes.png`](./fig_bc_training_curve_tutorial_4_agentes.png) — Behavioral Cloning supervised loss convergence over 30 epochs (`81.58%` imitation accuracy).
-* [`fig_visual_rollout_20s_timeline_tutorial_4_agentes.png`](./fig_visual_rollout_20s_timeline_tutorial_4_agentes.png) — Step-by-step 20s rollout reward timeline highlighting DQN's 2-ingredient plating milestones.
-* [`fig_reference_model_card_tutorial_4_agentes.png`](./fig_reference_model_card_tutorial_4_agentes.png) — Standalone reference model specification card.
-* [`fig_convergence_best_vs_others_tutorial_4_agentes.png`](./fig_convergence_best_vs_others_tutorial_4_agentes.png) — Champion convergence vs. mean of all other models.
-* [`fig_policy_coordination_tutorial_4_agentes.png`](./fig_policy_coordination_tutorial_4_agentes.png) — Policy coordination dynamics.
-* [`fig_cycle_temporal_optimization_tutorial_4_agentes.png`](./fig_cycle_temporal_optimization_tutorial_4_agentes.png) — Episode step-length temporal optimization.
-* [`fig_ranking_top_models_tutorial_4_agentes.png`](./fig_ranking_top_models_tutorial_4_agentes.png) — Top-10 model ranking by maximum training reward.
-* [`env_hud_tutorial_4_agentes.png`](./env_hud_tutorial_4_agentes.png) — 4-agent simulator HUD in `tutorial.txt`.
-* [`fig_algorithm_comparison_tutorial_4_agentes.png`](./fig_algorithm_comparison_tutorial_4_agentes.png) — Performance comparison across IMPALA, APPO, DQN, and PPO.
-* [`fig_training_time_and_efficiency_tutorial_4_agentes.png`](./fig_training_time_and_efficiency_tutorial_4_agentes.png) — Training duration (hours) and sampling throughput (steps/s).
-* [`fig_agent_workload_distribution_tutorial_4_agentes.png`](./fig_agent_workload_distribution_tutorial_4_agentes.png) — Emergent division of labor across the 4 chefs.
-* [`fig_radar_performance_profile_tutorial_4_agentes.png`](./fig_radar_performance_profile_tutorial_4_agentes.png) — Multi-criteria radar comparison of top models.
-* [`learning_curves_tune_tutorial_4_agentes.png`](./learning_curves_tune_tutorial_4_agentes.png) — Full learning curves for all 20 benchmark models (legend below chart).
-* [`fig_dishes_and_diversity_tutorial_4_agentes.png`](./fig_dishes_and_diversity_tutorial_4_agentes.png) — Delivered dishes and recipe diversity.
-* [`fig_reward_vs_deliveries_tutorial_4_agentes.png`](./fig_reward_vs_deliveries_tutorial_4_agentes.png) — Reward vs. deliveries correlation.
-* [`fig_idle_time_and_inactivity_tutorial_4_agentes.png`](./fig_idle_time_and_inactivity_tutorial_4_agentes.png) — Idle time analysis.
-* [`fig_delivery_timeline_growth_tutorial_4_agentes.png`](./fig_delivery_timeline_growth_tutorial_4_agentes.png) — Delivery progression across training phases.
-* [`pathologies_behavior_tutorial_4_agentes.png`](./pathologies_behavior_tutorial_4_agentes.png) — Team cooperation balance.
-* [`hyperparameter_comparison_tutorial_4_agentes.png`](./hyperparameter_comparison_tutorial_4_agentes.png) — Hyperparameter sensitivity analysis.
-* [`fig_episode_efficiency_tutorial_4_agentes.png`](./fig_episode_efficiency_tutorial_4_agentes.png) — Episode efficiency and reward density.
-* [`fig_entropy_dynamics_tutorial_4_agentes.png`](./fig_entropy_dynamics_tutorial_4_agentes.png) — Policy entropy dynamics.
-* [`fig_loss_convergence_tutorial_4_agentes.png`](./fig_loss_convergence_tutorial_4_agentes.png) — Gradient and loss convergence.
-</details>
+1. **Throughput & Reward-Hacking Diagnosis (Pre-Fix):** Initial multi-algorithm sweeps showed that asynchronous V-Trace architectures (`IMPALA`, `APPO`) run **5x–7x faster** than synchronous `PPO` and `DQN`. However, visual inspection and deterministic evaluation exposed shaping exploits (`+3,845` to `+3,990` training scores with `0` deliveries and entropy collapsing near `0.02`), driven by repeated counter handoff, station placement, and ready-item pickup loops.
+2. **Stage-Level Anti-Hacking Locks & 3-Day Post-Fix Benchmark:** Adding per-item stage locks (`place_stages_awarded`, `pickup_ready_awarded`, `place_on_station_awarded`) completely eliminated reward hacking across all 17 post-fix models (training means in an honest `+50.9` to `+140.9` range with healthy entropy `0.96–1.50`):
+   * **DQN (`df92c_00002`, 2.5M steps)** delivered the best overall reliability and sample efficiency: `+124.66` training mean, the **only algorithm to preserve greedy deterministic evaluation performance (`+114.87`, all 4 agents positive)**, and **`+184.80`** in the 20s visual rollout — being the only model to combine 2 ingredients (`cucumber + tomato`, 2/3 of `FRESH_SALAD`) onto a single plate.
+   * **PPO (`c62b5_00003`, 5.0M steps)** achieved the highest post-fix training mean (`+140.88`, episode peak `+443.67`), while **APPO (`743bb_00003`)** reached the highest single-episode peak (`+512.47`) and **IMPALA (`28d2f_00002`)** maintained the fastest throughput (`+101.32` in ~5.85h). All three policy-gradient families still retained high final entropy (`H = 1.17–1.48`), causing drops under deterministic `argmax` evaluation.
+   * **Behavioral Cloning (`BC`)** converged smoothly over 30 epochs (`1.603 → 0.558` loss, **`81.58%` imitation accuracy**), providing a viable supervised warm-start.
+3. **Next Optimization (In Progress):** Step-by-step replay of `DQN df92c_00002` revealed that early epsilon decay (`150k` steps, only 6% of training) and a `100k` replay buffer prevented agents from discovering full deliveries after assembling partial plates. The training script was recalibrated to `1.5M` exploration steps (`final_epsilon = 0.05`), a `300k` buffer, and longer step budgets (`5M–8M` steps).
+
+*All charts below are automatically regenerated by [`experiments/analysis/generate_report_charts.py`](../../experiments/analysis/generate_report_charts.py) and paired with general interpretation guides so they remain valid across future runs.*
 
 ---
 
-⬅**[Back to Results Index](../README.md)**
+## 1. Kitchen Layout & Reference Model
+
+### Simulator HUD
+<p align="center">
+  <img src="./env_hud_tutorial_4_agentes.png" alt="4-Agent Simulator HUD" width="80%" />
+</p>
+
+> **How to interpret:** Shows the spatial layout of `tutorial.txt` with all 4 agents active, highlighting the central dividing counter, cutting boards (`C`), ingredient and plate dispensers (`I`, `P`), delivery stations (`D`), and the live order queue HUD. Use this as a spatial reference when analyzing agent specialization and bottlenecks.
+
+### Reference Model Card
+<p align="center">
+  <img src="./fig_reference_model_card_tutorial_4_agentes.png" alt="Reference Model Specification Card" width="75%" />
+</p>
+
+> **How to interpret:** Summarizes the top-ranked reference model (algorithm, trial ID, checkpoint, hyperparameters, total steps, and max/final training reward) that serves as the anchor for the diagnostic charts below.
+
+---
+
+## 2. Learning Progression & Multi-Algorithm Comparison
+
+### Full Comparative Learning Curves
+<p align="center">
+  <img src="./learning_curves_tune_tutorial_4_agentes.png" alt="Full Learning Curves" width="95%" />
+</p>
+
+> **How to interpret:** Plots smoothed mean episode reward over training iterations for every loaded trial. A healthy run climbs steadily from negative initial step costs toward positive reward milestones. Abrupt vertical spikes followed by sudden crashes often indicate instability or reward-shaping loops rather than sustainable deliveries.
+
+### Clean-Scale Post-Fix Learning Curves
+<p align="center">
+  <img src="./fig_postfix_learning_curves_by_algo_tutorial_4_agentes.png" alt="Post-Fix Learning Curves by Algorithm" width="95%" />
+</p>
+
+> **How to interpret:** Compares the champion of each algorithm family (bold lines) and remaining trials (faded lines) on a shared environment-steps axis (in millions), excluding pre-fix reward-hacking outliers. Steeper early slopes indicate higher sample efficiency; curves still rising at the right edge indicate the algorithm has not yet plateaued and benefits from longer training.
+
+### Reference Convergence vs. Mean of Other Models
+<p align="center">
+  <img src="./fig_convergence_best_vs_others_tutorial_4_agentes.png" alt="Champion Convergence vs Others" width="90%" />
+</p>
+
+> **How to interpret:** Contrasts the reference model's reward curve against the average of all other models. A wide, sustained gap above the dashed mean shows strong sensitivity to hyperparameter or algorithm choice; overlapping curves indicate consistent performance across configurations.
+
+### Top-10 Model Ranking
+<p align="center">
+  <img src="./fig_ranking_top_models_tutorial_4_agentes.png" alt="Top-10 Model Ranking" width="90%" />
+</p>
+
+> **How to interpret:** Ranks the top trials by maximum training reward achieved. Always cross-check high training bars against deterministic evaluation and delivery charts to distinguish genuine task mastery from high-variance training spikes.
+
+### Algorithm Family Comparison
+<p align="center">
+  <img src="./fig_algorithm_comparison_tutorial_4_agentes.png" alt="Algorithm Family Comparison" width="90%" />
+</p>
+
+> **How to interpret:** Summarizes aggregate performance across RL algorithm families (`IMPALA`, `APPO`, `DQN`, `PPO`). Compare both peak performance and spread across trials to judge reliability versus best-case upside.
+
+### Training Time & Sampling Throughput
+<p align="center">
+  <img src="./fig_training_time_and_efficiency_tutorial_4_agentes.png" alt="Training Time and Sampling Throughput" width="90%" />
+</p>
+
+> **How to interpret:** Compares wall-clock training hours against environment sampling throughput (`steps/s`). Higher throughput (typically asynchronous actor-learner architectures like `IMPALA` and `APPO`) allows faster iteration over large step budgets, whereas slower off-policy methods (`DQN`) can compensate through replay-buffer sample reuse.
+
+### Multi-Criteria Performance Profile
+<p align="center">
+  <img src="./fig_radar_performance_profile_tutorial_4_agentes.png" alt="Multi-Criteria Radar Profile" width="75%" />
+</p>
+
+> **How to interpret:** Projects the top models across five normalized axes (`Max Reward`, `Final Stability`, `Convergence Speed`, `Length Efficiency`, `Residual Exploration`). Larger, more balanced polygons indicate well-rounded policies; spiky polygons reveal trade-offs (e.g., high peak reward with low final stability).
+
+### Supervised Pre-Training Convergence (Behavioral Cloning)
+<p align="center">
+  <img src="./fig_bc_training_curve_tutorial_4_agentes.png" alt="Behavioral Cloning Convergence" width="85%" />
+</p>
+
+> **How to interpret:** Tracks supervised cross-entropy loss across epochs when imitating demonstration trajectories. A smooth downward curve paired with high final imitation accuracy indicates the policy network can reliably clone expert actions for warm-starting RL.
+
+---
+
+## 3. Anti-Hacking Validation, Evaluation Gap & Deliveries
+
+### Anti-Hacking Impact: Pre-Fix vs. Post-Fix
+<p align="center">
+  <img src="./fig_antihacking_before_after_tutorial_4_agentes.png" alt="Anti-Hacking Before vs After" width="95%" />
+</p>
+
+> **How to interpret:** Side-by-side diagnostic of reward (left) and policy entropy (right) before and after stage-level anti-hacking locks. Reward hacking manifests as extreme reward spikes paired with sudden entropy collapse near zero; honest learning shows gradual reward growth while maintaining non-degenerate entropy.
+
+### Training vs. Deterministic Evaluation vs. 20s Visual Rollout
+<p align="center">
+  <img src="./fig_train_vs_eval_vs_visual_gap_tutorial_4_agentes.png" alt="Training vs Evaluation vs Visual Rollout Gap" width="90%" />
+</p>
+
+> **How to interpret:** Compares each algorithm's best stochastic training reward against its deterministic evaluation (`argmax`) and 20-second visual rollout. Similar bar heights signal robust generalization to greedy execution; a sharp drop in the deterministic evaluation bar indicates over-reliance on stochastic exploration or policy lockups.
+
+### 20s Visual Rollout Timeline
+<p align="center">
+  <img src="./fig_visual_rollout_20s_timeline_tutorial_4_agentes.png" alt="20s Visual Rollout Timeline" width="95%" />
+</p>
+
+> **How to interpret:** Plots cumulative team reward step by step across a 400-step (20s) visual rollout. Steep upward jumps mark real task milestones (chopping, plating, combining ingredients, or deliveries), while flat or slightly downward plateaus reveal where agents stall or repeat unproductive actions.
+
+### Delivered Dish Volume & Recipe Diversity
+<p align="center">
+  <img src="./fig_dishes_and_diversity_tutorial_4_agentes.png" alt="Delivered Dish Volume and Recipe Diversity" width="95%" />
+</p>
+
+> **How to interpret:** Left panel shows actual mean dishes delivered per evaluation episode across models; right panel shows the breakdown of delivered recipe types (`SIMPLE_SALAD`, `GARDEN_SALAD`, `FRESH_SALAD`). Balanced slices across multi-ingredient recipes confirm true end-to-end kitchen mastery.
+
+### Correlation: Delivered Dishes vs. Cumulative Reward
+<p align="center">
+  <img src="./fig_reward_vs_deliveries_tutorial_4_agentes.png" alt="Delivered Dishes vs Cumulative Reward" width="90%" />
+</p>
+
+> **How to interpret:** Evaluates whether higher episode rewards genuinely correspond to more completed deliveries. A strong positive linear trend ($R^2 \to 1$) validates reward alignment; high positive rewards clustered at `0` deliveries warn that intermediate shaping still dominates the objective.
+
+### Delivery Timeline Growth
+<p align="center">
+  <img src="./fig_delivery_timeline_growth_tutorial_4_agentes.png" alt="Delivery Timeline Growth" width="90%" />
+</p>
+
+> **How to interpret:** Tracks how the average number of completed deliveries per episode evolves over training phases. Upward steps reflect the emergence of increasingly reliable preparation and handoff pipelines.
+
+---
+
+## 4. Team Coordination & Per-Agent Workload
+
+### Per-Agent Deterministic Evaluation Breakdown
+<p align="center">
+  <img src="./fig_eval_agent_breakdown_by_algo_tutorial_4_agentes.png" alt="Per-Agent Evaluation Breakdown" width="90%" />
+</p>
+
+> **How to interpret:** Breaks down deterministic evaluation reward across each individual chef (`agent_0`–`agent_3`) per algorithm. Positive bars across all four agents indicate active team-wide participation; negative bars pinpoint agents that remain idle, collide, or accumulate step penalties.
+
+### Agent Workload Distribution
+<p align="center">
+  <img src="./fig_agent_workload_distribution_tutorial_4_agentes.png" alt="Agent Workload Distribution" width="90%" />
+</p>
+
+> **How to interpret:** Displays mean evaluation reward (with standard deviation error bars) for each agent in the latest `evaluation_results.json`. Comparing bar magnitudes reveals whether the team developed balanced division of labor or concentrated effort in a single agent.
+
+### Policy Coordination Dynamics
+<p align="center">
+  <img src="./fig_policy_coordination_tutorial_4_agentes.png" alt="Policy Coordination" width="90%" />
+</p>
+
+> **How to interpret:** Tracks how independent agent policies co-evolve over training iterations. Parallel upward trajectories indicate synchronized cooperation across kitchen zones, whereas diverging curves point to asymmetric credit assignment or non-stationarity.
+
+### Behavioral Coordination & Effort Symmetry
+<p align="center">
+  <img src="./pathologies_behavior_tutorial_4_agentes.png" alt="Behavioral Coordination and Effort Symmetry" width="95%" />
+</p>
+
+> **How to interpret:** Diagnoses classic multi-agent pathologies such as the *Lazy Agent* problem. When per-policy rewards are logged, staying near the `40%–60%` symmetry band confirms balanced effort; otherwise, it pairs team reward with episode step length to track overall progression.
+
+### Idle Time & Inactivity
+<p align="center">
+  <img src="./fig_idle_time_and_inactivity_tutorial_4_agentes.png" alt="Idle Time and Inactivity" width="90%" />
+</p>
+
+> **How to interpret:** Measures agent inactivity over training when idle-time telemetry is recorded. Decreasing inactivity curves indicate that agents learn to continuously engage in productive subtasks rather than waiting or oscillating.
+
+---
+
+## 5. Training Stability, Efficiency & Hyperparameter Sensitivity
+
+### Hyperparameter Sensitivity Analysis
+<p align="center">
+  <img src="./hyperparameter_comparison_tutorial_4_agentes.png" alt="Hyperparameter Sensitivity Analysis" width="95%" />
+</p>
+
+> **How to interpret:** Left heatmap maps maximum reward across `Learning Rate` vs. `Entropy Coefficient` (darker cells = higher reward); right boxplot compares return distributions by discount factor ($\gamma$). Use this to identify stable hyperparameter regions and whether longer-horizon credit assignment ($\gamma = 0.99$) outperforms shorter horizons ($\gamma = 0.98$).
+
+### Episode Efficiency & Reward Density
+<p align="center">
+  <img src="./fig_episode_efficiency_tutorial_4_agentes.png" alt="Episode Efficiency and Reward Density" width="90%" />
+</p>
+
+> **How to interpret:** Dual-axis plot pairing episode length (left axis, steps) with reward density (right axis, points/step). Rising reward density means agents accomplish more productive actions per step; falling episode length occurs once teams finish the entire order queue before the step limit.
+
+### Cycle Temporal Optimization
+<p align="center">
+  <img src="./fig_cycle_temporal_optimization_tutorial_4_agentes.png" alt="Cycle Temporal Optimization" width="90%" />
+</p>
+
+> **How to interpret:** Tracks mean steps per episode across training iterations. A flat line at the episode cap indicates episodes always end by timeout; a downward slope confirms that agents are completing all pending orders faster over time.
+
+### Policy Entropy Dynamics
+<p align="center">
+  <img src="./fig_entropy_dynamics_tutorial_4_agentes.png" alt="Policy Entropy Dynamics" width="90%" />
+</p>
+
+> **How to interpret:** Tracks action-distribution entropy over iterations (maximum uniform entropy for 5 discrete actions is $\ln 5 \approx 1.61$). Ideal learning starts near `1.61` and decays smoothly as policies become confident; entropy stuck near `1.4–1.6` indicates under-converged, overly random policies, while an abrupt drop near `0.0` warns of premature collapse into a fixed loop.
+
+### Gradient Stability & Loss Convergence
+<p align="center">
+  <img src="./fig_loss_convergence_tutorial_4_agentes.png" alt="Gradient Stability and Loss Convergence" width="95%" />
+</p>
+
+> **How to interpret:** Left panel shows critic Value Function Loss (`VF Loss`, log scale); right panel shows actor `Policy Loss`. Smooth, bounded trajectories confirm stable actor-critic optimization; persistent spikes or divergence suggest the learning rate is too high or reward magnitudes need recalibration.
+
+---
+
+⬅ **[Back to Results Index](../README.md)**
