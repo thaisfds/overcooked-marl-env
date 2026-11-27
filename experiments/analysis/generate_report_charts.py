@@ -2,7 +2,7 @@
 """
 ==============================================================================
 Script Avançado de Análise e Visualização Científica para a POC 2
-Destino padrão das figuras: resultados_experimentos/
+Destino padrão das figuras: experiment_results/
 ==============================================================================
 
 Gera uma suíte completa de gráficos e diagnósticos estatísticos com identificação
@@ -46,7 +46,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_REPORT_IMG_DIR = PROJECT_ROOT / "resultados_experimentos"
+DEFAULT_REPORT_IMG_DIR = PROJECT_ROOT / "experiment_results"
 DEFAULT_RAY_RESULTS = PROJECT_ROOT / "experiments" / "ray_results"
 DEFAULT_LOGS_DIR = PROJECT_ROOT / "experiments" / "logs"
 DEFAULT_BACKUP_DIR = PROJECT_ROOT / "Modelos Backup"
@@ -72,7 +72,7 @@ sns.set_theme(style="whitegrid", palette="deep")
 def parse_args():
     parser = argparse.ArgumentParser(description="Gera gráficos avançados de análise com identificação explícita do modelo de referência.")
     parser.add_argument("--sync", action="store_true", help="Sincroniza automaticamente os resultados do servidor magritte via rsync antes de gerar.")
-    parser.add_argument("--output-dir", type=str, default=str(DEFAULT_REPORT_IMG_DIR), help="Diretório de saída para salvar os gráficos (default: resultados_experimentos)")
+    parser.add_argument("--output-dir", type=str, default=str(DEFAULT_REPORT_IMG_DIR), help="Diretório de saída para salvar os gráficos (default: experiment_results)")
     parser.add_argument("--exp-id", type=str, default=None, help="Filtrar por ID específico de experimento (default: todos)")
     parser.add_argument("--window", type=int, default=5, help="Tamanho da janela para média móvel nas curvas (default: 5)")
     parser.add_argument("--include-backups", action="store_true", help="Inclui modelos e experimentos arquivados na pasta 'Modelos Backup' na análise.")
@@ -389,7 +389,7 @@ def save_plot(fig, out_dir: Path, base_name: str, env_suffix: Optional[str] = No
 
 
 def get_env_tag(trials_data: List[Dict[str, Any]]) -> str:
-    """Retorna uma tag padronizada com o mapa e número de agentes, ex: 'Mapa: tutorial.txt | 2 Agentes'."""
+    """Returns a standardized tag with map and agent count, e.g. 'Map: tutorial.txt | 4 Agents'."""
     if not trials_data:
         return ""
     maps = sorted(list({t.get("map_name", "tutorial.txt") for t in trials_data if t.get("map_name")}))
@@ -398,20 +398,20 @@ def get_env_tag(trials_data: List[Dict[str, Any]]) -> str:
     map_str = ", ".join(maps) if maps else "tutorial.txt"
     if len(agents) == 1:
         n = agents[0]
-        ag_str = f"{n} Agente{'s' if n > 1 else ''}"
+        ag_str = f"{n} Agent{'s' if n > 1 else ''}"
     elif len(agents) > 1:
-        ag_str = "/".join(str(n) for n in agents) + " Agentes"
+        ag_str = "/".join(str(n) for n in agents) + " Agents"
     else:
-        ag_str = "2 Agentes"
+        ag_str = "2 Agents"
 
-    return f"Mapa: {map_str} | {ag_str}"
+    return f"Map: {map_str} | {ag_str}"
 
 
 # ==============================================================================
-# 0. CARTÃO DEDICADO DO MODELO DE REFERÊNCIA (CAMPEÃO)
+# 0. STANDALONE REFERENCE MODEL (CHAMPION) CARD
 # ==============================================================================
 def plot_reference_model_card(trials_data: List[Dict[str, Any]], out_dir: Path):
-    """Gera uma imagem dedicada e limpa com a ficha técnica do Modelo de Referência (Campeão)."""
+    """Generates a clean standalone card with the Reference Model (Champion) specifications."""
     if not trials_data:
         return
 
@@ -422,16 +422,16 @@ def plot_reference_model_card(trials_data: List[Dict[str, Any]], out_dir: Path):
     fig, ax = plt.subplots(figsize=(9.5, 4.6), dpi=300)
     ax.axis("off")
 
-    header_text = f"★ MODELO DE REFERÊNCIA (CAMPEÃO) — {env_tag}"
+    header_text = f"★ REFERENCE MODEL (CHAMPION) — {env_tag}"
     body_lines = [
-        f"• Identificador:         {best_trial['trial_tag']}",
-        f"• Experimento:           {best_trial['exp_id']}",
+        f"• Model ID:              {best_trial['trial_tag']}",
+        f"• Experiment:            {best_trial['exp_id']}",
         f"• Checkpoint:            {best_trial['checkpoint_name']}",
-        f"• Hiperparâmetros:       {best_trial['param_summary']}  |  Batch Size: {best_trial['batch_size']}",
-        f"• Duração do Treino:     {best_trial['total_iterations']} iterações  ({best_trial['total_timesteps']:,} steps)",
-        f"• Recompensa Máxima:     {best_trial['max_reward']:+.2f} pts",
-        f"• Recompensa Final:      {best_trial['final_reward']:+.2f} pts",
-        f"• Total de Modelos:      {len(trials_data)} ensaios avaliados neste grupo",
+        f"• Hyperparameters:       {best_trial['param_summary']}  |  Batch Size: {best_trial['batch_size']}",
+        f"• Training Duration:     {best_trial['total_iterations']} iterations  ({best_trial['total_timesteps']:,} steps)",
+        f"• Max Train Reward:      {best_trial['max_reward']:+.2f} pts",
+        f"• Final Train Reward:    {best_trial['final_reward']:+.2f} pts",
+        f"• Total Models:          {len(trials_data)} trials evaluated in this group",
     ]
     card_text = f"{header_text}\n\n" + "\n".join(body_lines)
 
@@ -478,7 +478,7 @@ def plot_learning_curves(trials_data: List[Dict[str, Any]], out_dir: Path, windo
 
         is_best = (t["trial_id"] == best_trial["trial_id"])
         if is_best:
-            label = f"★ [REFERÊNCIA] {t['trial_tag']} ({t['param_summary']}) [Máx: {t['max_reward']:+.1f}]"
+            label = f"★ [REFERENCE] {t['trial_tag']} ({t['param_summary']}) [Max: {t['max_reward']:+.1f}]"
             lw = 3.0
             alpha = 1.0
             color = "#00509d"
@@ -494,21 +494,21 @@ def plot_learning_curves(trials_data: List[Dict[str, Any]], out_dir: Path, windo
             rolling_std = y.rolling(window=window, min_periods=1).std().fillna(0)
             ax.fill_between(x, y_smooth - rolling_std, y_smooth + rolling_std, alpha=0.18, color=color)
 
-    # Linhas de marcos
+    # Milestone reference lines
     ax.axhline(0, color="gray", linestyle=":", linewidth=1.0, alpha=0.7)
     if best_trial["max_reward"] > 500:
-        ax.axhline(300, color="#8c564b", linestyle="--", linewidth=1.1, alpha=0.6, label="Marco: 1ª Salada Simples (+300 pts)")
-        ax.axhline(900, color="#2ca02c", linestyle="--", linewidth=1.1, alpha=0.6, label="Marco: 3 Saladas Simples (+900 pts)")
-        ax.axhline(1500, color="#1f77b4", linestyle="--", linewidth=1.1, alpha=0.6, label="Marco: Transição Receita Composta (+1500 pts)")
+        ax.axhline(300, color="#8c564b", linestyle="--", linewidth=1.1, alpha=0.6, label="Milestone: 1st Simple Salad (+300 pts)")
+        ax.axhline(900, color="#2ca02c", linestyle="--", linewidth=1.1, alpha=0.6, label="Milestone: 3 Simple Salads (+900 pts)")
+        ax.axhline(1500, color="#1f77b4", linestyle="--", linewidth=1.1, alpha=0.6, label="Milestone: Composite Recipe Transition (+1500 pts)")
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Curvas de Aprendizado Comparativas - Ray Tune Grid Search (MARL) [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
+        f"Comparative Learning Curves — Ray Tune Grid Search (MARL) [{env_tag}]\n"
+        f"[Reference Model: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_xlabel("Iterações de Treinamento", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Recompensa Média por Episódio (Scaled)", fontsize=11, fontweight="bold")
+    ax.set_xlabel("Training Iterations", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Mean Episode Reward", fontsize=11, fontweight="bold")
     n_legend_items = len(trials_data) + (3 if best_trial["max_reward"] > 500 else 0)
     legend_cols = 2 if n_legend_items <= 12 else 3
     ax.legend(
@@ -539,52 +539,38 @@ def plot_hyperparameter_heatmaps(trials_data: List[Dict[str, Any]], out_dir: Pat
         data.append({
             "Learning Rate": lr_str,
             "Gamma": f"γ = {t['gamma']:.2f}",
-            "Entropia": f"H = {t['entropy']:.3f}",
-            "Recompensa Máxima": t["max_reward"],
-            "Recompensa Final": t["final_reward"],
-            "Iterações": t["total_iterations"]
+            "Entropy": f"H = {t['entropy']:.3f}",
+            "Max Reward": t["max_reward"],
+            "Final Reward": t["final_reward"],
+            "Iterations": t["total_iterations"]
         })
     df_all = pd.DataFrame(data)
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.2), dpi=300)
 
-    # Painel Esquerdo: Heatmap
     try:
-        pivot_table = df_all.pivot_table(index="Learning Rate", columns="Entropia", values="Recompensa Máxima", aggfunc="max")
-        sns.heatmap(pivot_table, annot=True, fmt="+.1f", cmap="YlGnBu", cbar_kws={'label': 'Recompensa Máxima (pts)'}, ax=axes[0], linewidths=1.0)
+        pivot_table = df_all.pivot_table(index="Learning Rate", columns="Entropy", values="Max Reward", aggfunc="max")
+        sns.heatmap(pivot_table, annot=True, fmt="+.1f", cmap="YlGnBu", cbar_kws={'label': 'Max Reward (pts)'}, ax=axes[0], linewidths=1.0)
         axes[0].set_title(
-            f"(a) Paisagem de Recompensa (LR x Entropia)\n[Ótimo no Modelo de Referência {best_trial['trial_tag']}: LR={best_trial['lr']:.0e}, H={best_trial['entropy']:.3f}]",
+            f"(a) Reward Landscape (LR vs. Entropy)\n[Optimum at Reference {best_trial['trial_tag']}: LR={best_trial['lr']:.0e}, H={best_trial['entropy']:.3f}]",
             fontweight="bold", fontsize=10.5
         )
-        axes[0].text(
-            0.03, 0.05,
-            f"★ Ótimo Global: {best_trial['trial_tag']}\nLR={best_trial['lr']:.0e}, H={best_trial['entropy']:.3f}, γ={best_trial['gamma']:.2f}\nScore: {best_trial['max_reward']:+.1f} pts",
-            transform=axes[0].transAxes, fontsize=8, fontweight="bold",
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor="#00509d", alpha=0.92, lw=1.2)
-        )
     except Exception:
-        sns.barplot(data=df_all, x="Entropia", y="Recompensa Máxima", hue="Learning Rate", ax=axes[0])
-        axes[0].set_title("(a) Recompensa Máxima por Entropia e LR", fontweight="bold")
+        sns.barplot(data=df_all, x="Entropy", y="Max Reward", hue="Learning Rate", ax=axes[0])
+        axes[0].set_title("(a) Max Reward by Entropy and LR", fontweight="bold")
 
-    # Painel Direito: Boxplot
-    sns.boxplot(data=df_all, x="Gamma", y="Recompensa Máxima", hue="Gamma", ax=axes[1], palette="Set2", width=0.45, legend=False)
-    sns.stripplot(data=df_all, x="Gamma", y="Recompensa Máxima", ax=axes[1], color="black", alpha=0.7, size=6, jitter=0.1)
+    sns.boxplot(data=df_all, x="Gamma", y="Max Reward", hue="Gamma", ax=axes[1], palette="Set2", width=0.45, legend=False)
+    sns.stripplot(data=df_all, x="Gamma", y="Max Reward", ax=axes[1], color="black", alpha=0.7, size=6, jitter=0.1)
     axes[1].set_title(
-        f"(b) Distribuição de Retorno por Fator Gamma (γ)\n[Fator do Modelo de Referência: γ = {best_trial['gamma']:.2f}]",
+        f"(b) Return Distribution by Discount Factor (γ)\n[Reference Factor: γ = {best_trial['gamma']:.2f}]",
         fontweight="bold", fontsize=10.5
     )
-    axes[1].set_ylabel("Recompensa Máxima (pts)")
-    axes[1].text(
-        0.03, 0.95,
-        f"★ Configuração de Referência: γ={best_trial['gamma']:.2f}\nModelo: {best_trial['trial_tag']} (Score: {best_trial['max_reward']:+.1f} pts)",
-        transform=axes[1].transAxes, fontsize=8.5, fontweight="bold", va="top",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f0f8ff", edgecolor="#2ca02c", alpha=0.92, lw=1.1)
-    )
+    axes[1].set_ylabel("Max Reward (pts)")
 
     env_tag = get_env_tag(trials_data)
     fig.suptitle(
-        f"Análise de Sensibilidade de Hiperparâmetros [{env_tag}]\n"
-        f"[Modelo de Referência Campeão: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f} | Score: {best_trial['max_reward']:+.1f} pts]",
+        f"Hyperparameter Sensitivity Analysis [{env_tag}]\n"
+        f"[Reference Champion: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f} | Score: {best_trial['max_reward']:+.1f} pts]",
         fontsize=12.5, fontweight="bold", y=1.03
     )
     save_plot(fig, out_dir, "hyperparameter_comparison", env_suffix=get_env_file_suffix(trials_data))
@@ -611,46 +597,46 @@ def plot_agent_cooperation_balance(trials_data: List[Dict[str, Any]], out_dir: P
         y0 = df[p0_col].rolling(window=5, min_periods=1).mean()
         y1 = df[p1_col].rolling(window=5, min_periods=1).mean()
 
-        axes[0].plot(x, y0, label=f"Agente 0 (policy_agent_0: Corte & Handoff | {best_trial['trial_tag']})", color="#1f77b4", lw=2.4)
-        axes[0].plot(x, y1, label=f"Agente 1 (policy_agent_1: Montagem & Delivery | {best_trial['trial_tag']})", color="#ff7f0e", lw=2.4)
+        axes[0].plot(x, y0, label=f"Agent 0 (policy_agent_0: Chop & Handoff | {best_trial['trial_tag']})", color="#1f77b4", lw=2.4)
+        axes[0].plot(x, y1, label=f"Agent 1 (policy_agent_1: Plating & Delivery | {best_trial['trial_tag']})", color="#ff7f0e", lw=2.4)
         axes[0].axhline(0, color="gray", linestyle=":", alpha=0.5)
-        axes[0].set_title(f"(a) Evolução de Recompensa Individual por Política ({best_trial['trial_tag']})", fontweight="bold", fontsize=11)
-        axes[0].set_xlabel("Iterações")
-        axes[0].set_ylabel("Recompensa da Política")
+        axes[0].set_title(f"(a) Individual Policy Reward Evolution ({best_trial['trial_tag']})", fontweight="bold", fontsize=11)
+        axes[0].set_xlabel("Iterations")
+        axes[0].set_ylabel("Policy Reward")
         axes[0].legend(loc="lower right", fontsize=8.5)
 
         safe_total = (y0.abs() + y1.abs()).replace(0, np.nan)
         ratio_0 = (y0.abs() / safe_total).fillna(0.5) * 100.0
         ratio_1 = (y1.abs() / safe_total).fillna(0.5) * 100.0
 
-        axes[1].plot(x, ratio_0, label="Participação Agente 0 (%)", color="#1f77b4", lw=2.0)
-        axes[1].plot(x, ratio_1, label="Participação Agente 1 (%)", color="#ff7f0e", lw=2.0)
-        axes[1].axhline(50, color="black", linestyle="--", alpha=0.7, label="Equilíbrio Simétrico (50% / 50%)")
-        axes[1].fill_between(x, 40, 60, color="green", alpha=0.12, label="Faixa Ótima de Cooperação [40% - 60%]")
-        axes[1].set_title(f"(b) Razão de Simetria de Esforço (Anti-Lazy Agent) - {best_trial['trial_tag']}", fontweight="bold", fontsize=11)
-        axes[1].set_xlabel("Iterações")
-        axes[1].set_ylabel("Participação Relativa (%)")
+        axes[1].plot(x, ratio_0, label="Agent 0 Share (%)", color="#1f77b4", lw=2.0)
+        axes[1].plot(x, ratio_1, label="Agent 1 Share (%)", color="#ff7f0e", lw=2.0)
+        axes[1].axhline(50, color="black", linestyle="--", alpha=0.7, label="Symmetric Balance (50% / 50%)")
+        axes[1].fill_between(x, 40, 60, color="green", alpha=0.12, label="Optimal Cooperation Band [40% - 60%]")
+        axes[1].set_title(f"(b) Effort Symmetry Ratio (Anti-Lazy Agent) — {best_trial['trial_tag']}", fontweight="bold", fontsize=11)
+        axes[1].set_xlabel("Iterations")
+        axes[1].set_ylabel("Relative Share (%)")
         axes[1].set_ylim(0, 100)
         axes[1].legend(loc="lower right", fontsize=8.5)
     else:
         r_col = best_trial["reward_col"]
         axes[0].plot(x, df[r_col].rolling(window=5, min_periods=1).mean(), color="#1f77b4", lw=2.4)
-        axes[0].set_title("(a) Recompensa de Equipe", fontweight="bold")
-        axes[0].set_xlabel("Iterações")
-        axes[0].set_ylabel("Recompensa Média")
+        axes[0].set_title("(a) Team Reward", fontweight="bold")
+        axes[0].set_xlabel("Iterations")
+        axes[0].set_ylabel("Mean Reward")
 
         if "env_runners/episode_len_mean" in df.columns:
             axes[1].plot(x, df["env_runners/episode_len_mean"], color="#2ca02c", lw=2.0)
-            axes[1].set_title("(b) Duração do Episódio (Passos)", fontweight="bold")
-            axes[1].set_xlabel("Iterações")
-            axes[1].set_ylabel("Passos / Episódio")
+            axes[1].set_title("(b) Episode Length (Steps)", fontweight="bold")
+            axes[1].set_xlabel("Iterations")
+            axes[1].set_ylabel("Steps / Episode")
 
     env_tag = get_env_tag(trials_data)
     n_ag = best_trial.get("num_agents", 2)
-    ag_label = "(Agente 0 vs. Agente 1)" if n_ag == 2 else "(Agente Único)" if n_ag == 1 else f"({n_ag} Agentes)"
+    ag_label = "(Agent 0 vs. Agent 1)" if n_ag == 2 else "(Single Agent)" if n_ag == 1 else f"({n_ag} Agents)"
     fig.suptitle(
-        f"Diagnóstico Comportamental de Coordenação e Esforço {ag_label} [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | Parâmetros: LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f} | Checkpoint: {best_trial['checkpoint_name']}]",
+        f"Behavioral Coordination & Effort Diagnostics {ag_label} [{env_tag}]\n"
+        f"[Reference Model: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f} | Checkpoint: {best_trial['checkpoint_name']}]",
         fontsize=12, fontweight="bold", y=1.03
     )
     save_plot(fig, out_dir, "pathologies_behavior", env_suffix=get_env_file_suffix(trials_data))
@@ -673,8 +659,8 @@ def plot_episode_length_and_efficiency(trials_data: List[Dict[str, Any]], out_di
     len_col = next((c for c in df.columns if "episode_len_mean" in c), None)
     if len_col:
         y_len = df[len_col].rolling(window=5, min_periods=1).mean()
-        line1 = ax1.plot(x, y_len, color="#9467bd", lw=2.2, label=f"Duração do Episódio (Passos) [{best_trial['trial_tag']}]")
-        ax1.set_ylabel("Passos por Episódio", color="#9467bd", fontweight="bold")
+        line1 = ax1.plot(x, y_len, color="#9467bd", lw=2.2, label=f"Episode Length (Steps) [{best_trial['trial_tag']}]")
+        ax1.set_ylabel("Steps per Episode", color="#9467bd", fontweight="bold")
         ax1.tick_params(axis='y', labelcolor="#9467bd")
     else:
         line1 = []
@@ -683,8 +669,8 @@ def plot_episode_length_and_efficiency(trials_data: List[Dict[str, Any]], out_di
     r_col = best_trial["reward_col"]
     if len_col and r_col:
         density = (df[r_col] / df[len_col].replace(0, np.nan)).rolling(window=5, min_periods=1).mean()
-        line2 = ax2.plot(x, density, color="#2ca02c", lw=2.2, linestyle="-.", label=f"Densidade de Recompensa (Pontos / Passo) [{best_trial['trial_tag']}]")
-        ax2.set_ylabel("Eficiência: Pontos / Passo", color="#2ca02c", fontweight="bold")
+        line2 = ax2.plot(x, density, color="#2ca02c", lw=2.2, linestyle="-.", label=f"Reward Density (Points / Step) [{best_trial['trial_tag']}]")
+        ax2.set_ylabel("Efficiency: Points / Step", color="#2ca02c", fontweight="bold")
         ax2.tick_params(axis='y', labelcolor="#2ca02c")
         ax2.grid(False)
     else:
@@ -693,11 +679,11 @@ def plot_episode_length_and_efficiency(trials_data: List[Dict[str, Any]], out_di
     lines = line1 + line2
     labels = [l.get_label() for l in lines]
     ax1.legend(lines, labels, loc="upper left", frameon=True, framealpha=0.9)
-    ax1.set_xlabel("Iterações de Treinamento", fontweight="bold")
+    ax1.set_xlabel("Training Iterations", fontweight="bold")
     env_tag = get_env_tag(trials_data)
     ax1.set_title(
-        f"Evolução da Eficiência Temporal e Densidade Operacional de Tarefas [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
+        f"Temporal Efficiency & Operational Reward Density [{env_tag}]\n"
+        f"[Reference Model: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12, fontweight="bold", pad=12
     )
 
@@ -722,8 +708,8 @@ def plot_policy_entropy_dynamics(trials_data: List[Dict[str, Any]], out_dir: Pat
     fig, ax = plt.subplots(figsize=(10.5, 5.2), dpi=300)
 
     if ent0_col and ent1_col:
-        ax.plot(x, df[ent0_col].rolling(window=5, min_periods=1).mean(), label=rf"Entropia $\pi_{{\theta_0}}$ (Agente 0 - {best_trial['trial_tag']})", color="#1f77b4", lw=2.2)
-        ax.plot(x, df[ent1_col].rolling(window=5, min_periods=1).mean(), label=rf"Entropia $\pi_{{\theta_1}}$ (Agente 1 - {best_trial['trial_tag']})", color="#ff7f0e", lw=2.2)
+        ax.plot(x, df[ent0_col].rolling(window=5, min_periods=1).mean(), label=rf"Entropy $\pi_{{\theta_0}}$ (Agent 0 — {best_trial['trial_tag']})", color="#1f77b4", lw=2.2)
+        ax.plot(x, df[ent1_col].rolling(window=5, min_periods=1).mean(), label=rf"Entropy $\pi_{{\theta_1}}$ (Agent 1 — {best_trial['trial_tag']})", color="#ff7f0e", lw=2.2)
     else:
         for t in trials_data[:4]:
             r_col = t["reward_col"]
@@ -731,12 +717,12 @@ def plot_policy_entropy_dynamics(trials_data: List[Dict[str, Any]], out_dir: Pat
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Dinâmica de Entropia: Transição da Exploração para Políticas Determinísticas [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
+        f"Policy Entropy Dynamics: Exploration to Consolidation [{env_tag}]\n"
+        f"[Reference Model: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_xlabel("Iterações de Treinamento", fontweight="bold")
-    ax.set_ylabel("Entropia da Distribuição de Ações", fontweight="bold")
+    ax.set_xlabel("Training Iterations", fontweight="bold")
+    ax.set_ylabel("Action Distribution Entropy", fontweight="bold")
     ax.set_ylim(0.25, 1.7)
     ax.legend(loc="upper right", frameon=True, framealpha=0.9)
 
@@ -763,28 +749,28 @@ def plot_loss_convergence(trials_data: List[Dict[str, Any]], out_dir: Path):
     if vf_col:
         y_vf = df[vf_col].rolling(window=5, min_periods=1).mean()
         axes[0].plot(x, y_vf, color="#d62728", lw=2.0)
-        axes[0].set_title(f"(a) Perda da Função de Valor do Crítico (VF Loss - {best_trial['trial_tag']})", fontweight="bold")
-        axes[0].set_xlabel("Iterações")
+        axes[0].set_title(f"(a) Critic Value Function Loss (VF Loss — {best_trial['trial_tag']})", fontweight="bold")
+        axes[0].set_xlabel("Iterations")
         axes[0].set_ylabel("Value Loss")
         axes[0].set_yscale("log")
         axes[0].set_ylim(top=35)
     else:
-        axes[0].text(0.5, 0.5, "VF Loss não disponível", ha="center")
+        axes[0].text(0.5, 0.5, "VF Loss unavailable", ha="center")
 
     if pol_col:
         y_pol = df[pol_col].rolling(window=5, min_periods=1).mean()
         axes[1].plot(x, y_pol, color="#1f77b4", lw=2.0)
         axes[1].axhline(0, color="gray", linestyle=":", alpha=0.6)
-        axes[1].set_title(f"(b) Perda PPO da Política do Ator (Policy Loss - {best_trial['trial_tag']})", fontweight="bold")
-        axes[1].set_xlabel("Iterações")
+        axes[1].set_title(f"(b) Actor Policy Loss ({best_trial['trial_tag']})", fontweight="bold")
+        axes[1].set_xlabel("Iterations")
         axes[1].set_ylabel("Policy Loss")
     else:
-        axes[1].text(0.5, 0.5, "Policy Loss não disponível", ha="center")
+        axes[1].text(0.5, 0.5, "Policy Loss unavailable", ha="center")
 
     env_tag = get_env_tag(trials_data)
     fig.suptitle(
-        f"Estabilidade de Gradientes e Otimização Ator-Crítico (PPO Loss) [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
+        f"Gradient Stability & Actor-Critic Loss Convergence [{env_tag}]\n"
+        f"[Reference Model: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12.5, fontweight="bold", y=1.03
     )
     save_plot(fig, out_dir, "fig_loss_convergence", env_suffix=get_env_file_suffix(trials_data))
@@ -801,11 +787,11 @@ def plot_radar_profile(trials_data: List[Dict[str, Any]], out_dir: Path):
     top_trials = trials_data[:min(3, len(trials_data))]
     best_trial = top_trials[0]
     categories = [
-        "Recompensa Máxima",
-        "Estabilidade Final",
-        "Velocidade de Convergência",
-        "Eficiência de Duração",
-        "Exploração Residual"
+        "Max Reward",
+        "Final Stability",
+        "Convergence Speed",
+        "Length Efficiency",
+        "Residual Exploration"
     ]
     N = len(categories)
 
@@ -838,7 +824,7 @@ def plot_radar_profile(trials_data: List[Dict[str, Any]], out_dir: Path):
 
         m_expl = min(1.0, t["entropy"] / 0.030)
         if i == 0:
-            label_name = f"★ [REFERÊNCIA] {t['trial_tag']} ({t['param_summary']})"
+            label_name = f"★ [REFERENCE] {t['trial_tag']} ({t['param_summary']})"
         else:
             label_name = f"Rank {i+1}: {t['trial_tag']} ({t['param_summary']})"
         scores_dict[label_name] = [m_rw, m_stab, m_speed, m_eff, m_expl]
@@ -860,8 +846,8 @@ def plot_radar_profile(trials_data: List[Dict[str, Any]], out_dir: Path):
 
     env_tag = get_env_tag(trials_data)
     plt.title(
-        f"Perfil Multicritério dos Modelos Top-Ranked (Radar) [{env_tag}]\n"
-        f"[Modelo de Referência Campeão: ★ {best_trial['trial_tag']} (LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f})]",
+        f"Multi-Criteria Performance Profile (Top-Ranked Models) [{env_tag}]\n"
+        f"[Reference Champion: ★ {best_trial['trial_tag']} (LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f})]",
         size=12, weight='bold', pad=22
     )
     plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.08), fontsize=8.5, ncol=2)
@@ -886,55 +872,55 @@ def plot_executive_dashboard(trials_data: List[Dict[str, Any]], out_dir: Path, w
     x_b = df_best["training_iteration"]
     y_b = df_best[r_col].rolling(window=window, min_periods=1).mean()
 
-    # 8a. Convergência: Campeão vs. Média dos Demais Modelos
+    # 8a. Convergence: Champion vs. Mean of Other Models
     fig, ax = plt.subplots(figsize=(10, 5.6), dpi=300)
-    ax.plot(x_b, y_b, color="#00509d", lw=2.6, label=f"★ [REFERÊNCIA] {best_trial['trial_tag']} ({best_trial['param_summary']})")
+    ax.plot(x_b, y_b, color="#00509d", lw=2.6, label=f"★ [REFERENCE] {best_trial['trial_tag']} ({best_trial['param_summary']})")
     if len(trials_data) > 1:
         other_ys = [t["df"][t["reward_col"]].rolling(window=window, min_periods=1).mean() for t in trials_data[1:] if t["reward_col"] in t["df"].columns]
         if other_ys:
             min_len = min(len(y) for y in other_ys)
             stacked = np.array([y.iloc[:min_len].values for y in other_ys])
             mean_others = np.nanmean(stacked, axis=0)
-            ax.plot(x_b.iloc[:min_len], mean_others, color="gray", linestyle="--", lw=1.8, label="Média dos Demais Modelos")
-    ax.set_title(f"Convergência: ★ {best_trial['trial_tag']} vs. Demais Modelos [{env_tag}]", fontweight="bold", fontsize=11.5)
-    ax.set_xlabel("Iterações", fontweight="bold")
-    ax.set_ylabel("Recompensa Média", fontweight="bold")
+            ax.plot(x_b.iloc[:min_len], mean_others, color="gray", linestyle="--", lw=1.8, label="Mean of Other Models")
+    ax.set_title(f"Convergence: ★ {best_trial['trial_tag']} vs. Other Models [{env_tag}]", fontweight="bold", fontsize=11.5)
+    ax.set_xlabel("Iterations", fontweight="bold")
+    ax.set_ylabel("Mean Reward", fontweight="bold")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=9, ncol=2)
     save_plot(fig, out_dir, "fig_convergence_best_vs_others", env_suffix=env_suffix)
 
-    # 8b. Coordenação de Políticas
+    # 8b. Policy Coordination
     fig, ax = plt.subplots(figsize=(10, 5.6), dpi=300)
     p0_col = next((c for c in df_best.columns if "policy_reward_mean/policy_agent_0" in c), None)
     p1_col = next((c for c in df_best.columns if "policy_reward_mean/policy_agent_1" in c), None)
     if p0_col and p1_col:
-        ax.plot(x_b, df_best[p0_col].rolling(window=window, min_periods=1).mean(), label=f"Agente 0 (Superior: Corte | {best_trial['trial_tag']})", color="#2b5c8f", lw=2.2)
-        ax.plot(x_b, df_best[p1_col].rolling(window=window, min_periods=1).mean(), label=f"Agente 1 (Inferior: Entrega | {best_trial['trial_tag']})", color="#d95f02", lw=2.2)
-        ax.set_ylabel("Recompensa por Política", fontweight="bold")
+        ax.plot(x_b, df_best[p0_col].rolling(window=window, min_periods=1).mean(), label=f"Agent 0 (Top: Chopping | {best_trial['trial_tag']})", color="#2b5c8f", lw=2.2)
+        ax.plot(x_b, df_best[p1_col].rolling(window=window, min_periods=1).mean(), label=f"Agent 1 (Bottom: Delivery | {best_trial['trial_tag']})", color="#d95f02", lw=2.2)
+        ax.set_ylabel("Policy Reward", fontweight="bold")
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=9, ncol=2)
     else:
-        ax.plot(x_b, y_b, color="#2b5c8f", lw=2.2, label=f"{best_trial['trial_tag']} (Recompensa de Equipe)")
-        ax.set_ylabel("Recompensa de Equipe", fontweight="bold")
+        ax.plot(x_b, y_b, color="#2b5c8f", lw=2.2, label=f"{best_trial['trial_tag']} (Team Reward)")
+        ax.set_ylabel("Team Reward", fontweight="bold")
         ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=9)
-    ax.set_title(f"Coordenação de Políticas: {best_trial['trial_tag']} [{env_tag}]", fontweight="bold", fontsize=11.5)
-    ax.set_xlabel("Iterações", fontweight="bold")
+    ax.set_title(f"Policy Coordination: {best_trial['trial_tag']} [{env_tag}]", fontweight="bold", fontsize=11.5)
+    ax.set_xlabel("Iterations", fontweight="bold")
     save_plot(fig, out_dir, "fig_policy_coordination", env_suffix=env_suffix)
 
-    # 8c. Otimização Temporal de Ciclos (Passos/Episódio)
+    # 8c. Cycle Temporal Optimization (Steps/Episode)
     len_col = next((c for c in df_best.columns if "episode_len_mean" in c), None)
     if len_col:
         fig, ax = plt.subplots(figsize=(10, 5.2), dpi=300)
         ax.plot(x_b, df_best[len_col].rolling(window=window, min_periods=1).mean(), color="#7570b3", lw=2.2)
-        ax.set_ylabel("Passos Médios por Episódio", fontweight="bold")
-        ax.set_title(f"Otimização Temporal de Ciclos: {best_trial['trial_tag']} [{env_tag}]", fontweight="bold", fontsize=11.5)
-        ax.set_xlabel("Iterações", fontweight="bold")
+        ax.set_ylabel("Mean Steps per Episode", fontweight="bold")
+        ax.set_title(f"Cycle Temporal Optimization: {best_trial['trial_tag']} [{env_tag}]", fontweight="bold", fontsize=11.5)
+        ax.set_xlabel("Iterations", fontweight="bold")
         save_plot(fig, out_dir, "fig_cycle_temporal_optimization", env_suffix=env_suffix)
 
-    # 8d. Ranking de Recompensa Máxima por Modelo (Top 10)
+    # 8d. Top-10 Model Ranking by Max Reward
     top_n = trials_data[:min(10, len(trials_data))]
     names_short = []
     for i, t in enumerate(top_n):
         if i == 0:
-            names_short.append(f"★ [REFERÊNCIA] {t['trial_tag']} ({t['param_summary']})")
+            names_short.append(f"★ [REFERENCE] {t['trial_tag']} ({t['param_summary']})")
         else:
             names_short.append(f"Rank {i+1}: {t['trial_tag']} ({t['param_summary']})")
     rewards_top = [t["max_reward"] for t in top_n]
@@ -942,8 +928,8 @@ def plot_executive_dashboard(trials_data: List[Dict[str, Any]], out_dir: Path, w
     edge_colors = ["#ffd166" if i == 0 else "black" for i in range(len(top_n))]
     fig, ax = plt.subplots(figsize=(11, max(5.2, 0.55 * len(top_n))), dpi=300)
     ax.barh(names_short[::-1], rewards_top[::-1], color=colors_bar[::-1], edgecolor=edge_colors[::-1], linewidth=1.2, height=0.65)
-    ax.set_title(f"Ranking de Recompensa Máxima por Modelo (Top {len(top_n)}) [{env_tag}]", fontweight="bold", fontsize=11.5)
-    ax.set_xlabel("Recompensa Máxima (pts)", fontweight="bold")
+    ax.set_title(f"Top-{len(top_n)} Model Ranking by Max Reward [{env_tag}]", fontweight="bold", fontsize=11.5)
+    ax.set_xlabel("Max Reward (pts)", fontweight="bold")
     save_plot(fig, out_dir, "fig_ranking_top_models", env_suffix=env_suffix)
 
 
@@ -987,7 +973,7 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
 
     for i, t in enumerate(trials_data[:6]):
         if i == 0:
-            name = f"★ [REFERÊNCIA] {t['trial_tag']} ({t['param_summary']})"
+            name = f"★ [REFERENCE] {t['trial_tag']} ({t['param_summary']})"
         else:
             name = f"Rank {i+1}: {t['trial_tag']} ({t['param_summary']})"
         tid_short = t['trial_id'].split('_')[-1] if '_' in t['trial_id'] else t['trial_id']
@@ -998,7 +984,7 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
                 break
 
         if found_eval is None:
-            model_names.append(f"{name} [não avaliado]")
+            model_names.append(f"{name} [not evaluated]")
             deliveries_est.append(0.0)
             colors_bars.append("#9e9e9e")
         else:
@@ -1007,13 +993,13 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
             colors_bars.append("#00509d" if i == 0 else ("#2ca02c" if found_eval >= 3.0 else ("#ff7f0e" if found_eval >= 1.0 else "#d62728")))
 
     bars = axes[0].barh(model_names[::-1], deliveries_est[::-1], color=colors_bars[::-1], edgecolor="black", height=0.55)
-    axes[0].set_xlabel("Média REAL de Pratos Entregues por Episódio (Avaliação)", fontweight="bold")
-    axes[0].set_title("(a) Média de Entregas Reais por Modelo Avaliado", fontweight="bold", fontsize=10.5)
+    axes[0].set_xlabel("Mean ACTUAL Delivered Dishes per Episode (Evaluation)", fontweight="bold")
+    axes[0].set_title("(a) Mean Actual Deliveries by Evaluated Model", fontweight="bold", fontsize=10.5)
     max_deliv_val = max(deliveries_est) if deliveries_est else 0.0
     axes[0].set_xlim(0, max(1.0, max_deliv_val + 1.0))
     for bar, lbl in zip(bars, model_names[::-1]):
         w = bar.get_width()
-        txt = "N/A" if "[não avaliado]" in lbl else f"{w:.2f} pratos"
+        txt = "N/A" if "[not evaluated]" in lbl else f"{w:.2f} dishes"
         axes[0].text(w + 0.05, bar.get_y() + bar.get_height()/2, txt, va="center", fontweight="bold", fontsize=9)
 
     recipe_counts = {}
@@ -1046,22 +1032,22 @@ def plot_dishes_and_diversity(trials_data: List[Dict[str, Any]], out_dir: Path):
         axes[1].axis("off")
         axes[1].text(
             0.5, 0.55,
-            "0 PRATOS ENTREGUES\n\nNenhum prato foi concluído nos episódios\nde evaluation_results.json.",
+            "0 DISHES DELIVERED\n\nNo dish was completed across episodes\nin evaluation_results.json.",
             transform=axes[1].transAxes, ha="center", va="center",
             fontsize=11, fontweight="bold", color="#b71c1c",
             bbox=dict(boxstyle="round,pad=0.6", facecolor="#ffebee", edgecolor="#d62728", lw=1.5)
         )
-        summary_line = f"• Desempenho Real: 0.00 pratos/episódio ({total_eval_eps} eps avaliados)"
+        summary_line = f"• Actual Performance: 0.00 dishes/episode ({total_eval_eps} evaluated eps)"
         badge_edge = "#d62728"
 
     axes[1].set_title(
-        f"(b) Diversidade Real de Cardápio Atendida\n[Modelo de Referência: {best_trial['trial_tag']}]",
+        f"(b) Actual Delivered Recipe Diversity\n[Reference Model: {best_trial['trial_tag']}]",
         fontweight="bold", fontsize=10.5
     )
 
     env_tag = get_env_tag(trials_data)
     fig.suptitle(
-        f"Volume e Diversidade de Pratos Entregues [{env_tag}]\n[Modelo de Referência Campeão: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
+        f"Delivered Dish Volume & Recipe Diversity [{env_tag}]\n[Reference Champion: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12.5, fontweight="bold", y=1.02
     )
     save_plot(fig, out_dir, "fig_dishes_and_diversity", env_suffix=get_env_file_suffix(trials_data))
@@ -1094,35 +1080,33 @@ def plot_reward_vs_deliveries_correlation(trials_data: List[Dict[str, Any]], out
     rewards_list = [ep.get("total_raw_reward", 0.0) for ep in episodes_eval]
     deliveries_list = [ep.get("delivered_count", 0) for ep in episodes_eval]
 
-    df_corr = pd.DataFrame({"Pratos Entregues": deliveries_list, "Recompensa": rewards_list})
+    df_corr = pd.DataFrame({"Delivered Dishes": deliveries_list, "Reward": rewards_list})
     mean_deliv = float(np.mean(deliveries_list))
     mean_rw = float(np.mean(rewards_list))
 
-    if len(df_corr["Pratos Entregues"].unique()) >= 2:
+    if len(df_corr["Delivered Dishes"].unique()) >= 2:
         r_val = float(np.corrcoef(deliveries_list, rewards_list)[0, 1])
         r2_val = r_val ** 2 if not np.isnan(r_val) else 0.0
         sns.regplot(
-            data=df_corr, x="Pratos Entregues", y="Recompensa", ax=ax,
+            data=df_corr, x="Delivered Dishes", y="Reward", ax=ax,
             scatter_kws={"s": 75, "alpha": 0.85, "color": "#00509d", "edgecolor": "black"},
-            line_kws={"color": "#d62728", "lw": 2.2, "label": f"Regressão Linear Real (R² = {r2_val:.3f})"}
+            line_kws={"color": "#d62728", "lw": 2.2, "label": f"Actual Linear Regression (R² = {r2_val:.3f})"}
         )
-        corr_line = f"• Regressão Linear Real: R² = {r2_val:.3f}"
-        box_edge = "#00509d"
     else:
         ax.scatter(
-            df_corr["Pratos Entregues"], df_corr["Recompensa"],
+            df_corr["Delivered Dishes"], df_corr["Reward"],
             s=75, alpha=0.85, color="#d62728", edgecolor="black",
-            label="Episódios Avaliados (sem variação de entregas)"
+            label="Evaluated Episodes (no delivery variance)"
         )
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Correlação Real entre Volume de Entregas e Recompensa Acumulada [{env_tag}]\n"
-        f"[Modelo de Referência: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
+        f"Actual Correlation: Delivered Dishes vs. Cumulative Reward [{env_tag}]\n"
+        f"[Reference Model: ★ {best_trial['trial_tag']} | LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_xlabel("Número de Pratos Concluídos no Episódio", fontweight="bold")
-    ax.set_ylabel("Recompensa Total Obtida (pts)", fontweight="bold")
+    ax.set_xlabel("Completed Dishes per Episode", fontweight="bold")
+    ax.set_ylabel("Total Episode Reward (pts)", fontweight="bold")
     max_x = max(5, int(max(deliveries_list)) + 1)
     ax.set_xticks(range(0, max_x + 1))
     ax.legend(loc="lower right", frameon=True, framealpha=0.9)
@@ -1227,11 +1211,11 @@ def plot_agent_workload_distribution(trials_data: List[Dict[str, Any]], out_dir:
         ax.text(bar.get_x() + bar.get_width()/2, m_val + offset, f"{m_val:+.2f}", ha="center", va="bottom", fontsize=9, fontweight="bold")
 
     env_tag = get_env_tag(trials_data)
-    ax.set_ylabel("Recompensa Média na Avaliação (pts)", fontweight="bold")
-    ax.set_xlabel("Agente", fontweight="bold")
+    ax.set_ylabel("Mean Evaluation Reward (pts)", fontweight="bold")
+    ax.set_xlabel("Agent", fontweight="bold")
     ax.set_title(
-        f"Contribuição Real por Agente na Avaliação [{env_tag}]\n"
-        f"[Dados de evaluation_results.json | Referência Treino: ★ {best_trial['trial_tag']}]",
+        f"Actual Per-Agent Contribution in Evaluation [{env_tag}]\n"
+        f"[From evaluation_results.json | Training Reference: ★ {best_trial['trial_tag']}]",
         fontsize=12, fontweight="bold", pad=12
     )
     save_plot(fig, out_dir, "fig_agent_workload_distribution", env_suffix=get_env_file_suffix(trials_data))
@@ -1248,8 +1232,8 @@ def render_env_hud_screenshot(best_trial: Dict[str, Any], out_dir: Path):
 
         map_name = best_trial.get("map_name", "tutorial.txt")
         num_agents = best_trial.get("num_agents", 2)
-        ag_str = f"{num_agents} Agente{'s' if num_agents > 1 else ''}"
-        env_tag = f"Mapa: {map_name} | {ag_str}"
+        ag_str = f"{num_agents} Agent{'s' if num_agents > 1 else ''}"
+        env_tag = f"Map: {map_name} | {ag_str}"
 
         env = OvercookedMARL(render_mode="human", map_path=map_name, num_fixed_agents=num_agents, featurized_obs=True)
         env.reset()
@@ -1259,13 +1243,13 @@ def render_env_hud_screenshot(best_trial: Dict[str, Any], out_dir: Path):
             ax.imshow(frame)
             ax.axis("off")
             ax.set_title(
-                f"Ambiente Overcooked MARL [{env_tag}]\n"
-                f"[Modelo de Referência em Execução: ★ {best_trial['trial_tag']} (LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f})]",
+                f"Overcooked MARL Environment [{env_tag}]\n"
+                f"[Running Reference Model: ★ {best_trial['trial_tag']} (LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f})]",
                 fontsize=11, fontweight="bold", pad=8
             )
 
             hud_text = (
-                f"★ [{env_tag}] Modelo: {best_trial['trial_tag']} | "
+                f"★ [{env_tag}] Model: {best_trial['trial_tag']} | "
                 f"LR={best_trial['lr']:.0e}, γ={best_trial['gamma']:.2f}, H={best_trial['entropy']:.3f} | "
                 f"Checkpoint: {best_trial['checkpoint_name']}"
             )
@@ -1352,24 +1336,22 @@ def plot_cross_agent_scaling(trials_data: List[Dict[str, Any]], out_dir: Path):
     for t in trials_data:
         n = t.get("num_agents", 2)
         data.append({
-            "Agentes": f"{n} Agente{'s' if n > 1 else ''}",
+            "Agents": f"{n} Agent{'s' if n > 1 else ''}",
             "num_agents": n,
-            "Recompensa Máxima": t["max_reward"],
-            "Recompensa Final": t["final_reward"],
-            "Iterações": t["total_iterations"]
+            "Max Reward": t["max_reward"],
+            "Final Reward": t["final_reward"],
+            "Iterations": t["total_iterations"]
         })
     df = pd.DataFrame(data)
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.2), dpi=300)
 
-    # Painel 1: Boxplot comparativo de Recompensa Máxima por contagem de agentes
-    sns.boxplot(data=df, x="Agentes", y="Recompensa Máxima", hue="Agentes", palette="Set2", legend=False, ax=axes[0], width=0.45)
-    sns.stripplot(data=df, x="Agentes", y="Recompensa Máxima", color="black", alpha=0.6, jitter=0.2, size=6, ax=axes[0])
-    axes[0].set_title("(a) Distribuição de Recompensa Máxima por Quantidade de Agentes", fontweight="bold", fontsize=11)
-    axes[0].set_xlabel("Configuração de Agentes", fontweight="bold")
-    axes[0].set_ylabel("Recompensa Máxima de Treino (pts)", fontweight="bold")
+    sns.boxplot(data=df, x="Agents", y="Max Reward", hue="Agents", palette="Set2", legend=False, ax=axes[0], width=0.45)
+    sns.stripplot(data=df, x="Agents", y="Max Reward", color="black", alpha=0.6, jitter=0.2, size=6, ax=axes[0])
+    axes[0].set_title("(a) Max Reward Distribution by Agent Count", fontweight="bold", fontsize=11)
+    axes[0].set_xlabel("Agent Configuration", fontweight="bold")
+    axes[0].set_ylabel("Max Training Reward (pts)", fontweight="bold")
 
-    # Painel 2: Curvas agregadas por escala de agentes
     curve_data = []
     for t in trials_data:
         r_df = t["df"]
@@ -1378,24 +1360,24 @@ def plot_cross_agent_scaling(trials_data: List[Dict[str, Any]], out_dir: Path):
         if r_col in r_df.columns:
             for _, row in r_df.iterrows():
                 curve_data.append({
-                    "Iteração": int(row["training_iteration"]),
-                    "Recompensa": float(row[r_col]),
-                    "Agentes": f"{n} Agente{'s' if n > 1 else ''}"
+                    "Iteration": int(row["training_iteration"]),
+                    "Reward": float(row[r_col]),
+                    "Agents": f"{n} Agent{'s' if n > 1 else ''}"
                 })
     if curve_data:
         c_df = pd.DataFrame(curve_data)
-        sns.lineplot(data=c_df, x="Iteração", y="Recompensa", hue="Agentes", palette="Set2", lw=2.2, ax=axes[1])
-        axes[1].set_title("(b) Dinâmica Comparativa de Aprendizado (Média ± IC 95%)", fontweight="bold", fontsize=11)
-        axes[1].set_xlabel("Iteração de Treinamento", fontweight="bold")
-        axes[1].set_ylabel("Recompensa Média por Episódio (pts)", fontweight="bold")
-        axes[1].legend(title="Escala", loc="best")
+        sns.lineplot(data=c_df, x="Iteration", y="Reward", hue="Agents", palette="Set2", lw=2.2, ax=axes[1])
+        axes[1].set_title("(b) Comparative Learning Dynamics (Mean ± 95% CI)", fontweight="bold", fontsize=11)
+        axes[1].set_xlabel("Training Iteration", fontweight="bold")
+        axes[1].set_ylabel("Mean Episode Reward (pts)", fontweight="bold")
+        axes[1].legend(title="Scale", loc="best")
 
-    fig.suptitle("Análise Comparativa de Escalabilidade Multiagente (1 vs 2 vs 4 Agentes)", fontsize=13, fontweight="bold")
+    fig.suptitle("Multi-Agent Scalability Comparison (1 vs. 2 vs. 4 Agents)", fontsize=13, fontweight="bold")
     save_plot(fig, out_dir, "comparacao_escalabilidade_agentes")
 
 
 def plot_general_performance_comparison(trials_data: List[Dict[str, Any]], out_dir: Path):
-    """Gráfico macro de comparação geral de desempenho entre todos os modelos do projeto."""
+    """Macro general performance comparison across all project models."""
     if not trials_data:
         return
 
@@ -1404,53 +1386,50 @@ def plot_general_performance_comparison(trials_data: List[Dict[str, Any]], out_d
         n = t.get("num_agents", 2)
         m = t.get("map_name", "tutorial.txt")
         data.append({
-            "Modelo": t["trial_tag"],
+            "Model": t["trial_tag"],
             "Config": f"{n} Ag.{'s' if n > 1 else ''} ({m})",
-            "Agentes": n,
-            "Mapa": m,
-            "Recompensa Máxima": t["max_reward"],
-            "Recompensa Final": t["final_reward"],
-            "Iterações": t["total_iterations"],
+            "Agents": n,
+            "Map": m,
+            "Max Reward": t["max_reward"],
+            "Final Reward": t["final_reward"],
+            "Iterations": t["total_iterations"],
             "LR": t["lr"],
             "Gamma": t["gamma"],
-            "Entropia": t["entropy"]
+            "Entropy": t["entropy"]
         })
     df = pd.DataFrame(data)
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.6), dpi=300)
 
-    # Painel 1: Top modelos globais em Recompensa Máxima com indicação de configuração
-    top_models = df.sort_values(by="Recompensa Máxima", ascending=False).head(12)
+    top_models = df.sort_values(by="Max Reward", ascending=False).head(12)
     palette = sns.color_palette("tab10", len(top_models["Config"].unique()))
     config_color_map = dict(zip(top_models["Config"].unique(), palette))
     colors = [config_color_map[c] for c in top_models["Config"]]
 
-    axes[0].barh(top_models["Modelo"][::-1], top_models["Recompensa Máxima"][::-1], color=colors[::-1], edgecolor="black", height=0.6)
-    axes[0].set_title("(a) Ranking Global dos Melhores Modelos por Configuração", fontweight="bold", fontsize=11)
-    axes[0].set_xlabel("Recompensa Máxima Atingida (pts)", fontweight="bold")
-    axes[0].set_ylabel("Modelo (Algoritmo / Trial)", fontweight="bold")
+    axes[0].barh(top_models["Model"][::-1], top_models["Max Reward"][::-1], color=colors[::-1], edgecolor="black", height=0.6)
+    axes[0].set_title("(a) Global Ranking of Top Models by Configuration", fontweight="bold", fontsize=11)
+    axes[0].set_xlabel("Max Reward Reached (pts)", fontweight="bold")
+    axes[0].set_ylabel("Model (Algorithm / Trial)", fontweight="bold")
 
-    # Legenda customizada de configurações
     for c, col in config_color_map.items():
         axes[0].plot([], [], color=col, label=c, linewidth=6)
-    axes[0].legend(title="Configuração (Escala / Mapa)", loc="lower right", fontsize=8.5)
+    axes[0].legend(title="Configuration (Scale / Map)", loc="lower right", fontsize=8.5)
 
-    # Painel 2: Trade-off Recompensa Máxima vs. Iterações
     sns.scatterplot(
-        data=df, x="Iterações", y="Recompensa Máxima", hue="Config", size="LR",
+        data=df, x="Iterations", y="Max Reward", hue="Config", size="LR",
         sizes=(50, 220), palette="tab10", ax=axes[1], alpha=0.85, edgecolor="black"
     )
-    axes[1].set_title("(b) Convergência e Esforço Computacional por Configuração", fontweight="bold", fontsize=11)
-    axes[1].set_xlabel("Iterações Totais de Treinamento", fontweight="bold")
-    axes[1].set_ylabel("Recompensa Máxima (pts)", fontweight="bold")
+    axes[1].set_title("(b) Convergence & Compute Effort by Configuration", fontweight="bold", fontsize=11)
+    axes[1].set_xlabel("Total Training Iterations", fontweight="bold")
+    axes[1].set_ylabel("Max Reward (pts)", fontweight="bold")
     axes[1].legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8.5)
 
-    fig.suptitle("Análise Comparativa Geral de Desempenho (Todos os Modelos e Mapas)", fontsize=13, fontweight="bold")
+    fig.suptitle("General Comparative Performance Analysis (All Models & Maps)", fontsize=13, fontweight="bold")
     save_plot(fig, out_dir, "comparacao_geral_desempenho")
 
 
 def plot_general_hyperparameter_landscape(trials_data: List[Dict[str, Any]], out_dir: Path):
-    """Análise macro da sensibilidade de hiperparâmetros abrangendo todas as configurações."""
+    """Macro hyperparameter sensitivity analysis across all configurations."""
     if len(trials_data) < 4:
         return
 
@@ -1461,31 +1440,29 @@ def plot_general_hyperparameter_landscape(trials_data: List[Dict[str, Any]], out
         data.append({
             "Learning Rate": lr_str,
             "Gamma": f"γ = {t['gamma']:.2f}",
-            "Entropia": f"H = {t['entropy']:.3f}",
-            "Escala": f"{n} Agente{'s' if n > 1 else ''}",
-            "Recompensa Máxima": t["max_reward"],
-            "Recompensa Final": t["final_reward"],
-            "Iterações": t["total_iterations"]
+            "Entropy": f"H = {t['entropy']:.3f}",
+            "Scale": f"{n} Agent{'s' if n > 1 else ''}",
+            "Max Reward": t["max_reward"],
+            "Final Reward": t["final_reward"],
+            "Iterations": t["total_iterations"]
         })
     df = pd.DataFrame(data)
 
     fig, axes = plt.subplots(1, 2, figsize=(14.5, 5.2), dpi=300)
 
-    # Painel 1: Desempenho por Learning Rate segregado por Escala
-    sns.boxplot(data=df, x="Learning Rate", y="Recompensa Máxima", hue="Escala", palette="Set2", ax=axes[0], width=0.55)
-    axes[0].set_title("(a) Sensibilidade da Taxa de Aprendizado (LR) por Escala", fontweight="bold", fontsize=11)
+    sns.boxplot(data=df, x="Learning Rate", y="Max Reward", hue="Scale", palette="Set2", ax=axes[0], width=0.55)
+    axes[0].set_title("(a) Learning Rate (LR) Sensitivity by Scale", fontweight="bold", fontsize=11)
     axes[0].set_xlabel("Learning Rate", fontweight="bold")
-    axes[0].set_ylabel("Recompensa Máxima (pts)", fontweight="bold")
-    axes[0].legend(title="Escala", loc="best")
+    axes[0].set_ylabel("Max Reward (pts)", fontweight="bold")
+    axes[0].legend(title="Scale", loc="best")
 
-    # Painel 2: Desempenho por Coeficiente de Entropia e Fator Gamma
-    sns.boxplot(data=df, x="Entropia", y="Recompensa Máxima", hue="Gamma", palette="Blues", ax=axes[1], width=0.55)
-    axes[1].set_title("(b) Impacto do Coeficiente de Entropia (H) e Fator de Desconto (γ)", fontweight="bold", fontsize=11)
-    axes[1].set_xlabel("Coeficiente de Entropia", fontweight="bold")
-    axes[1].set_ylabel("Recompensa Máxima (pts)", fontweight="bold")
-    axes[1].legend(title="Fator γ", loc="best")
+    sns.boxplot(data=df, x="Entropy", y="Max Reward", hue="Gamma", palette="Blues", ax=axes[1], width=0.55)
+    axes[1].set_title("(b) Impact of Entropy Coefficient (H) & Discount Factor (γ)", fontweight="bold", fontsize=11)
+    axes[1].set_xlabel("Entropy Coefficient", fontweight="bold")
+    axes[1].set_ylabel("Max Reward (pts)", fontweight="bold")
+    axes[1].legend(title="Factor γ", loc="best")
 
-    fig.suptitle("Análise Comparativa Geral de Hiperparâmetros (Landscape Global)", fontsize=13, fontweight="bold")
+    fig.suptitle("General Hyperparameter Sensitivity Analysis (Global Landscape)", fontsize=13, fontweight="bold")
     save_plot(fig, out_dir, "comparacao_geral_hiperparametros")
 
 
@@ -1575,33 +1552,33 @@ def plot_antihacking_before_after(trials_data: List[Dict[str, Any]], out_dir: Pa
     env_suffix = get_env_file_suffix(trials_data)
     fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.4), dpi=300)
 
-    # Painel (a): Recompensa Média
+    # Panel (a): Mean Reward
     for i, t in enumerate(pre_trials):
         df = t["df"]
         x = _get_timesteps_series(df)
         y = df[t["reward_col"]].rolling(window=window, min_periods=1).mean()
-        lbl = f"Pré-Fix: {t['trial_tag']} [Máx: {t['max_reward']:+.0f}]" if i < 2 else None
+        lbl = f"Pre-Fix: {t['trial_tag']} [Max: {t['max_reward']:+.0f}]" if i < 2 else None
         axes[0].plot(x, y, color="#d62728", linestyle="--", lw=2.0 if i == 0 else 1.2, alpha=0.85 if i == 0 else 0.45, label=lbl)
     for i, t in enumerate(post_trials):
         df = t["df"]
         x = _get_timesteps_series(df)
         y = df[t["reward_col"]].rolling(window=window, min_periods=1).mean()
-        lbl = f"Pós-Fix: {t['trial_tag']} [Máx: {t['max_reward']:+.1f}]" if i < 2 else None
+        lbl = f"Post-Fix: {t['trial_tag']} [Max: {t['max_reward']:+.1f}]" if i < 2 else None
         axes[0].plot(x, y, color="#00509d", linestyle="-", lw=2.4 if i == 0 else 1.3, alpha=0.95 if i == 0 else 0.55, label=lbl)
     axes[0].axhline(0, color="gray", linestyle=":", lw=1.0)
-    axes[0].set_title("(a) Recompensa Média: Explosão Artificial vs. Curva Honesta", fontweight="bold", fontsize=11)
-    axes[0].set_xlabel("Passos de Ambiente (Milhões)", fontweight="bold")
-    axes[0].set_ylabel("Recompensa Média por Episódio", fontweight="bold")
+    axes[0].set_title("(a) Mean Reward: Artificial Spike vs. Honest Curve", fontweight="bold", fontsize=11)
+    axes[0].set_xlabel("Environment Steps (Millions)", fontweight="bold")
+    axes[0].set_ylabel("Mean Episode Reward", fontweight="bold")
     axes[0].legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), frameon=True, fontsize=8, ncol=2)
 
-    # Painel (b): Entropia da Política (agent_0)
+    # Panel (b): Policy Entropy (agent_0)
     for i, t in enumerate(pre_trials):
         df = t["df"]
         ent_col = next((c for c in df.columns if "policy_agent_0/learner_stats/entropy" in c), None)
         if ent_col:
             x = _get_timesteps_series(df)
             y = df[ent_col].rolling(window=window, min_periods=1).mean()
-            lbl = f"Pré-Fix: {t['trial_tag']} (H final: {df[ent_col].dropna().iloc[-1]:.3f})" if i < 2 else None
+            lbl = f"Pre-Fix: {t['trial_tag']} (Final H: {df[ent_col].dropna().iloc[-1]:.3f})" if i < 2 else None
             axes[1].plot(x, y, color="#d62728", linestyle="--", lw=2.0 if i == 0 else 1.2, alpha=0.85 if i == 0 else 0.45, label=lbl)
     for i, t in enumerate(post_trials):
         df = t["df"]
@@ -1609,17 +1586,17 @@ def plot_antihacking_before_after(trials_data: List[Dict[str, Any]], out_dir: Pa
         if ent_col:
             x = _get_timesteps_series(df)
             y = df[ent_col].rolling(window=window, min_periods=1).mean()
-            lbl = f"Pós-Fix: {t['trial_tag']} (H final: {df[ent_col].dropna().iloc[-1]:.3f})" if i < 2 else None
+            lbl = f"Post-Fix: {t['trial_tag']} (Final H: {df[ent_col].dropna().iloc[-1]:.3f})" if i < 2 else None
             axes[1].plot(x, y, color="#00509d", linestyle="-", lw=2.4 if i == 0 else 1.3, alpha=0.95 if i == 0 else 0.55, label=lbl)
-    axes[1].axhline(np.log(5), color="gray", linestyle=":", lw=1.0, label="Entropia Máxima Uniforme (ln 5 ≈ 1,61)")
-    axes[1].set_title("(b) Entropia: Colapso em Loop vs. Exploração Saudável", fontweight="bold", fontsize=11)
-    axes[1].set_xlabel("Passos de Ambiente (Milhões)", fontweight="bold")
-    axes[1].set_ylabel("Entropia da Política (Agente 0)", fontweight="bold")
+    axes[1].axhline(np.log(5), color="gray", linestyle=":", lw=1.0, label="Max Uniform Entropy (ln 5 ≈ 1.61)")
+    axes[1].set_title("(b) Entropy: Loop Collapse vs. Healthy Exploration", fontweight="bold", fontsize=11)
+    axes[1].set_xlabel("Environment Steps (Millions)", fontweight="bold")
+    axes[1].set_ylabel("Policy Entropy (Agent 0)", fontweight="bold")
     axes[1].set_ylim(-0.05, 1.75)
     axes[1].legend(loc="upper center", bbox_to_anchor=(0.5, -0.15), frameon=True, fontsize=8, ncol=2)
 
     fig.suptitle(
-        f"Impacto das Travas Anti-Hacking: IMPALA Pré-Fix vs. Pós-Fix [{env_tag}]",
+        f"Impact of Anti-Hacking Locks: IMPALA Pre-Fix vs. Post-Fix [{env_tag}]",
         fontsize=12.5, fontweight="bold", y=1.02
     )
     save_plot(fig, out_dir, "fig_antihacking_before_after", env_suffix=env_suffix)
@@ -1659,18 +1636,18 @@ def plot_postfix_learning_curves_by_algo(trials_data: List[Dict[str, Any]], out_
             if idx == 0:
                 ax.plot(
                     x, y, color=color, lw=2.6, alpha=0.98,
-                    label=f"★ {t['trial_tag']} ({t['param_summary']}) [Máx: {t['max_reward']:+.1f}]"
+                    label=f"★ {t['trial_tag']} ({t['param_summary']}) [Max: {t['max_reward']:+.1f}]"
                 )
             else:
                 ax.plot(x, y, color=color, lw=1.0, alpha=0.25)
 
     ax.axhline(0, color="gray", linestyle=":", lw=1.1)
     ax.set_title(
-        f"Curvas de Aprendizado Pós-Correção por Algoritmo (Escala Limpa) [{env_tag}]",
+        f"Post-Fix Learning Curves by Algorithm (Clean Scale) [{env_tag}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_xlabel("Passos de Ambiente (Milhões)", fontsize=11, fontweight="bold")
-    ax.set_ylabel("Recompensa Média por Episódio", fontsize=11, fontweight="bold")
+    ax.set_xlabel("Environment Steps (Millions)", fontsize=11, fontweight="bold")
+    ax.set_ylabel("Mean Episode Reward", fontsize=11, fontweight="bold")
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=-300)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, framealpha=0.95, fontsize=8.5, ncol=2)
@@ -1698,9 +1675,9 @@ def plot_train_vs_eval_vs_visual_gap(trials_data: List[Dict[str, Any]], out_dir:
     width = 0.26
     fig, ax = plt.subplots(figsize=(10.5, 5.6), dpi=300)
 
-    b1 = ax.bar(x - width, train_vals, width, label="Treino Estocástico (Máx. Média)", color="#1f77b4", edgecolor="black", lw=0.8)
-    b2 = ax.bar(x, eval_vals, width, label="Avaliação Determinística (20 eps, 800 passos)", color="#2ca02c", edgecolor="black", lw=0.8)
-    b3 = ax.bar(x + width, vis_vals, width, label="Rollout Visual (20s, 400 passos)", color="#ff7f0e", edgecolor="black", lw=0.8)
+    b1 = ax.bar(x - width, train_vals, width, label="Stochastic Training (Max Mean)", color="#1f77b4", edgecolor="black", lw=0.8)
+    b2 = ax.bar(x, eval_vals, width, label="Deterministic Eval (20 eps, 800 steps)", color="#2ca02c", edgecolor="black", lw=0.8)
+    b3 = ax.bar(x + width, vis_vals, width, label="Visual Rollout (20s, 400 steps)", color="#ff7f0e", edgecolor="black", lw=0.8)
 
     for bars in (b1, b2, b3):
         for bar in bars:
@@ -1718,10 +1695,10 @@ def plot_train_vs_eval_vs_visual_gap(trials_data: List[Dict[str, Any]], out_dir:
     ax.axhline(0, color="black", lw=1.0)
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Gap Treino vs. Avaliação Determinística vs. Rollout Visual (Pós-Fix) [{env_tag}]",
+        f"Training vs. Deterministic Evaluation vs. 20s Visual Rollout (Post-Fix) [{env_tag}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_ylabel("Recompensa Média (pts)", fontweight="bold")
+    ax.set_ylabel("Mean Reward (pts)", fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels(x_labels, fontweight="bold")
     ax.set_ylim(min(eval_vals + [0]) - 28, max(train_vals + vis_vals) + 28)
@@ -1737,7 +1714,7 @@ def plot_eval_agent_breakdown_by_algo(trials_data: List[Dict[str, Any]], out_dir
         return
 
     agents = ["agent_0", "agent_1", "agent_2", "agent_3"]
-    agent_labels = ["Agente 0 (Sup.)", "Agente 1 (Inf.)", "Agente 2 (Sup.)", "Agente 3 (Inf.)"]
+    agent_labels = ["Agent 0 (Top)", "Agent 1 (Bottom)", "Agent 2 (Top)", "Agent 3 (Bottom)"]
     agent_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
 
     x = np.arange(len(algos))
@@ -1761,10 +1738,10 @@ def plot_eval_agent_breakdown_by_algo(trials_data: List[Dict[str, Any]], out_dir
     ax.axhline(0, color="black", lw=1.0)
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Desempenho Individual por Agente na Avaliação Determinística (Pós-Fix) [{env_tag}]",
+        f"Per-Agent Deterministic Evaluation Breakdown (Post-Fix) [{env_tag}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_ylabel("Recompensa Média do Agente (pts)", fontweight="bold")
+    ax.set_ylabel("Mean Agent Reward (pts)", fontweight="bold")
     ax.set_xticks(x)
     ax.set_xticklabels([f"{a}\n({summaries[a]['trial_short']})" for a in algos], fontweight="bold")
     all_v = [v for a in algos for v in summaries[a]["agent_scores"].values()]
@@ -1794,12 +1771,12 @@ def plot_bc_training_curve(out_dir: Path, env_tag: str, env_suffix: str):
     cfg = bc_info.get("training_config", {})
 
     fig, ax = plt.subplots(figsize=(9.5, 5.0), dpi=300)
-    ax.plot(epochs, losses, color="#00509d", marker="o", markersize=4.5, lw=2.3, label="Cross-Entropy Loss (Treino Supervisionado)")
+    ax.plot(epochs, losses, color="#00509d", marker="o", markersize=4.5, lw=2.3, label="Cross-Entropy Loss (Supervised Training)")
     ax.fill_between(epochs, losses, min(losses) * 0.9, color="#00509d", alpha=0.10)
 
-    acc_str = f"Acurácia de Imitação Final: {acc:.2f}%" if acc is not None else "Treino Concluído"
+    acc_str = f"Final Imitation Accuracy: {acc:.2f}%" if acc is not None else "Training Completed"
     ax.annotate(
-        f"{acc_str}\n(Loss final: {losses[-1]:.3f} | {cfg.get('demo_steps', 5000):,} demos)",
+        f"{acc_str}\n(Final Loss: {losses[-1]:.3f} | {cfg.get('demo_steps', 5000):,} demos)",
         xy=(epochs[-1], losses[-1]),
         xytext=(epochs[-1] - 10, losses[-1] + 0.62),
         fontsize=9, fontweight="bold",
@@ -1807,10 +1784,10 @@ def plot_bc_training_curve(out_dir: Path, env_tag: str, env_suffix: str):
         arrowprops=dict(arrowstyle="->", color="#00509d", lw=1.5)
     )
     ax.set_title(
-        f"Convergência do Pré-Treino Supervisionado (Behavioral Cloning) [{env_tag}]",
+        f"Supervised Pre-Training Convergence (Behavioral Cloning) [{env_tag}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_xlabel("Época de Treinamento", fontweight="bold")
+    ax.set_xlabel("Training Epoch", fontweight="bold")
     ax.set_ylabel("Cross-Entropy Loss", fontweight="bold")
     ax.set_xlim(1, max(epochs) + 0.5)
     ax.legend(loc="upper right", frameon=True, fontsize=9)
@@ -1855,34 +1832,33 @@ def plot_visual_rollout_20s_timeline(trials_data: List[Dict[str, Any]], out_dir:
         plt.close(fig)
         return
 
-    # Destacar marcos reais verificados no replay do DQN df92c_00002 (passo 36 e passo 42)
     if dqn_data and len(dqn_data["totals"]) >= 57:
         y36 = dqn_data["totals"][35]
         y42 = dqn_data["totals"][41]
         ax.scatter([36, 42], [y36, y42], color="#d62728", s=55, zorder=5)
         ax.annotate(
-            "Passo 36: Pepino no prato (+10,7)",
+            "Step 36: Cucumber plated (+10.7)",
             xy=(36, y36), xytext=(95, y36 + 6),
             fontsize=8.2, fontweight="bold",
             bbox=dict(boxstyle="round,pad=0.25", facecolor="#fff5f5", edgecolor="#d62728", lw=0.9),
             arrowprops=dict(arrowstyle="->", color="#d62728", lw=1.2)
         )
         ax.annotate(
-            "Passo 42: Pepino + Tomate no prato (+23,5)\n(2/3 da FRESH_SALAD)",
+            "Step 42: Cucumber + Tomato plated (+23.5)\n(2/3 of FRESH_SALAD)",
             xy=(42, y42), xytext=(95, y42 + 12),
             fontsize=8.2, fontweight="bold",
             bbox=dict(boxstyle="round,pad=0.3", facecolor="#fff5f5", edgecolor="#d62728", lw=1.0),
             arrowprops=dict(arrowstyle="->", color="#d62728", lw=1.2)
         )
-        ax.axvspan(57, 400, color="gray", alpha=0.08, label="Platô pós-passo 57 (DQN segura prato sem entregar)")
+        ax.axvspan(57, 400, color="gray", alpha=0.08, label="Post-step 57 plateau (DQN holds plate without delivering)")
 
     env_tag = get_env_tag(trials_data)
     ax.set_title(
-        f"Evolução Acumulada nos Rollouts Visuais de 20s (Campeões Pós-Fix) [{env_tag}]",
+        f"Cumulative Reward Timeline in 20s Visual Rollouts (Post-Fix Champions) [{env_tag}]",
         fontsize=12, fontweight="bold", pad=12
     )
-    ax.set_xlabel("Passo do Episódio (20s = 400 passos)", fontweight="bold")
-    ax.set_ylabel("Recompensa Acumulada da Equipe (pts)", fontweight="bold")
+    ax.set_xlabel("Episode Step (20s = 400 steps)", fontweight="bold")
+    ax.set_ylabel("Cumulative Team Reward (pts)", fontweight="bold")
     ax.set_xlim(0, 405)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), frameon=True, fontsize=8.5, ncol=2)
     save_plot(fig, out_dir, "fig_visual_rollout_20s_timeline", env_suffix=get_env_file_suffix(trials_data))
