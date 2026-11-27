@@ -215,6 +215,6 @@ overcooked-marl-env/
 
 | Section | Links |
 | :--- | :--- |
-| **Experiment Results** | [Overview](./experiment_results/README.md) · [01 — Evolution](./experiment_results/01_visao_geral_e_evolucao/README.md) · [02 — 1-Agent](./experiment_results/02_experimento_1_agente_cozinha_aberta/README.md) · [03 — 2-Agent](./experiment_results/03_experimento_2_agentes_cooperacao/README.md) · [04 — 4-Agent](./experiment_results/04_experimento_4_agentes_e_algoritmos/README.md) |
+| **Experiment Results** | [All Results](./experiment_results/README.md) · [01 — Evolution](./experiment_results/README.md#1-overview--environment-evolution) · [02 — 1-Agent](./experiment_results/README.md#2-1-agent-open-kitchen-baseline) · [03 — 2-Agent](./experiment_results/README.md#3-2-agent-divided-kitchen-cooperation) · [04 — 4-Agent](./experiment_results/README.md#4-4-agent-brigade--multi-algorithm-benchmark) |
 | **Training & Evaluation** | [Experiments Pipeline](./experiments/README.md) |
 | **Environment Package** | [Package](./overcooked_marl_env/README.md) · [Core](./overcooked_marl_env/core/README.md) · [Environment](./overcooked_marl_env/environment/README.md) · [Map](./overcooked_marl_env/map/README.md) · [Mechanics](./overcooked_marl_env/mechanics/README.md) · [Rendering](./overcooked_marl_env/rendering/README.md) · [Utils](./overcooked_marl_env/utils/README.md) |
